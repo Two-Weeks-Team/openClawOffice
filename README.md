@@ -129,6 +129,16 @@ pnpm build
 pnpm preview
 ```
 
+## Local50 Benchmark
+
+```bash
+pnpm benchmark:local50
+```
+
+- Benchmark scenario: `50 agents / 500 runs / 5000 events`
+- Pipeline budget constants: `src/lib/perf-budgets.ts`
+- Profiling report template: `docs/perf-local50.md`
+
 ## API endpoints (dev server)
 
 - `GET /api/office/snapshot`
