@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MAX_STREAM_EVENTS, mergeLifecycleEvent } from "./lifecycle-merge";
+import { buildRunGraph } from "./run-graph";
 import type { OfficeEvent, OfficeSnapshot } from "../types/office";
 
 function makeEvent(id: string, at: number): OfficeEvent {
@@ -21,6 +22,7 @@ function makeSnapshot(events: OfficeEvent[]): OfficeSnapshot {
     diagnostics: [],
     entities: [],
     runs: [],
+    runGraph: buildRunGraph([]),
     events,
   };
 }

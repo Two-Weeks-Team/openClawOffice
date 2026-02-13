@@ -1,4 +1,5 @@
 import type { OfficeEntityStatus, OfficeEvent, OfficeRun, OfficeSnapshot } from "../types/office";
+import { buildRunGraph } from "./run-graph";
 
 export type SyntheticSessionStore = Record<
   string,
@@ -224,6 +225,7 @@ export function createLocal50Scenario(options: ScenarioOptions = {}): Local50Sce
       diagnostics: [],
       entities,
       runs,
+      runGraph: buildRunGraph(runs),
       events,
     },
     sessionStores: buildSessionStores(agentIds, seedTime),

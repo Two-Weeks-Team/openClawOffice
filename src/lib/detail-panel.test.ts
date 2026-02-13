@@ -1,8 +1,48 @@
 import { describe, expect, it } from "vitest";
 import { buildDetailPanelModel } from "./detail-panel";
+import { buildRunGraph } from "./run-graph";
 import type { OfficeSnapshot } from "../types/office";
 
 function makeSnapshot(): OfficeSnapshot {
+  const runs: OfficeSnapshot["runs"] = [
+    {
+      runId: "run-1",
+      childSessionKey: "agent:research:session:1",
+      requesterSessionKey: "agent:main:session:1",
+      childAgentId: "research",
+      parentAgentId: "main",
+      status: "active",
+      task: "Gather layout benchmarks and compare anomalies.",
+      cleanup: "keep",
+      createdAt: 900_000,
+      startedAt: 901_000,
+    },
+    {
+      runId: "run-2",
+      childSessionKey: "agent:ops:session:2",
+      requesterSessionKey: "agent:main:session:2",
+      childAgentId: "ops",
+      parentAgentId: "main",
+      status: "error",
+      task: "Inspect stream reconnection gaps and stale cursors.",
+      cleanup: "delete",
+      createdAt: 910_000,
+      startedAt: 911_000,
+      endedAt: 912_000,
+    },
+    {
+      runId: "run-3",
+      childSessionKey: "agent:main:session:3",
+      requesterSessionKey: "agent:ops:session:3",
+      childAgentId: "main",
+      parentAgentId: "ops",
+      status: "ok",
+      task: "Warm cache for agent dashboard boot.",
+      cleanup: "keep",
+      createdAt: 905_000,
+    },
+  ];
+
   return {
     generatedAt: 1_000_000,
     source: {
@@ -36,44 +76,8 @@ function makeSnapshot(): OfficeSnapshot {
         lastUpdatedAt: 999_400,
       },
     ],
-    runs: [
-      {
-        runId: "run-1",
-        childSessionKey: "agent:research:session:1",
-        requesterSessionKey: "agent:main:session:1",
-        childAgentId: "research",
-        parentAgentId: "main",
-        status: "active",
-        task: "Gather layout benchmarks and compare anomalies.",
-        cleanup: "keep",
-        createdAt: 900_000,
-        startedAt: 901_000,
-      },
-      {
-        runId: "run-2",
-        childSessionKey: "agent:ops:session:2",
-        requesterSessionKey: "agent:main:session:2",
-        childAgentId: "ops",
-        parentAgentId: "main",
-        status: "error",
-        task: "Inspect stream reconnection gaps and stale cursors.",
-        cleanup: "delete",
-        createdAt: 910_000,
-        startedAt: 911_000,
-        endedAt: 912_000,
-      },
-      {
-        runId: "run-3",
-        childSessionKey: "agent:main:session:3",
-        requesterSessionKey: "agent:ops:session:3",
-        childAgentId: "main",
-        parentAgentId: "ops",
-        status: "ok",
-        task: "Warm cache for agent dashboard boot.",
-        cleanup: "keep",
-        createdAt: 905_000,
-      },
-    ],
+    runs,
+    runGraph: buildRunGraph(runs),
     events: [
       {
         id: "run-2:error:1",

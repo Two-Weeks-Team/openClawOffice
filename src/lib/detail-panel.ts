@@ -1,4 +1,5 @@
 import type { OfficeEntity, OfficeEvent, OfficeRun, OfficeSnapshot } from "../types/office";
+import { indexRunsById, runIdsForAgent } from "./run-graph";
 
 const MAX_DETAIL_EVENTS = 14;
 
@@ -110,25 +111,27 @@ export function buildDetailPanelModel(
     };
   }
 
-  const runById = new Map<string, OfficeRun>();
-  for (const run of snapshot.runs) {
-    runById.set(run.runId, run);
-  }
+  const runById = indexRunsById(snapshot.runs);
 
   const linkedRun =
     entity.kind === "subagent" && entity.runId ? (runById.get(entity.runId) ?? null) : null;
 
   let relatedRuns: OfficeRun[] = [];
   if (entity.kind === "agent") {
-    relatedRuns = snapshot.runs.filter(
-      (run) => run.parentAgentId === entity.agentId || run.childAgentId === entity.agentId,
-    );
+    relatedRuns = runIdsForAgent(snapshot.runGraph, entity.agentId)
+      .map((runId) => runById.get(runId))
+      .filter((run): run is OfficeRun => Boolean(run));
   } else if (linkedRun) {
     relatedRuns = [linkedRun];
   } else {
-    relatedRuns = snapshot.runs.filter(
-      (run) => run.childAgentId === entity.agentId && run.parentAgentId === entity.parentAgentId,
-    );
+    relatedRuns = runIdsForAgent(snapshot.runGraph, entity.agentId)
+      .map((runId) => runById.get(runId))
+      .filter((run): run is OfficeRun => {
+        if (!run) {
+          return false;
+        }
+        return run.childAgentId === entity.agentId && run.parentAgentId === entity.parentAgentId;
+      });
   }
 
   relatedRuns = [...relatedRuns].sort((a, b) => {

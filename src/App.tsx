@@ -380,6 +380,7 @@ function App() {
         <div className="workspace-side">
           <EventRail
             events={snapshot.events}
+            runGraph={snapshot.runGraph}
             now={snapshot.generatedAt}
             filters={timelineFilters}
             onFiltersChange={setTimelineFilters}
