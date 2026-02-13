@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "priorityOrder": ["status", "role", "parent", "recent"],
+  "recentWindowMs": 300000,
+  "parentAffinityPx": 64,
+  "defaultOverflowZoneId": "ops",
+  "rooms": [
+    {
+      "id": "strategy",
+      "label": "Strategy Room",
+      "shape": "ring",
+      "role": "strategy",
+      "x": 280,
+      "y": 70,
+      "width": 330,
+      "height": 180,
+      "fill": "rgba(47, 106, 140, 0.82)",
+      "border": "#8cd7ff",
+      "capacity": 10,
+      "spacing": { "x": 42, "y": 28 },
+      "anchor": { "x": 0.5, "y": 0.48 },
+      "secondaryZoneId": "ops",
+      "routing": {
+        "statuses": ["active"],
+        "kinds": ["agent"],
+        "recentWeight": 0.2
+      }
+    },
+    {
+      "id": "ops",
+      "label": "Ops Floor",
+      "shape": "grid",
+      "role": "ops",
+      "x": 70,
+      "y": 210,
+      "width": 420,
+      "height": 250,
+      "fill": "rgba(40, 88, 115, 0.85)",
+      "border": "#74d1f8",
+      "capacity": 16,
+      "spacing": { "x": 64, "y": 52 },
+      "anchor": { "x": 0.5, "y": 0.5 },
+      "secondaryZoneId": "build",
+      "routing": {
+        "statuses": ["ok", "offline"],
+        "kinds": ["agent"],
+        "recentWeight": 0.15
+      }
+    },
+    {
+      "id": "build",
+      "label": "Build Pods",
+      "shape": "line",
+      "role": "build",
+      "x": 560,
+      "y": 235,
+      "width": 330,
+      "height": 200,
+      "fill": "rgba(44, 125, 132, 0.84)",
+      "border": "#8cf8dc",
+      "capacity": 12,
+      "spacing": { "x": 56, "y": 36 },
+      "anchor": { "x": 0.5, "y": 0.52 },
+      "secondaryZoneId": "ops",
+      "routing": {
+        "statuses": ["idle"],
+        "kinds": ["agent"],
+        "recentWeight": 0.1
+      }
+    },
+    {
+      "id": "spawn",
+      "label": "Spawn Lab",
+      "shape": "cluster",
+      "role": "spawn",
+      "x": 520,
+      "y": 70,
+      "width": 390,
+      "height": 160,
+      "fill": "rgba(17, 82, 111, 0.82)",
+      "border": "#5ec6ff",
+      "capacity": 14,
+      "spacing": { "x": 48, "y": 30 },
+      "anchor": { "x": 0.54, "y": 0.52 },
+      "secondaryZoneId": "ops",
+      "routing": {
+        "statuses": ["active", "idle"],
+        "kinds": ["subagent"],
+        "recentWeight": 0.35
+      }
+    },
+    {
+      "id": "lounge",
+      "label": "Recovery Lounge",
+      "shape": "cluster",
+      "role": "recovery",
+      "x": 300,
+      "y": 470,
+      "width": 420,
+      "height": 150,
+      "fill": "rgba(13, 97, 120, 0.82)",
+      "border": "#70f2ff",
+      "capacity": 12,
+      "spacing": { "x": 54, "y": 28 },
+      "anchor": { "x": 0.5, "y": 0.52 },
+      "secondaryZoneId": "ops",
+      "routing": {
+        "statuses": ["ok", "error", "offline"],
+        "kinds": ["agent", "subagent"],
+        "recentWeight": 0.25
+      }
+    }
+  ]
+}

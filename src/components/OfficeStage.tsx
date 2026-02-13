@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import { buildPlacements, getRooms } from "../lib/layout";
+import { buildPlacements, type RoomSpec } from "../lib/layout";
 import type { OfficeEntity, OfficeRun, OfficeSnapshot } from "../types/office";
 
 type Props = {
@@ -238,7 +238,7 @@ function buildTileCatalog(manifest: ManifestShape | null) {
 }
 
 function buildLayerTiles(params: {
-  rooms: ReturnType<typeof getRooms>;
+  rooms: RoomSpec[];
   tileCatalog: Map<string, TileCatalog>;
 }) {
   const { rooms, tileCatalog } = params;
@@ -359,10 +359,21 @@ function tileStyle(tile: LayerTile): CSSProperties {
 }
 
 export function OfficeStage({ snapshot }: Props) {
-  const rooms = useMemo(() => getRooms(), []);
-  const placements = useMemo(() => buildPlacements(snapshot.entities), [snapshot.entities]);
-
   const [manifest, setManifest] = useState<ManifestShape | null>(null);
+  const [zoneConfig, setZoneConfig] = useState<unknown>(null);
+
+  const layoutState = useMemo(
+    () =>
+      buildPlacements({
+        entities: snapshot.entities,
+        generatedAt: snapshot.generatedAt,
+        zoneConfig,
+      }),
+    [snapshot.entities, snapshot.generatedAt, zoneConfig],
+  );
+
+  const rooms = layoutState.rooms;
+  const placements = layoutState.placements;
 
   useEffect(() => {
     let cancelled = false;
@@ -389,6 +400,39 @@ export function OfficeStage({ snapshot }: Props) {
     void loadManifest();
     return () => {
       cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadZoneConfig = async () => {
+      try {
+        const response = await fetch("/assets/layout/zone-config.json", {
+          method: "GET",
+          cache: "no-store",
+          headers: { Accept: "application/json" },
+        });
+        if (!response.ok) {
+          return;
+        }
+        const payload = (await response.json()) as unknown;
+        if (!cancelled) {
+          setZoneConfig(payload);
+        }
+      } catch (error) {
+        console.error("Failed to load zone config, using default layout policy.", error);
+      }
+    };
+
+    void loadZoneConfig();
+    const intervalId = window.setInterval(() => {
+      void loadZoneConfig();
+    }, 10_000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
     };
   }, []);
 
@@ -481,23 +525,37 @@ export function OfficeStage({ snapshot }: Props) {
         ))}
       </svg>
 
-      {rooms.map((room) => (
-        <section
-          key={room.id}
-          className="office-room"
-          style={{
-            left: room.x,
-            top: room.y,
-            width: room.width,
-            height: room.height,
-            background: room.fill,
-            borderColor: room.border,
-          }}
-        >
-          <header>{room.label}</header>
-          <div className="shape-tag">{room.shape}</div>
-        </section>
-      ))}
+      {rooms.map((room) => {
+        const debug = layoutState.roomDebug.get(room.id);
+        const overflowCount = (debug?.overflowIn ?? 0) + (debug?.overflowOut ?? 0);
+        return (
+          <section
+            key={room.id}
+            className="office-room"
+            style={{
+              left: room.x,
+              top: room.y,
+              width: room.width,
+              height: room.height,
+              background: room.fill,
+              borderColor: room.border,
+            }}
+          >
+            <header>{room.label}</header>
+            <div className="shape-tag">{room.shape}</div>
+            {debug ? (
+              <div className={`zone-debug ${overflowCount > 0 ? "has-overflow" : ""}`} aria-hidden="true">
+                <span>
+                  cap {debug.assigned}/{debug.capacity}
+                </span>
+                <span>target {debug.targeted}</span>
+                {debug.overflowOut > 0 ? <span>out +{debug.overflowOut}</span> : null}
+                {debug.overflowIn > 0 ? <span>in +{debug.overflowIn}</span> : null}
+              </div>
+            ) : null}
+          </section>
+        );
+      })}
 
       {sortedPlacements.map((placement) => {
         const entity = placement.entity;

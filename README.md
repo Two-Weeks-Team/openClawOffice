@@ -35,6 +35,8 @@ Web-based visual command center for OpenClaw agents and subagents.
 - Layered stage rendering model (`floor -> wall -> object -> entity -> overlay`)
 - Y-axis depth sort for entities + wall-side occlusion dimming
 - Responsive LOD policy (desktop: full layers, smaller viewport: object/wall detail reduction)
+- Zone rule engine (JSON DSL) with priority routing + room capacity overflow policy
+- Room-level debug overlay (`cap/target/overflow`) for layout diagnostics
 
 ## Data source
 
@@ -53,6 +55,10 @@ Live/demo transition rules:
 Kenney tile coordinates and spacing are resolved from
 `public/assets/kenney/kenney-curation.json` so city/interior tile atlases follow
 one standardized source contract.
+
+Room layout policy is resolved from `public/assets/layout/zone-config.json`.
+The client reloads this config periodically (10s) and recalculates placements,
+so policy edits can be reflected without restarting the app.
 
 You can override the state directory:
 
