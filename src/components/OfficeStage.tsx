@@ -5,6 +5,8 @@ import type { OfficeEntity, OfficeRun, OfficeSnapshot } from "../types/office";
 type Props = {
   snapshot: OfficeSnapshot;
   selectedEntityId?: string | null;
+  highlightRunId?: string | null;
+  highlightAgentId?: string | null;
   onSelectEntity?: (entityId: string) => void;
 };
 
@@ -369,7 +371,13 @@ function tileStyle(tile: LayerTile): CSSProperties {
   };
 }
 
-export function OfficeStage({ snapshot, selectedEntityId = null, onSelectEntity }: Props) {
+export function OfficeStage({
+  snapshot,
+  selectedEntityId = null,
+  highlightRunId = null,
+  highlightAgentId = null,
+  onSelectEntity,
+}: Props) {
   const [manifest, setManifest] = useState<ManifestShape | null>(null);
   const [zoneConfig, setZoneConfig] = useState<unknown>(null);
 
@@ -485,14 +493,40 @@ export function OfficeStage({ snapshot, selectedEntityId = null, onSelectEntity 
     return map;
   }, [snapshot.runs]);
 
+  const normalizedHighlightRunId =
+    typeof highlightRunId === "string" && highlightRunId.trim().length > 0
+      ? highlightRunId.trim()
+      : null;
+  const normalizedHighlightAgentId =
+    typeof highlightAgentId === "string" && highlightAgentId.trim().length > 0
+      ? highlightAgentId.trim()
+      : null;
+  const highlightedRun = normalizedHighlightRunId ? runById.get(normalizedHighlightRunId) : undefined;
+
   const sortedPlacements = useMemo(
     () => [...placements].sort((a, b) => a.y - b.y),
     [placements],
   );
 
   const runLinks = useMemo(() => {
+    const hasTimelineHighlight = Boolean(normalizedHighlightRunId || normalizedHighlightAgentId);
     return snapshot.runs
-      .filter((run) => run.status !== "ok" && run.status !== "error")
+      .filter((run) => {
+        if (run.status !== "ok" && run.status !== "error") {
+          return true;
+        }
+        if (normalizedHighlightRunId && run.runId === normalizedHighlightRunId) {
+          return true;
+        }
+        if (
+          normalizedHighlightAgentId &&
+          (run.parentAgentId === normalizedHighlightAgentId ||
+            run.childAgentId === normalizedHighlightAgentId)
+        ) {
+          return true;
+        }
+        return false;
+      })
       .map((run) => {
         const source = placementById.get(`agent:${run.parentAgentId}`);
         const target = placementById.get(`subagent:${run.runId}`);
@@ -514,15 +548,34 @@ export function OfficeStage({ snapshot, selectedEntityId = null, onSelectEntity 
             : runAgeMs >= RUN_STALE_WINDOW_MS
               ? "run-stale"
               : "";
+        const isHighlighted =
+          (normalizedHighlightRunId && run.runId === normalizedHighlightRunId) ||
+          (normalizedHighlightAgentId &&
+            (run.parentAgentId === normalizedHighlightAgentId ||
+              run.childAgentId === normalizedHighlightAgentId));
 
         return {
           id: `${run.runId}:${sx}:${sy}:${tx}:${ty}`,
-          cls: [runLineClass(run), lifecycleClass].filter(Boolean).join(" "),
+          cls: [
+            runLineClass(run),
+            lifecycleClass,
+            isHighlighted ? "run-highlight" : "",
+            hasTimelineHighlight && !isHighlighted ? "run-muted" : "",
+          ]
+            .filter(Boolean)
+            .join(" "),
           d: `M ${sx} ${sy} Q ${cx} ${cy} ${tx} ${ty}`,
         };
       })
       .filter((value): value is { id: string; cls: string; d: string } => Boolean(value));
-  }, [snapshot.generatedAt, snapshot.runs, placementById]);
+  }, [
+    normalizedHighlightAgentId,
+    normalizedHighlightRunId,
+    placementById,
+    snapshot.generatedAt,
+    snapshot.runs,
+  ]);
+  const hasTimelineHighlight = Boolean(normalizedHighlightRunId || normalizedHighlightAgentId);
 
   return (
     <div className="office-stage-wrap">
@@ -588,6 +641,19 @@ export function OfficeStage({ snapshot, selectedEntityId = null, onSelectEntity 
         const entity = placement.entity;
         const occlusion = layerState.occlusionByRoom.get(placement.roomId);
         const isSelected = selectedEntityId === entity.id;
+        const runHighlightMatch = normalizedHighlightRunId
+          ? entity.kind === "subagent"
+            ? entity.runId === normalizedHighlightRunId
+            : highlightedRun
+              ? highlightedRun.parentAgentId === entity.agentId ||
+                highlightedRun.childAgentId === entity.agentId
+              : false
+          : false;
+        const agentHighlightMatch = normalizedHighlightAgentId
+          ? entity.agentId === normalizedHighlightAgentId ||
+            entity.parentAgentId === normalizedHighlightAgentId
+          : false;
+        const isLinked = runHighlightMatch || agentHighlightMatch;
         const linkedRun =
           entity.kind === "subagent" && entity.runId ? runById.get(entity.runId) : undefined;
         const getAge = (timestamp?: number, fallback: number = Number.POSITIVE_INFINITY) =>
@@ -640,7 +706,7 @@ export function OfficeStage({ snapshot, selectedEntityId = null, onSelectEntity 
             key={entity.id}
             className={`entity-token ${statusClass(entity)} ${entity.kind} ${isOccluded ? "is-occluded" : ""} ${motionClasses} ${
               isSelected ? "is-selected" : ""
-            }`}
+            } ${isLinked ? "is-linked" : ""} ${hasTimelineHighlight && !isLinked ? "is-muted" : ""}`}
             style={{ left: placement.x, top: placement.y, zIndex: ENTITY_Z_OFFSET + Math.round(placement.y) }}
             role="button"
             tabIndex={0}
