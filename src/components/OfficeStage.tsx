@@ -364,7 +364,8 @@ export function OfficeStage({ snapshot }: Props) {
         if (!cancelled) {
           setManifest(payload);
         }
-      } catch {
+      } catch (error) {
+        console.error("Failed to load Kenney manifest, using fallback tiles.", error);
         // fallback tile catalog is used when manifest fetch fails
       }
     };
@@ -381,6 +382,18 @@ export function OfficeStage({ snapshot }: Props) {
     () => buildLayerTiles({ rooms, tileCatalog }),
     [rooms, tileCatalog],
   );
+
+  const tilesByLayer = useMemo(() => {
+    const grouped: Record<StageLayer, LayerTile[]> = {
+      floor: [],
+      wall: [],
+      object: [],
+    };
+    for (const tile of layerState.tiles) {
+      grouped[tile.layer].push(tile);
+    }
+    return grouped;
+  }, [layerState.tiles]);
 
   const placementById = useMemo(() => {
     const map = new Map<string, (typeof placements)[number]>();
@@ -429,27 +442,21 @@ export function OfficeStage({ snapshot }: Props) {
       <div className="office-stage-grid" />
 
       <div className="iso-layer layer-floor" aria-hidden>
-        {layerState.tiles
-          .filter((tile) => tile.layer === "floor")
-          .map((tile) => (
-            <span key={tile.id} className="iso-tile layer-floor" style={tileStyle(tile)} />
-          ))}
+        {tilesByLayer.floor.map((tile) => (
+          <span key={tile.id} className="iso-tile layer-floor" style={tileStyle(tile)} />
+        ))}
       </div>
 
       <div className="iso-layer layer-wall" aria-hidden>
-        {layerState.tiles
-          .filter((tile) => tile.layer === "wall")
-          .map((tile) => (
-            <span key={tile.id} className="iso-tile layer-wall" style={tileStyle(tile)} />
-          ))}
+        {tilesByLayer.wall.map((tile) => (
+          <span key={tile.id} className="iso-tile layer-wall" style={tileStyle(tile)} />
+        ))}
       </div>
 
       <div className="iso-layer layer-object" aria-hidden>
-        {layerState.tiles
-          .filter((tile) => tile.layer === "object")
-          .map((tile) => (
-            <span key={tile.id} className="iso-tile layer-object" style={tileStyle(tile)} />
-          ))}
+        {tilesByLayer.object.map((tile) => (
+          <span key={tile.id} className="iso-tile layer-object" style={tileStyle(tile)} />
+        ))}
       </div>
 
       <svg className="office-lines" viewBox="0 0 980 660" preserveAspectRatio="none" aria-hidden>
@@ -479,12 +486,12 @@ export function OfficeStage({ snapshot }: Props) {
       {sortedPlacements.map((placement) => {
         const entity = placement.entity;
         const occlusion = layerState.occlusionByRoom.get(placement.roomId);
-        const isOccluded =
-          Boolean(occlusion) &&
-          placement.x >= (occlusion?.left ?? 0) &&
-          placement.x <= (occlusion?.right ?? 0) &&
-          placement.y >= (occlusion?.top ?? 0) &&
-          placement.y <= (occlusion?.bottom ?? 0);
+        const isOccluded = occlusion
+          ? placement.x >= occlusion.left &&
+            placement.x <= occlusion.right &&
+            placement.y >= occlusion.top &&
+            placement.y <= occlusion.bottom
+          : false;
 
         return (
           <article
