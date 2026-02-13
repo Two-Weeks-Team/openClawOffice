@@ -33,12 +33,14 @@
         {
           "id": "strategy-furniture-a",
           "kind": "furniture",
+          "semantic": "meeting_table",
           "colRatio": 0.28,
           "rowRatio": 0.45
         },
         {
           "id": "strategy-furniture-b",
           "kind": "furniture",
+          "semantic": "plant_small",
           "colRatio": 0.7,
           "rowRatio": 0.56
         },
@@ -64,12 +66,14 @@
         {
           "id": "ops-furniture-a",
           "kind": "furniture",
+          "semantic": "desk_pair",
           "colRatio": 0.26,
           "rowRatio": 0.44
         },
         {
           "id": "ops-furniture-b",
           "kind": "furniture",
+          "semantic": "corridor_lamp",
           "colRatio": 0.72,
           "rowRatio": 0.58
         },
@@ -95,12 +99,14 @@
         {
           "id": "build-furniture-a",
           "kind": "furniture",
+          "semantic": "build_beacon",
           "colRatio": 0.3,
           "rowRatio": 0.45
         },
         {
           "id": "build-furniture-b",
           "kind": "furniture",
+          "semantic": "desk_pair",
           "colRatio": 0.7,
           "rowRatio": 0.58
         }
@@ -120,12 +126,14 @@
         {
           "id": "spawn-furniture-a",
           "kind": "furniture",
+          "semantic": "arcade_console",
           "colRatio": 0.3,
           "rowRatio": 0.46
         },
         {
           "id": "spawn-furniture-b",
           "kind": "furniture",
+          "semantic": "corridor_lamp",
           "colRatio": 0.72,
           "rowRatio": 0.56
         },
@@ -151,12 +159,14 @@
         {
           "id": "lounge-furniture-a",
           "kind": "furniture",
+          "semantic": "lounge_greenery",
           "colRatio": 0.26,
           "rowRatio": 0.42
         },
         {
           "id": "lounge-furniture-b",
           "kind": "furniture",
+          "semantic": "meeting_table",
           "colRatio": 0.73,
           "rowRatio": 0.54
         }
