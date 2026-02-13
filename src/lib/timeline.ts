@@ -62,9 +62,8 @@ export function buildTimelineIndex(events: OfficeEvent[], runGraph?: OfficeRunGr
     } else {
       const eventAgentIds = new Set<string>([event.agentId, event.parentAgentId]);
       agentIdsByEventId.set(event.id, eventAgentIds);
-      pushToMap(byAgentId, event.agentId, event);
-      if (event.parentAgentId !== event.agentId) {
-        pushToMap(byAgentId, event.parentAgentId, event);
+      for (const agentId of eventAgentIds) {
+        pushToMap(byAgentId, agentId, event);
       }
     }
 

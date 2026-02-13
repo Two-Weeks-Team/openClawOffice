@@ -432,16 +432,19 @@ export async function buildOfficeSnapshot(): Promise<OfficeSnapshot> {
 
   const agentMap = agentResult.agentMap;
   const runs = runResult.runs;
-  const runGraph = buildRunGraph(runs);
-  const diagnostics = [
+  const baseDiagnostics = [
     ...agentResult.diagnostics,
     ...runResult.diagnostics,
-    ...graphDiagnosticsToSnapshotDiagnostics(runGraph.diagnostics),
   ];
 
   if (agentMap.size === 0 && runs.length === 0) {
-    return createDemoSnapshot(stateDir, diagnostics);
+    return createDemoSnapshot(stateDir, baseDiagnostics);
   }
+  const runGraph = buildRunGraph(runs);
+  const diagnostics = [
+    ...baseDiagnostics,
+    ...graphDiagnosticsToSnapshotDiagnostics(runGraph.diagnostics),
+  ];
 
   const activeByAgent = new Map<string, number>();
   const hasErrorByAgent = new Map<string, boolean>();

@@ -534,6 +534,9 @@ export function OfficeStage({
       if (placement.entity.kind === "agent") {
         map.set(`agent:${placement.entity.agentId}`, placement);
       }
+      if (placement.entity.kind === "subagent" && placement.entity.runId) {
+        map.set(`subagent:${placement.entity.runId}`, placement);
+      }
     }
     return map;
   }, [placements]);

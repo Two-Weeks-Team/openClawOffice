@@ -3,6 +3,17 @@ import type { OfficeRun } from "../types/office";
 import { buildRunGraph } from "./run-graph";
 
 describe("buildRunGraph", () => {
+  it("returns an empty graph for empty input", () => {
+    const graph = buildRunGraph([]);
+    expect(graph.nodes).toEqual([]);
+    expect(graph.edges).toEqual([]);
+    expect(graph.diagnostics).toEqual([]);
+    expect(graph.index.runNodeIdByRunId).toEqual({});
+    expect(graph.index.runIdsByAgentId).toEqual({});
+    expect(graph.index.agentIdsByRunId).toEqual({});
+    expect(graph.index.timeRangeByRunId).toEqual({});
+  });
+
   it("builds spawnedBy edges and indexes by runId/agentId/time range", () => {
     const runs: OfficeRun[] = [
       {
@@ -92,5 +103,42 @@ describe("buildRunGraph", () => {
     expect(cycleDiagnostics.length).toBeGreaterThan(0);
     expect(cycleDiagnostics[0]?.message).toContain("run-a");
     expect(cycleDiagnostics[0]?.message).toContain("run-b");
+  });
+
+  it("marks duplicated child sessions as orphan diagnostics", () => {
+    const runs: OfficeRun[] = [
+      {
+        runId: "run-1",
+        childSessionKey: "agent:alpha:subagent:same",
+        requesterSessionKey: "agent:main:session:1",
+        childAgentId: "alpha",
+        parentAgentId: "main",
+        status: "active",
+        task: "first",
+        cleanup: "keep",
+        createdAt: 100,
+      },
+      {
+        runId: "run-2",
+        childSessionKey: "agent:alpha:subagent:same",
+        requesterSessionKey: "agent:main:session:2",
+        childAgentId: "alpha",
+        parentAgentId: "main",
+        status: "active",
+        task: "second",
+        cleanup: "keep",
+        createdAt: 120,
+      },
+    ];
+
+    const graph = buildRunGraph(runs);
+    expect(
+      graph.diagnostics.some(
+        (entry) =>
+          entry.code === "orphan_run" &&
+          entry.message.includes("Duplicate childSessionKey") &&
+          entry.runId === "run-2",
+      ),
+    ).toBe(true);
   });
 });

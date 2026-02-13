@@ -242,7 +242,7 @@ export function buildRunGraph(runs: OfficeRun[]): OfficeRunGraph {
 
   for (const run of runs) {
     const parentRun = runByChildSessionKey.get(run.requesterSessionKey);
-    if (parentRun) {
+    if (parentRun && parentRun.runId !== run.runId) {
       edges.push({
         id: `spawnedBy:${parentRun.runId}->${run.runId}`,
         kind: "spawnedBy",
@@ -261,6 +261,16 @@ export function buildRunGraph(runs: OfficeRun[]): OfficeRunGraph {
       } else {
         spawnAdjacency.set(parentRun.runId, [run.runId]);
       }
+      continue;
+    }
+
+    if (parentRun && parentRun.runId === run.runId) {
+      pushDiagnostic({
+        code: "cycle_detected",
+        runId: run.runId,
+        nodeId: toRunNodeId(run.runId),
+        message: `Run "${run.runId}" references itself via requester session "${run.requesterSessionKey}".`,
+      });
       continue;
     }
 
