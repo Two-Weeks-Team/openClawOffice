@@ -4,6 +4,8 @@ import type { OfficeEntity, OfficeRun, OfficeSnapshot } from "../types/office";
 
 type Props = {
   snapshot: OfficeSnapshot;
+  selectedEntityId?: string | null;
+  onSelectEntity?: (entityId: string) => void;
 };
 
 // Entity and overlay are rendered separately for independent depth control.
@@ -367,7 +369,7 @@ function tileStyle(tile: LayerTile): CSSProperties {
   };
 }
 
-export function OfficeStage({ snapshot }: Props) {
+export function OfficeStage({ snapshot, selectedEntityId = null, onSelectEntity }: Props) {
   const [manifest, setManifest] = useState<ManifestShape | null>(null);
   const [zoneConfig, setZoneConfig] = useState<unknown>(null);
 
@@ -585,6 +587,7 @@ export function OfficeStage({ snapshot }: Props) {
       {sortedPlacements.map((placement) => {
         const entity = placement.entity;
         const occlusion = layerState.occlusionByRoom.get(placement.roomId);
+        const isSelected = selectedEntityId === entity.id;
         const linkedRun =
           entity.kind === "subagent" && entity.runId ? runById.get(entity.runId) : undefined;
         const getAge = (timestamp?: number, fallback: number = Number.POSITIVE_INFINITY) =>
@@ -635,8 +638,23 @@ export function OfficeStage({ snapshot }: Props) {
         return (
           <article
             key={entity.id}
-            className={`entity-token ${statusClass(entity)} ${entity.kind} ${isOccluded ? "is-occluded" : ""} ${motionClasses}`}
+            className={`entity-token ${statusClass(entity)} ${entity.kind} ${isOccluded ? "is-occluded" : ""} ${motionClasses} ${
+              isSelected ? "is-selected" : ""
+            }`}
             style={{ left: placement.x, top: placement.y, zIndex: ENTITY_Z_OFFSET + Math.round(placement.y) }}
+            role="button"
+            tabIndex={0}
+            aria-label={`Open detail panel for ${entity.label}`}
+            aria-pressed={isSelected}
+            onClick={() => {
+              onSelectEntity?.(entity.id);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onSelectEntity?.(entity.id);
+              }
+            }}
           >
             <div className="sprite-shell">
               <div className="sprite" style={spriteStyle(entity.id)} />

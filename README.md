@@ -38,6 +38,7 @@ Web-based visual command center for OpenClaw agents and subagents.
 - Zone rule engine (JSON DSL) with priority routing + room capacity overflow policy
 - Room-level debug overlay (`cap/target/overflow`) for layout diagnostics
 - Lifecycle motion tokens for spawn/start/end/error/cleanup + reduced-motion fallback
+- Entity detail panel (`Overview / Sessions / Runs / Messages / Metrics`) with copy actions
 
 ## Motion Lifecycle Guide
 
@@ -54,6 +55,16 @@ Web-based visual command center for OpenClaw agents and subagents.
 연결선은 run age에 따라 recent/stale 클래스를 분리해 강조를 조정합니다.
 접근성 모드(`prefers-reduced-motion: reduce`)에서는 stage 애니메이션을 최소화하고
 정적 스타일로 상태만 유지합니다.
+
+## Detail Panel Scenarios
+
+운영자가 1~2회 클릭으로 원인에 접근할 수 있도록 아래 시나리오를 기준으로 설계했습니다.
+
+1. `agent` 선택 후 Overview에서 상태/모델/lastUpdated를 확인하고 Sessions에서 로그 경로를 즉시 복사
+2. `subagent` 선택 후 Runs에서 parent->child 링크와 원문 task를 확인해 실행 의도를 복원
+3. 장애 상태 엔티티 선택 후 Messages에서 `error/end/cleanup` 순서를 시간축으로 추적
+4. Session key/run ID를 복사해 터미널/로그 검색으로 즉시 전환
+5. Metrics에서 run/error/event 밀도를 확인해 타임라인 대비 병목 후보를 빠르게 좁힘
 
 ## Data source
 
