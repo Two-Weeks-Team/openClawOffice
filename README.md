@@ -2,6 +2,29 @@
 
 Web-based visual command center for OpenClaw agents and subagents.
 
+## Purpose
+
+`openClawOffice`는 로컬 OpenClaw 런타임의 에이전트/서브에이전트 상태를
+아이소메트릭 오피스 형태로 가시화하는 운영 도구입니다.
+
+## Intent
+
+- 텍스트 로그 중심 운영을 공간 중심 운영으로 전환
+- spawn/start/end/error 흐름을 실시간으로 추적
+- 문제 상황에서 원인 파악 시간을 줄이는 관제 UX 제공
+
+## Vision
+
+\"로컬 단독 환경에서 최대 50개 에이전트를 안정적으로 운영/관찰할 수 있는
+시각적 오퍼레이션 콘솔\"을 목표로 합니다.
+
+## Operating Constraints
+
+- Local-only: 단일 사용자 로컬 실행 전제
+- Network bind: `127.0.0.1` 루프백 바인딩만 지원
+- Capacity target: 활성 에이전트 최대 `50`
+- Security scope: 로컬 단독 사용 전제로 보안 하드닝은 최소 범위로 제한
+
 ## What this MVP shows
 
 - Isometric-style office zones with shape-based placement (`ring`, `grid`, `line`, `cluster`)
@@ -32,7 +55,7 @@ pnpm install
 pnpm dev
 ```
 
-Open: `http://localhost:5179`
+Open: `http://127.0.0.1:5179`
 
 ## Build
 
@@ -57,3 +80,12 @@ This project expects assets under:
 A curation manifest is included at:
 
 - `public/assets/kenney/kenney-curation.json`
+
+## Issue Policy
+
+모든 구현 이슈는 아래 정렬 기준을 따라야 합니다.
+
+- README의 Purpose/Intent/Vision에 정렬
+- `127.0.0.1` 로컬 바인딩 전제 유지
+- 50-agent 운영 한계를 기준으로 목표/완료조건 정의
+- 보안 이슈는 로컬 단독 사용 전제에서 우선순위 제외

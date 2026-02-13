@@ -6,7 +6,11 @@ import { openClawOfficeApiPlugin } from './server/vite-office-plugin'
 export default defineConfig({
   plugins: [react(), openClawOfficeApiPlugin()],
   server: {
-    host: true,
+    host: '127.0.0.1',
     port: 5179,
+  },
+  preview: {
+    host: '127.0.0.1',
+    port: 5180,
   },
 })
