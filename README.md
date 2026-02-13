@@ -75,6 +75,16 @@ Web-based visual command center for OpenClaw agents and subagents.
 - 타임라인 재생 중 현재 이벤트는 스테이지 엔티티/링크 하이라이트와 동기화
 - 타임라인 인덱싱/필터/재생 시나리오는 `src/lib/timeline.test.ts`로 검증
 
+## Ops UX Checklist
+
+운영자 탐색 UX 검증 시 아래 항목을 확인합니다.
+
+1. 검색(`agentId/runId/task`) 입력 후 1초 내 Stage 반영
+2. 상태/룸/최근 N분 복합 필터 동시 적용 시 결과 일관성 유지
+3. Focus mode 켜짐 상태에서 대상 식별(강조)과 비대상 dim이 명확
+4. 운영자 액션(`runId/sessionKey/log guide`) 성공/실패 토스트가 즉시 표시
+5. 선택/필터가 없는 실패 케이스에서도 안내 문구가 누락되지 않음
+
 ## Data source
 
 By default, the app reads OpenClaw runtime state from:

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { buildPlacements, type RoomSpec } from "../lib/layout";
 import type { OfficeEntity, OfficeRun, OfficeSnapshot } from "../types/office";
 
@@ -7,6 +7,12 @@ type Props = {
   selectedEntityId?: string | null;
   highlightRunId?: string | null;
   highlightAgentId?: string | null;
+  filterEntityIds?: string[];
+  hasEntityFilter?: boolean;
+  roomFilterId?: string;
+  focusMode?: boolean;
+  onRoomOptionsChange?: (roomIds: string[]) => void;
+  onFilterMatchCountChange?: (count: number) => void;
   onSelectEntity?: (entityId: string) => void;
 };
 
@@ -376,10 +382,17 @@ export function OfficeStage({
   selectedEntityId = null,
   highlightRunId = null,
   highlightAgentId = null,
+  filterEntityIds = [],
+  hasEntityFilter = false,
+  roomFilterId = "all",
+  focusMode = false,
+  onRoomOptionsChange,
+  onFilterMatchCountChange,
   onSelectEntity,
 }: Props) {
   const [manifest, setManifest] = useState<ManifestShape | null>(null);
   const [zoneConfig, setZoneConfig] = useState<unknown>(null);
+  const previousRoomOptionsKeyRef = useRef("");
 
   const layoutState = useMemo(
     () =>
@@ -393,6 +406,45 @@ export function OfficeStage({
 
   const rooms = layoutState.rooms;
   const placements = layoutState.placements;
+  const filteredEntityIdSet = useMemo(() => new Set(filterEntityIds), [filterEntityIds]);
+  const normalizedRoomFilterId =
+    roomFilterId.trim() !== "" && roomFilterId !== "all" ? roomFilterId : null;
+  const hasRoomFilter = Boolean(normalizedRoomFilterId);
+  const hasOpsFilter = hasEntityFilter || hasRoomFilter;
+
+  useEffect(() => {
+    if (!onRoomOptionsChange) {
+      return;
+    }
+    const roomIds = [...rooms.map((room) => room.id)].sort((a, b) => a.localeCompare(b));
+    const roomOptionsKey = roomIds.join(",");
+    if (roomOptionsKey === previousRoomOptionsKeyRef.current) {
+      return;
+    }
+    previousRoomOptionsKeyRef.current = roomOptionsKey;
+    onRoomOptionsChange(roomIds);
+  }, [onRoomOptionsChange, rooms]);
+
+  const matchedEntityCount = useMemo(() => {
+    let count = 0;
+    for (const placement of placements) {
+      const entity = placement.entity;
+      const matchesEntityFilter = !hasEntityFilter || filteredEntityIdSet.has(entity.id);
+      const matchesRoomFilter =
+        !normalizedRoomFilterId || placement.roomId === normalizedRoomFilterId;
+      if (matchesEntityFilter && matchesRoomFilter) {
+        count += 1;
+      }
+    }
+    return count;
+  }, [filteredEntityIdSet, hasEntityFilter, normalizedRoomFilterId, placements]);
+
+  useEffect(() => {
+    if (!onFilterMatchCountChange) {
+      return;
+    }
+    onFilterMatchCountChange(matchedEntityCount);
+  }, [matchedEntityCount, onFilterMatchCountChange]);
 
   useEffect(() => {
     let cancelled = false;
@@ -533,6 +585,16 @@ export function OfficeStage({
         if (!source || !target) {
           return null;
         }
+        const sourceMatchesOps =
+          (!hasEntityFilter || filteredEntityIdSet.has(source.entity.id)) &&
+          (!normalizedRoomFilterId || source.roomId === normalizedRoomFilterId);
+        const targetMatchesOps =
+          (!hasEntityFilter || filteredEntityIdSet.has(target.entity.id)) &&
+          (!normalizedRoomFilterId || target.roomId === normalizedRoomFilterId);
+        const linkMatchesOps = sourceMatchesOps && targetMatchesOps;
+        if (hasOpsFilter && !focusMode && !linkMatchesOps) {
+          return null;
+        }
 
         const sx = source.x;
         const sy = source.y;
@@ -553,14 +615,17 @@ export function OfficeStage({
           (normalizedHighlightAgentId &&
             (run.parentAgentId === normalizedHighlightAgentId ||
               run.childAgentId === normalizedHighlightAgentId));
+        const isOpsHighlighted = hasOpsFilter && linkMatchesOps;
+        const hasHighlight = isHighlighted || isOpsHighlighted;
 
         return {
           id: `${run.runId}:${sx}:${sy}:${tx}:${ty}`,
           cls: [
             runLineClass(run),
             lifecycleClass,
-            isHighlighted ? "run-highlight" : "",
+            hasHighlight ? "run-highlight" : "",
             hasTimelineHighlight && !isHighlighted ? "run-muted" : "",
+            hasOpsFilter && focusMode && !linkMatchesOps ? "run-muted" : "",
           ]
             .filter(Boolean)
             .join(" "),
@@ -571,6 +636,11 @@ export function OfficeStage({
   }, [
     normalizedHighlightAgentId,
     normalizedHighlightRunId,
+    filteredEntityIdSet,
+    focusMode,
+    hasEntityFilter,
+    hasOpsFilter,
+    normalizedRoomFilterId,
     placementById,
     snapshot.generatedAt,
     snapshot.runs,
@@ -641,6 +711,13 @@ export function OfficeStage({
         const entity = placement.entity;
         const occlusion = layerState.occlusionByRoom.get(placement.roomId);
         const isSelected = selectedEntityId === entity.id;
+        const matchesEntityFilter = !hasEntityFilter || filteredEntityIdSet.has(entity.id);
+        const matchesRoomFilter =
+          !normalizedRoomFilterId || placement.roomId === normalizedRoomFilterId;
+        const matchesOpsFilter = matchesEntityFilter && matchesRoomFilter;
+        if (hasOpsFilter && !focusMode && !matchesOpsFilter && !isSelected) {
+          return null;
+        }
         const runHighlightMatch = normalizedHighlightRunId
           ? entity.kind === "subagent"
             ? entity.runId === normalizedHighlightRunId
@@ -700,13 +777,17 @@ export function OfficeStage({
         ]
           .filter(Boolean)
           .join(" ");
+        const isMutedByTimeline = hasTimelineHighlight && !isLinked;
+        const isMutedByFocus = hasOpsFilter && focusMode && !matchesOpsFilter;
 
         return (
           <article
             key={entity.id}
             className={`entity-token ${statusClass(entity)} ${entity.kind} ${isOccluded ? "is-occluded" : ""} ${motionClasses} ${
               isSelected ? "is-selected" : ""
-            } ${isLinked ? "is-linked" : ""} ${hasTimelineHighlight && !isLinked ? "is-muted" : ""}`}
+            } ${isLinked ? "is-linked" : ""} ${hasOpsFilter && matchesOpsFilter ? "is-filter-hit" : ""} ${
+              isMutedByFocus ? "is-filtered-out" : ""
+            } ${isMutedByTimeline || isMutedByFocus ? "is-muted" : ""}`}
             style={{ left: placement.x, top: placement.y, zIndex: ENTITY_Z_OFFSET + Math.round(placement.y) }}
             role="button"
             tabIndex={0}
