@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { OfficeEvent, OfficeSnapshot } from "../types/office";
+import { mergeLifecycleEvent } from "../lib/lifecycle-merge";
 
 type OfficeStreamState = {
   snapshot: OfficeSnapshot | null;
@@ -15,7 +16,6 @@ type LifecyclePayload = {
 
 const POLL_INTERVAL_MS = 4_000;
 const RECONNECT_DELAY_MS = 1_200;
-const MAX_EVENTS = 220;
 
 async function fetchSnapshot(signal: AbortSignal): Promise<OfficeSnapshot> {
   const response = await fetch("/api/office/snapshot", {
@@ -27,23 +27,6 @@ async function fetchSnapshot(signal: AbortSignal): Promise<OfficeSnapshot> {
     throw new Error(`Snapshot fetch failed (${response.status})`);
   }
   return (await response.json()) as OfficeSnapshot;
-}
-
-function mergeLifecycleEvent(snapshot: OfficeSnapshot, event: OfficeEvent): OfficeSnapshot {
-  const events = [event, ...snapshot.events.filter((item) => item.id !== event.id)]
-    .sort((a, b) => {
-      if (a.at !== b.at) {
-        return b.at - a.at;
-      }
-      return a.id.localeCompare(b.id);
-    })
-    .slice(0, MAX_EVENTS);
-
-  return {
-    ...snapshot,
-    generatedAt: Math.max(snapshot.generatedAt, event.at),
-    events,
-  };
 }
 
 function parseSseErrorMessage(event: Event): string | undefined {

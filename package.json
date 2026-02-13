@@ -7,8 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "test": "vitest run",
-    "ci:local": "pnpm lint && pnpm test && pnpm build",
+    "test": "vitest run --exclude server/perf-local50.test.ts",
+    "benchmark:local50": "vitest run server/perf-local50.test.ts",
+    "ci:local": "pnpm lint && pnpm test && pnpm benchmark:local50 && pnpm build",
     "preview": "vite preview"
   },
   "dependencies": {
