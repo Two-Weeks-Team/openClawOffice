@@ -135,6 +135,10 @@ function layoutPoint(params: {
 
 function classifyRoom(entity: OfficeEntity): string {
   if (entity.kind === "subagent") {
+    // Completed or errored subagents go to Recovery Lounge
+    if (entity.status === "ok" || entity.status === "error") {
+      return "lounge";
+    }
     return "spawn";
   }
   if (entity.status === "active") {

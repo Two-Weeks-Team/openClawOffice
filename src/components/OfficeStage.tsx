@@ -74,6 +74,8 @@ export function OfficeStage({ snapshot }: Props) {
 
   const runLinks = useMemo(() => {
     return snapshot.runs
+      // Hide edges for completed/errored subagents
+      .filter((run) => run.status !== "ok" && run.status !== "error")
       .map((run) => {
         const source = placementById.get(`agent:${run.parentAgentId}`);
         const target = placementById.get(`subagent:${run.runId}`);
