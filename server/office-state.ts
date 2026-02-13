@@ -220,7 +220,15 @@ async function loadAgentSnapshots(stateDir: string): Promise<AgentLoadResult> {
   let folders: Dirent[] = [];
   try {
     folders = await fs.readdir(agentsDir, { withFileTypes: true });
-  } catch {
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+      diagnostics.push({
+        level: "warning",
+        code: "AGENT_DIR_READ_FAILED",
+        source: agentsDir,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
     return { agentMap: out, diagnostics };
   }
 

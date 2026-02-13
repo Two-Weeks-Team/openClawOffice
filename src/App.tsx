@@ -69,7 +69,10 @@ function App() {
           <strong>Data Warnings ({snapshot.diagnostics.length})</strong>
           <ul>
             {diagnostics.map((diagnostic, index) => (
-              <li key={`${diagnostic.code}:${diagnostic.source}:${index}`}>
+              <li
+                key={`${diagnostic.code}:${diagnostic.source}:${index}`}
+                title={diagnostic.message}
+              >
                 [{diagnostic.code}] {diagnostic.source}
               </li>
             ))}
