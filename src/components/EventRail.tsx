@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { OfficeEvent } from "../types/office";
+import type { OfficeEvent, OfficeRunGraph } from "../types/office";
 import {
   buildTimelineIndex,
   filterTimelineEvents,
@@ -10,6 +10,7 @@ import {
 
 type Props = {
   events: OfficeEvent[];
+  runGraph: OfficeRunGraph;
   now: number;
   filters: TimelineFilters;
   onFiltersChange: (next: TimelineFilters) => void;
@@ -46,6 +47,7 @@ function eventBadge(type: OfficeEvent["type"]) {
 
 export function EventRail({
   events,
+  runGraph,
   now,
   filters,
   onFiltersChange,
@@ -55,7 +57,7 @@ export function EventRail({
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackMs, setPlaybackMs] = useState(800);
 
-  const index = useMemo(() => buildTimelineIndex(events), [events]);
+  const index = useMemo(() => buildTimelineIndex(events, runGraph), [events, runGraph]);
   const filteredDesc = useMemo(() => filterTimelineEvents(index, filters), [index, filters]);
   const playbackEvents = useMemo(
     () => [...filteredDesc].sort((a, b) => a.at - b.at),

@@ -111,7 +111,7 @@ describe("local50 benchmark smoke", () => {
       name: "buildTimelineIndex(5k events)",
       iterations: 10,
       action: () => {
-        buildTimelineIndex(snapshot.events);
+        buildTimelineIndex(snapshot.events, snapshot.runGraph);
       },
     });
 

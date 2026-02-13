@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { OfficeEvent } from "../types/office";
+import type { OfficeEvent, OfficeRun } from "../types/office";
+import { buildRunGraph } from "./run-graph";
 import {
   buildTimelineIndex,
   filterTimelineEvents,
@@ -48,6 +49,36 @@ function makeEvents(): OfficeEvent[] {
   ];
 }
 
+function makeRuns(): OfficeRun[] {
+  return [
+    {
+      runId: "run-a",
+      childSessionKey: "agent:child-a:session:1",
+      requesterSessionKey: "agent:parent-a:session:1",
+      childAgentId: "child-a",
+      parentAgentId: "parent-a",
+      status: "active",
+      task: "run a",
+      cleanup: "keep",
+      createdAt: 90,
+      startedAt: 95,
+    },
+    {
+      runId: "run-b",
+      childSessionKey: "agent:child-b:session:1",
+      requesterSessionKey: "agent:parent-b:session:1",
+      childAgentId: "child-b",
+      parentAgentId: "parent-b",
+      status: "ok",
+      task: "run b",
+      cleanup: "keep",
+      createdAt: 100,
+      startedAt: 105,
+      endedAt: 120,
+    },
+  ];
+}
+
 describe("timeline index", () => {
   it("indexes events by run, agent, and status", () => {
     const index = buildTimelineIndex(makeEvents());
@@ -70,6 +101,24 @@ describe("timeline index", () => {
       status: "error",
     });
     expect(filtered.map((event) => event.id)).toEqual(["run-b:error"]);
+  });
+
+  it("uses run graph agent mapping when provided", () => {
+    const graph = buildRunGraph(makeRuns());
+    const index = buildTimelineIndex(makeEvents(), graph);
+    const filteredParentA = filterTimelineEvents(index, {
+      runId: "",
+      agentId: "parent-a",
+      status: "all",
+    });
+    expect(filteredParentA.map((event) => event.id)).toEqual(["run-a:start", "run-a:spawn"]);
+
+    const filteredParentB = filterTimelineEvents(index, {
+      runId: "",
+      agentId: "parent-b",
+      status: "all",
+    });
+    expect(filteredParentB.map((event) => event.id)).toEqual(["run-b:cleanup", "run-b:error"]);
   });
 });
 

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { buildPlacements, type RoomSpec } from "../lib/layout";
+import { indexRunsById } from "../lib/run-graph";
 import type { OfficeEntity, OfficeRun, OfficeSnapshot } from "../types/office";
 
 type Props = {
@@ -538,11 +539,7 @@ export function OfficeStage({
   }, [placements]);
 
   const runById = useMemo(() => {
-    const map = new Map<string, OfficeRun>();
-    for (const run of snapshot.runs) {
-      map.set(run.runId, run);
-    }
-    return map;
+    return indexRunsById(snapshot.runs);
   }, [snapshot.runs]);
 
   const normalizedHighlightRunId =
@@ -562,26 +559,26 @@ export function OfficeStage({
 
   const runLinks = useMemo(() => {
     const hasTimelineHighlight = Boolean(normalizedHighlightRunId || normalizedHighlightAgentId);
-    return snapshot.runs
-      .filter((run) => {
-        if (run.status !== "ok" && run.status !== "error") {
-          return true;
+    const runEdges = snapshot.runGraph.edges.filter((edge) => edge.kind === "runId");
+    return runEdges
+      .map((edge) => {
+        const run = runById.get(edge.runId);
+        if (!run) {
+          return null;
         }
-        if (normalizedHighlightRunId && run.runId === normalizedHighlightRunId) {
-          return true;
+        if (run.status === "ok" || run.status === "error") {
+          const highlightByRunId = normalizedHighlightRunId && run.runId === normalizedHighlightRunId;
+          const highlightByAgentId =
+            normalizedHighlightAgentId &&
+            (run.parentAgentId === normalizedHighlightAgentId ||
+              run.childAgentId === normalizedHighlightAgentId);
+          if (!highlightByRunId && !highlightByAgentId) {
+            return null;
+          }
         }
-        if (
-          normalizedHighlightAgentId &&
-          (run.parentAgentId === normalizedHighlightAgentId ||
-            run.childAgentId === normalizedHighlightAgentId)
-        ) {
-          return true;
-        }
-        return false;
-      })
-      .map((run) => {
-        const source = placementById.get(`agent:${run.parentAgentId}`);
-        const target = placementById.get(`subagent:${run.runId}`);
+
+        const source = placementById.get(edge.from);
+        const target = placementById.get(edge.to);
         if (!source || !target) {
           return null;
         }
@@ -643,7 +640,8 @@ export function OfficeStage({
     normalizedRoomFilterId,
     placementById,
     snapshot.generatedAt,
-    snapshot.runs,
+    snapshot.runGraph.edges,
+    runById,
   ]);
   const hasTimelineHighlight = Boolean(normalizedHighlightRunId || normalizedHighlightAgentId);
 

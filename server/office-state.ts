@@ -7,6 +7,7 @@ import {
   parseSubagentStore,
   type SessionSummary,
 } from "./runtime-parser";
+import { buildRunGraph } from "../src/lib/run-graph";
 import { buildTranscriptBubble } from "./transcript-tailer";
 import type {
   OfficeEntity,
@@ -295,6 +296,17 @@ function resolveAgentStatus(params: {
   return "offline";
 }
 
+function graphDiagnosticsToSnapshotDiagnostics(
+  diagnostics: ReturnType<typeof buildRunGraph>["diagnostics"],
+): SnapshotDiagnostic[] {
+  return diagnostics.map((diagnostic) => ({
+    level: "warning",
+    code: `RUN_GRAPH_${diagnostic.code.toUpperCase()}`,
+    source: diagnostic.nodeId ?? diagnostic.runId ?? "run-graph",
+    message: diagnostic.message,
+  }));
+}
+
 function createDemoSnapshot(stateDir: string, diagnostics: SnapshotDiagnostic[] = []): OfficeSnapshot {
   const now = Date.now();
   const demoRuns: OfficeRun[] = [
@@ -395,15 +407,18 @@ function createDemoSnapshot(stateDir: string, diagnostics: SnapshotDiagnostic[] 
     })),
   ];
 
+  const runGraph = buildRunGraph(demoRuns);
+
   return {
     generatedAt: now,
     source: {
       stateDir,
       live: false,
     },
-    diagnostics,
+    diagnostics: [...diagnostics, ...graphDiagnosticsToSnapshotDiagnostics(runGraph.diagnostics)],
     entities,
     runs: demoRuns,
+    runGraph,
     events: buildEventsFromRuns(demoRuns),
   };
 }
@@ -417,7 +432,12 @@ export async function buildOfficeSnapshot(): Promise<OfficeSnapshot> {
 
   const agentMap = agentResult.agentMap;
   const runs = runResult.runs;
-  const diagnostics = [...agentResult.diagnostics, ...runResult.diagnostics];
+  const runGraph = buildRunGraph(runs);
+  const diagnostics = [
+    ...agentResult.diagnostics,
+    ...runResult.diagnostics,
+    ...graphDiagnosticsToSnapshotDiagnostics(runGraph.diagnostics),
+  ];
 
   if (agentMap.size === 0 && runs.length === 0) {
     return createDemoSnapshot(stateDir, diagnostics);
@@ -500,6 +520,7 @@ export async function buildOfficeSnapshot(): Promise<OfficeSnapshot> {
     diagnostics,
     entities,
     runs,
+    runGraph,
     events: buildEventsFromRuns(runs),
   };
 }

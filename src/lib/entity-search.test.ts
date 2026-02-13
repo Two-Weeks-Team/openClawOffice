@@ -1,8 +1,34 @@
 import { describe, expect, it } from "vitest";
 import { buildEntitySearchIndex, searchEntityIds } from "./entity-search";
+import { buildRunGraph } from "./run-graph";
 import type { OfficeSnapshot } from "../types/office";
 
 function makeSnapshot(): OfficeSnapshot {
+  const runs: OfficeSnapshot["runs"] = [
+    {
+      runId: "run-abc",
+      childSessionKey: "agent:research:session:1",
+      requesterSessionKey: "agent:main:session:1",
+      childAgentId: "research",
+      parentAgentId: "main",
+      status: "active",
+      task: "collect timeline replay evidence",
+      cleanup: "keep",
+      createdAt: 990_000,
+    },
+    {
+      runId: "run-def",
+      childSessionKey: "agent:ops:session:2",
+      requesterSessionKey: "agent:main:session:2",
+      childAgentId: "ops",
+      parentAgentId: "main",
+      status: "error",
+      task: "investigate gateway timeout",
+      cleanup: "delete",
+      createdAt: 980_000,
+    },
+  ];
+
   return {
     generatedAt: 1_000_000,
     source: { stateDir: "/tmp/openclaw", live: true },
@@ -31,30 +57,8 @@ function makeSnapshot(): OfficeSnapshot {
         task: "collect timeline replay evidence",
       },
     ],
-    runs: [
-      {
-        runId: "run-abc",
-        childSessionKey: "agent:research:session:1",
-        requesterSessionKey: "agent:main:session:1",
-        childAgentId: "research",
-        parentAgentId: "main",
-        status: "active",
-        task: "collect timeline replay evidence",
-        cleanup: "keep",
-        createdAt: 990_000,
-      },
-      {
-        runId: "run-def",
-        childSessionKey: "agent:ops:session:2",
-        requesterSessionKey: "agent:main:session:2",
-        childAgentId: "ops",
-        parentAgentId: "main",
-        status: "error",
-        task: "investigate gateway timeout",
-        cleanup: "delete",
-        createdAt: 980_000,
-      },
-    ],
+    runs,
+    runGraph: buildRunGraph(runs),
     events: [],
   };
 }

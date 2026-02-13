@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { OfficeEvent, OfficeSnapshot } from "./office-types";
+import { buildRunGraph } from "../src/lib/run-graph";
 import { OfficeStreamBridge, parseLifecycleCursor } from "./stream-bridge";
 
 function makeEvent(input: {
@@ -31,6 +32,7 @@ function makeSnapshot(events: OfficeEvent[]): OfficeSnapshot {
     diagnostics: [],
     entities: [],
     runs: [],
+    runGraph: buildRunGraph([]),
     events,
   };
 }
