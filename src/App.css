@@ -248,6 +248,29 @@ body {
   border: 1px solid rgba(197, 244, 255, 0.35);
 }
 
+.zone-debug {
+  position: absolute;
+  left: 10px;
+  bottom: 8px;
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.zone-debug span {
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 0.66rem;
+  color: rgba(217, 247, 255, 0.92);
+  border: 1px solid rgba(186, 236, 255, 0.32);
+  background: rgba(6, 39, 55, 0.38);
+}
+
+.zone-debug.has-overflow span {
+  border-color: rgba(255, 203, 120, 0.45);
+  color: rgba(255, 239, 196, 0.95);
+}
+
 .office-lines {
   position: absolute;
   inset: 0;
