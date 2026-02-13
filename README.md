@@ -74,6 +74,16 @@ pnpm preview
 - `GET /api/office/snapshot`
 - `GET /api/office/stream` (SSE)
 
+### Stream Protocol (`/api/office/stream`)
+
+- `snapshot` event: full `OfficeSnapshot` payload (initial sync + resync after lifecycle bursts)
+- `lifecycle` event: incremental payload `{ seq, event }`
+  - `seq`: monotonic stream cursor for reconnect/backfill
+  - `event`: lifecycle event (`spawn | start | end | error | cleanup`)
+- Reconnect/backfill:
+  - client can resume with SSE `Last-Event-ID` or `?lastEventId=<seq>`
+  - server keeps an in-memory lifecycle queue and replays missed frames after reconnect
+
 ## Kenney assets
 
 This project expects assets under:
