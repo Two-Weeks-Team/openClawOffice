@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { buildPlacements } from "../lib/layout";
 import { compileRoomBlueprintLayers } from "../lib/room-blueprint";
 import { indexRunsById } from "../lib/run-graph";
+import { applySemanticRoomMappings, buildSemanticAssetRegistry } from "../lib/semantic-room-mapping";
 import type { OfficeEntity, OfficeRun, OfficeSnapshot } from "../types/office";
 
 type Props = {
@@ -396,16 +397,27 @@ export function OfficeStage({
   }, []);
 
   const tileCatalog = useMemo(() => buildTileCatalog(manifest), [manifest]);
-
-  const layerState = useMemo(
+  const semanticRegistry = useMemo(() => buildSemanticAssetRegistry(manifest), [manifest]);
+  const mappedBlueprint = useMemo(
     () =>
-      compileRoomBlueprintLayers({
+      applySemanticRoomMappings({
         rawBlueprint: roomBlueprint,
-        rooms,
-        tileCatalog,
+        registry: semanticRegistry,
       }),
-    [roomBlueprint, rooms, tileCatalog],
+    [roomBlueprint, semanticRegistry],
   );
+
+  const layerState = useMemo(() => {
+    const compiled = compileRoomBlueprintLayers({
+      rawBlueprint: mappedBlueprint.blueprint,
+      rooms,
+      tileCatalog,
+    });
+    return {
+      ...compiled,
+      diagnostics: [...mappedBlueprint.diagnostics, ...compiled.diagnostics],
+    };
+  }, [mappedBlueprint, rooms, tileCatalog]);
 
   useEffect(() => {
     if (layerState.diagnostics.length === 0) {
