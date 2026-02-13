@@ -1,4 +1,6 @@
+import { useState } from "react";
 import "./App.css";
+import { EntityDetailPanel } from "./components/EntityDetailPanel";
 import { EventRail } from "./components/EventRail";
 import { OfficeStage } from "./components/OfficeStage";
 import { useOfficeStream } from "./hooks/useOfficeStream";
@@ -14,6 +16,7 @@ function StatCard(props: { label: string; value: number | string; accent?: strin
 
 function App() {
   const { snapshot, connected, liveSource, error } = useOfficeStream();
+  const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
 
   if (!snapshot) {
     return (
@@ -60,8 +63,23 @@ function App() {
       </section>
 
       <section className="workspace">
-        <OfficeStage snapshot={snapshot} />
-        <EventRail events={snapshot.events} />
+        <OfficeStage
+          snapshot={snapshot}
+          selectedEntityId={selectedEntityId}
+          onSelectEntity={(entityId) => {
+            setSelectedEntityId((prev) => (prev === entityId ? null : entityId));
+          }}
+        />
+        <div className="workspace-side">
+          <EventRail events={snapshot.events} />
+          <EntityDetailPanel
+            snapshot={snapshot}
+            selectedEntityId={selectedEntityId}
+            onClose={() => {
+              setSelectedEntityId(null);
+            }}
+          />
+        </div>
       </section>
 
       {diagnostics.length > 0 ? (
