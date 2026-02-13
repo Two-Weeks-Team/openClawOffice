@@ -6,6 +6,7 @@ type Props = {
   snapshot: OfficeSnapshot;
 };
 
+// Entity and overlay are rendered separately for independent depth control.
 type StageLayer = "floor" | "wall" | "object";
 
 type TileSourceSpec = {
@@ -456,19 +457,19 @@ export function OfficeStage({ snapshot }: Props) {
     <div className="office-stage-wrap">
       <div className="office-stage-grid" />
 
-      <div className="iso-layer layer-floor" aria-hidden>
+      <div className="iso-layer layer-floor" aria-hidden="true">
         {tilesByLayer.floor.map((tile) => (
           <span key={tile.id} className="iso-tile layer-floor" style={tileStyle(tile)} />
         ))}
       </div>
 
-      <div className="iso-layer layer-wall" aria-hidden>
+      <div className="iso-layer layer-wall" aria-hidden="true">
         {tilesByLayer.wall.map((tile) => (
           <span key={tile.id} className="iso-tile layer-wall" style={tileStyle(tile)} />
         ))}
       </div>
 
-      <div className="iso-layer layer-object" aria-hidden>
+      <div className="iso-layer layer-object" aria-hidden="true">
         {tilesByLayer.object.map((tile) => (
           <span key={tile.id} className="iso-tile layer-object" style={tileStyle(tile)} />
         ))}

@@ -564,6 +564,7 @@ body {
   .office-stage-wrap {
     --tile-scale: 1.16;
     --tile-opacity: 0.82;
+    min-height: 560px;
   }
 
   .iso-layer.layer-wall .iso-tile {
@@ -582,10 +583,6 @@ body {
 
   .stats-bar {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .office-stage-wrap {
-    min-height: 560px;
   }
 
   .office-room {
