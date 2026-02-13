@@ -2,6 +2,7 @@ import type { OfficeEntity, OfficeEvent, OfficeRun, OfficeSnapshot } from "../ty
 import { indexRunsById, runIdsForAgent } from "./run-graph";
 
 const MAX_DETAIL_EVENTS = 14;
+const MAX_RECENT_RUNS = 6;
 
 function trimTrailingSeparators(pathname: string): string {
   return pathname.replace(/[\\/]+$/, "");
@@ -23,6 +24,15 @@ function estimateTokens(text: string | undefined): number {
   return Math.max(1, Math.ceil(compact.length / 4));
 }
 
+function estimateRunLatencyMs(run: OfficeRun, now: number): number | null {
+  const startedAt = run.startedAt ?? run.createdAt;
+  const endedAt = run.endedAt ?? (run.status === "active" ? now : undefined);
+  if (typeof startedAt !== "number" || typeof endedAt !== "number") {
+    return null;
+  }
+  return Math.max(0, endedAt - startedAt);
+}
+
 export type DetailPanelStatus = "empty" | "missing" | "ready";
 
 export type DetailPanelPaths = {
@@ -42,9 +52,28 @@ export type DetailPanelMetrics = {
   tokenEstimate: number;
 };
 
+export type DetailPanelRunInsight = {
+  run: OfficeRun;
+  model: string;
+  tokenEstimate: number;
+  latencyMs: number | null;
+  eventCount: number;
+};
+
+export type DetailPanelRunDiff = {
+  baseline: DetailPanelRunInsight;
+  candidate: DetailPanelRunInsight;
+  modelChanged: boolean;
+  tokenEstimateDelta: number;
+  latencyDeltaMs: number | null;
+  eventCountDelta: number;
+};
+
 type DetailPanelBase = {
   linkedRun: OfficeRun | null;
   relatedRuns: OfficeRun[];
+  recentRuns: DetailPanelRunInsight[];
+  runDiff: DetailPanelRunDiff | null;
   relatedEvents: OfficeEvent[];
   models: string[];
   metrics: DetailPanelMetrics;
@@ -89,6 +118,8 @@ export function buildDetailPanelModel(
       entity: null,
       linkedRun: null,
       relatedRuns: [],
+      recentRuns: [],
+      runDiff: null,
       relatedEvents: [],
       models: [],
       metrics: EMPTY_METRICS,
@@ -104,6 +135,8 @@ export function buildDetailPanelModel(
       entity: null,
       linkedRun: null,
       relatedRuns: [],
+      recentRuns: [],
+      runDiff: null,
       relatedEvents: [],
       models: [],
       metrics: EMPTY_METRICS,
@@ -142,6 +175,19 @@ export function buildDetailPanelModel(
   });
 
   const relatedRunIds = new Set(relatedRuns.map((run) => run.runId));
+  const runEvents = new Map<string, OfficeEvent[]>();
+  for (const event of snapshot.events) {
+    if (!relatedRunIds.has(event.runId)) {
+      continue;
+    }
+    const bucket = runEvents.get(event.runId);
+    if (bucket) {
+      bucket.push(event);
+    } else {
+      runEvents.set(event.runId, [event]);
+    }
+  }
+
   const relatedEvents = snapshot.events
     .filter((event) => {
       if (relatedRunIds.has(event.runId)) {
@@ -159,6 +205,44 @@ export function buildDetailPanelModel(
       return a.id.localeCompare(b.id);
     })
     .slice(0, MAX_DETAIL_EVENTS);
+
+  const modelByAgent = new Map<string, string>();
+  for (const snapshotEntity of snapshot.entities) {
+    if (snapshotEntity.model && !modelByAgent.has(snapshotEntity.agentId)) {
+      modelByAgent.set(snapshotEntity.agentId, snapshotEntity.model);
+    }
+  }
+
+  const recentRuns = relatedRuns.slice(0, MAX_RECENT_RUNS).map((run) => {
+    const runScopedEvents = runEvents.get(run.runId) ?? [];
+    const runTokenEstimate =
+      estimateTokens(run.task) +
+      runScopedEvents.reduce((sum, event) => sum + estimateTokens(event.text), 0);
+    return {
+      run,
+      model: modelByAgent.get(run.childAgentId) ?? "unknown",
+      tokenEstimate: runTokenEstimate,
+      latencyMs: estimateRunLatencyMs(run, snapshot.generatedAt),
+      eventCount: runScopedEvents.length,
+    };
+  });
+
+  const latestErrorRun = recentRuns.find((item) => item.run.status === "error");
+  const latestSuccessRun = recentRuns.find((item) => item.run.status === "ok");
+  const runDiff: DetailPanelRunDiff | null =
+    latestErrorRun && latestSuccessRun
+      ? {
+          baseline: latestSuccessRun,
+          candidate: latestErrorRun,
+          modelChanged: latestSuccessRun.model !== latestErrorRun.model,
+          tokenEstimateDelta: latestErrorRun.tokenEstimate - latestSuccessRun.tokenEstimate,
+          latencyDeltaMs:
+            latestSuccessRun.latencyMs === null || latestErrorRun.latencyMs === null
+              ? null
+              : latestErrorRun.latencyMs - latestSuccessRun.latencyMs,
+          eventCountDelta: latestErrorRun.eventCount - latestSuccessRun.eventCount,
+        }
+      : null;
 
   const models = entity.model ? [entity.model] : [];
   const estimatedTexts = [
@@ -200,6 +284,8 @@ export function buildDetailPanelModel(
     entity,
     linkedRun,
     relatedRuns,
+    recentRuns,
+    runDiff,
     relatedEvents,
     models,
     metrics: {
