@@ -129,6 +129,19 @@ pnpm build
 pnpm preview
 ```
 
+## Local Quality Gate
+
+```bash
+pnpm ci:local
+```
+
+`ci:local` includes:
+- lint + unit tests
+- `benchmark:local50` smoke
+- production build
+- API + SSE e2e smoke (`scripts/e2e-smoke.mjs`)
+- quality gate reference: `docs/quality-gate.md`
+
 ## Local50 Benchmark
 
 ```bash
@@ -143,6 +156,10 @@ pnpm benchmark:local50
 
 - `GET /api/office/snapshot`
 - `GET /api/office/stream` (SSE)
+- `GET /api/office/metrics`
+
+All API responses include `X-Correlation-Id`.
+You can pass your own `x-correlation-id` request header to trace failures end-to-end.
 
 ### Stream Protocol (`/api/office/stream`)
 
@@ -150,6 +167,7 @@ pnpm benchmark:local50
 - `lifecycle` event: incremental payload `{ seq, event }`
   - `seq`: monotonic stream cursor for reconnect/backfill
   - `event`: lifecycle event (`spawn | start | end | error | cleanup`)
+- `error` event: `{ code, error, requestId }`
 - Reconnect/backfill:
   - client can resume with SSE `Last-Event-ID` or `?lastEventId=<seq>`
   - server keeps an in-memory lifecycle queue and replays missed frames after reconnect
