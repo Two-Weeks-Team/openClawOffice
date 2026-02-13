@@ -508,7 +508,7 @@ body {
   inset: -8px;
   border: 1px solid rgba(255, 219, 143, 0.78);
   opacity: 0.95;
-  animation: spawn-pulse 900ms ease-out 2;
+  animation: spawn-pulse 900ms ease-out 2 forwards;
 }
 
 .entity-token.motion-run .sprite-shell::after {
@@ -552,7 +552,7 @@ body {
 }
 
 .entity-token.motion-cleanup {
-  animation: cleanup-fade var(--motion-slow) ease-out;
+  animation: cleanup-fade var(--motion-slow) ease-out forwards;
 }
 
 .entity-token.motion-cleanup .bubble {

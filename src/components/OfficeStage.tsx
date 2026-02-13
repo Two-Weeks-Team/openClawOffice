@@ -587,27 +587,14 @@ export function OfficeStage({ snapshot }: Props) {
         const occlusion = layerState.occlusionByRoom.get(placement.roomId);
         const linkedRun =
           entity.kind === "subagent" && entity.runId ? runById.get(entity.runId) : undefined;
-        const entityAgeMs =
-          typeof entity.lastUpdatedAt === "number"
-            ? Math.max(0, snapshot.generatedAt - entity.lastUpdatedAt)
-            : Number.POSITIVE_INFINITY;
-        const spawnAgeMs =
-          typeof linkedRun?.createdAt === "number"
-            ? Math.max(0, snapshot.generatedAt - linkedRun.createdAt)
-            : entityAgeMs;
+        const getAge = (timestamp?: number, fallback: number = Number.POSITIVE_INFINITY) =>
+          typeof timestamp === "number" ? Math.max(0, snapshot.generatedAt - timestamp) : fallback;
+        const entityAgeMs = getAge(entity.lastUpdatedAt);
+        const spawnAgeMs = getAge(linkedRun?.createdAt, entityAgeMs);
         const runStartAt = linkedRun?.startedAt ?? linkedRun?.createdAt;
-        const startAgeMs =
-          typeof runStartAt === "number"
-            ? Math.max(0, snapshot.generatedAt - runStartAt)
-            : entityAgeMs;
-        const endAgeMs =
-          typeof linkedRun?.endedAt === "number"
-            ? Math.max(0, snapshot.generatedAt - linkedRun.endedAt)
-            : entityAgeMs;
-        const cleanupAgeMs =
-          typeof linkedRun?.cleanupCompletedAt === "number"
-            ? Math.max(0, snapshot.generatedAt - linkedRun.cleanupCompletedAt)
-            : Number.POSITIVE_INFINITY;
+        const startAgeMs = getAge(runStartAt, entityAgeMs);
+        const endAgeMs = getAge(linkedRun?.endedAt, entityAgeMs);
+        const cleanupAgeMs = getAge(linkedRun?.cleanupCompletedAt);
         const showSpawnPulse =
           entity.kind === "subagent" && entity.status === "active" && spawnAgeMs <= SPAWN_PULSE_WINDOW_MS;
         const showStartOrbit =
@@ -626,7 +613,7 @@ export function OfficeStage({ snapshot }: Props) {
           (entity.status === "active" ||
             entity.status === "error" ||
             entityAgeMs <= BUBBLE_VISIBLE_WINDOW_MS);
-        const bubbleClass = entityAgeMs <= SPAWN_PULSE_WINDOW_MS ? "is-fresh" : "is-calm";
+        const bubbleClass = spawnAgeMs <= SPAWN_PULSE_WINDOW_MS ? "is-fresh" : "is-calm";
         const isOccluded = occlusion
           ? placement.x >= occlusion.left &&
             placement.x <= occlusion.right &&
