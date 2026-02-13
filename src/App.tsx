@@ -68,8 +68,8 @@ function App() {
         <section className="diagnostic-strip" role="status" aria-live="polite">
           <strong>Data Warnings ({snapshot.diagnostics.length})</strong>
           <ul>
-            {diagnostics.map((diagnostic) => (
-              <li key={`${diagnostic.code}:${diagnostic.source}`}>
+            {diagnostics.map((diagnostic, index) => (
+              <li key={`${diagnostic.code}:${diagnostic.source}:${index}`}>
                 [{diagnostic.code}] {diagnostic.source}
               </li>
             ))}
