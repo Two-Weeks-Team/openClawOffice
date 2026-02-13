@@ -46,8 +46,10 @@ export type OfficeEvent = {
   text: string;
 };
 
+export type SnapshotDiagnosticLevel = "warning";
+
 export type SnapshotDiagnostic = {
-  level: "warning";
+  level: SnapshotDiagnosticLevel;
   code: string;
   source: string;
   message: string;

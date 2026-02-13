@@ -40,7 +40,12 @@ By default, the app reads OpenClaw runtime state from:
 - `~/.openclaw/agents/<agentId>/sessions/sessions.json`
 - `~/.openclaw/subagents/runs.json`
 
-If no runtime state exists, it automatically falls back to a demo snapshot.
+Live/demo transition rules:
+
+- If at least one valid agent session or subagent run is parsed, the snapshot is treated as live runtime data.
+- If no valid runtime rows are parsed, it falls back to a demo snapshot.
+- Demo entities are never mixed into a live snapshot.
+- Invalid JSON or malformed rows are degraded into diagnostics (warning codes) instead of crashing the app.
 
 You can override the state directory:
 
