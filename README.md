@@ -32,6 +32,9 @@ Web-based visual command center for OpenClaw agents and subagents.
 - Chat-style speech bubbles from latest session text (when available)
 - Subagent spawn lifecycle timeline (spawn/start/end/error/cleanup)
 - Parent-agent -> subagent link paths in the office map
+- Layered stage rendering model (`floor -> wall -> object -> entity -> overlay`)
+- Y-axis depth sort for entities + wall-side occlusion dimming
+- Responsive LOD policy (desktop: full layers, smaller viewport: object/wall detail reduction)
 
 ## Data source
 
@@ -46,6 +49,10 @@ Live/demo transition rules:
 - If no valid runtime rows are parsed, it falls back to a demo snapshot.
 - Demo entities are never mixed into a live snapshot.
 - Invalid JSON or malformed rows are degraded into diagnostics (warning codes) instead of crashing the app.
+
+Kenney tile coordinates and spacing are resolved from
+`public/assets/kenney/kenney-curation.json` so city/interior tile atlases follow
+one standardized source contract.
 
 You can override the state directory:
 
