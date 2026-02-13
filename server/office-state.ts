@@ -2,93 +2,23 @@ import fs from "node:fs/promises";
 import type { Dirent } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import {
+  parseSessionsStore,
+  parseSubagentStore,
+  type SessionSummary,
+} from "./runtime-parser";
+import type {
+  OfficeEntity,
+  OfficeEntityStatus,
+  OfficeEvent,
+  OfficeRun,
+  OfficeSnapshot,
+  SnapshotDiagnostic,
+} from "./office-types";
 
-export type OfficeEntityStatus = "active" | "idle" | "offline" | "ok" | "error";
-
-export type OfficeEntity = {
-  id: string;
-  kind: "agent" | "subagent";
-  label: string;
-  agentId: string;
-  parentAgentId?: string;
-  runId?: string;
-  status: OfficeEntityStatus;
-  sessions: number;
-  activeSubagents: number;
-  lastUpdatedAt?: number;
-  model?: string;
-  bubble?: string;
-  task?: string;
-};
-
-export type OfficeRunStatus = "active" | "ok" | "error";
-
-export type OfficeRun = {
-  runId: string;
-  childSessionKey: string;
-  requesterSessionKey: string;
-  childAgentId: string;
-  parentAgentId: string;
-  status: OfficeRunStatus;
-  task: string;
-  label?: string;
-  cleanup: "delete" | "keep";
-  createdAt: number;
-  startedAt?: number;
-  endedAt?: number;
-  cleanupCompletedAt?: number;
-};
-
-export type OfficeEventType = "spawn" | "start" | "end" | "error" | "cleanup";
-
-export type OfficeEvent = {
-  id: string;
-  type: OfficeEventType;
-  runId: string;
-  at: number;
-  agentId: string;
-  parentAgentId: string;
-  text: string;
-};
-
-export type OfficeSnapshot = {
-  generatedAt: number;
-  source: {
-    stateDir: string;
-    live: boolean;
-  };
-  entities: OfficeEntity[];
-  runs: OfficeRun[];
-  events: OfficeEvent[];
-};
-
-type SessionEntry = {
-  updatedAt?: unknown;
-  model?: unknown;
-  modelOverride?: unknown;
-};
-
-type PersistedSubagentRun = {
-  runId?: unknown;
-  childSessionKey?: unknown;
-  requesterSessionKey?: unknown;
-  task?: unknown;
-  label?: unknown;
-  cleanup?: unknown;
-  createdAt?: unknown;
-  startedAt?: unknown;
-  endedAt?: unknown;
-  cleanupCompletedAt?: unknown;
-  outcome?: {
-    status?: unknown;
-    error?: unknown;
-  };
-};
-
-type PersistedSubagentStore = {
-  version?: unknown;
-  runs?: Record<string, PersistedSubagentRun>;
-};
+const MAX_EVENTS = 220;
+const LIVE_IDLE_WINDOW_MS = 8 * 60_000;
+const LIVE_ACTIVE_WINDOW_MS = 2 * 60_000;
 
 type AgentSnapshot = {
   agentId: string;
@@ -98,10 +28,15 @@ type AgentSnapshot = {
   bubble?: string;
 };
 
-const AGENT_KEY_PATTERN = /^agent:([^:]+):/i;
-const MAX_EVENTS = 220;
-const LIVE_IDLE_WINDOW_MS = 8 * 60_000;
-const LIVE_ACTIVE_WINDOW_MS = 2 * 60_000;
+type AgentLoadResult = {
+  agentMap: Map<string, AgentSnapshot>;
+  diagnostics: SnapshotDiagnostic[];
+};
+
+type RunLoadResult = {
+  runs: OfficeRun[];
+  diagnostics: SnapshotDiagnostic[];
+};
 
 function resolveStateDir() {
   const fromEnv = process.env.OPENCLAW_STATE_DIR?.trim();
@@ -116,13 +51,6 @@ function normalizeText(value: unknown): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-function normalizeNumber(value: unknown): number | undefined {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return undefined;
-  }
-  return value;
-}
-
 function shortText(value: string | undefined, max = 120): string | undefined {
   if (!value) {
     return undefined;
@@ -133,24 +61,42 @@ function shortText(value: string | undefined, max = 120): string | undefined {
   return `${value.slice(0, max - 1)}...`;
 }
 
-function parseAgentIdFromSessionKey(key: string | undefined): string | undefined {
-  if (!key) {
-    return undefined;
-  }
-  const match = key.match(AGENT_KEY_PATTERN);
-  return match?.[1]?.trim() || undefined;
-}
-
-function parseModelFromSession(entry: SessionEntry): string | undefined {
-  return normalizeText(entry.modelOverride) ?? normalizeText(entry.model);
-}
-
-async function readJsonFile<T>(pathname: string): Promise<T | undefined> {
+async function readJsonFile(pathname: string): Promise<{ value: unknown; diagnostics: SnapshotDiagnostic[] }> {
   try {
     const raw = await fs.readFile(pathname, "utf-8");
-    return JSON.parse(raw) as T;
-  } catch {
-    return undefined;
+    try {
+      return {
+        value: JSON.parse(raw) as unknown,
+        diagnostics: [],
+      };
+    } catch (err) {
+      return {
+        value: undefined,
+        diagnostics: [
+          {
+            level: "warning",
+            code: "JSON_PARSE_FAILED",
+            source: pathname,
+            message: err instanceof Error ? err.message : String(err),
+          },
+        ],
+      };
+    }
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      return { value: undefined, diagnostics: [] };
+    }
+    return {
+      value: undefined,
+      diagnostics: [
+        {
+          level: "warning",
+          code: "JSON_READ_FAILED",
+          source: pathname,
+          message: err instanceof Error ? err.message : String(err),
+        },
+      ],
+    };
   }
 }
 
@@ -252,15 +198,30 @@ async function readLatestBubble(agentDir: string): Promise<string | undefined> {
   return undefined;
 }
 
-async function loadAgentSnapshots(stateDir: string): Promise<Map<string, AgentSnapshot>> {
+function latestSessionMetadata(sessions: SessionSummary[]): { lastUpdatedAt?: number; model?: string } {
+  let model: string | undefined;
+  let lastUpdatedAt: number | undefined;
+
+  for (const entry of sessions) {
+    if (entry.updatedAt !== undefined && (lastUpdatedAt === undefined || entry.updatedAt > lastUpdatedAt)) {
+      lastUpdatedAt = entry.updatedAt;
+      model = entry.model;
+    }
+  }
+
+  return { lastUpdatedAt, model };
+}
+
+async function loadAgentSnapshots(stateDir: string): Promise<AgentLoadResult> {
   const out = new Map<string, AgentSnapshot>();
+  const diagnostics: SnapshotDiagnostic[] = [];
   const agentsDir = path.join(stateDir, "agents");
 
   let folders: Dirent[] = [];
   try {
     folders = await fs.readdir(agentsDir, { withFileTypes: true });
   } catch {
-    return out;
+    return { agentMap: out, diagnostics };
   }
 
   for (const folder of folders) {
@@ -274,82 +235,31 @@ async function loadAgentSnapshots(stateDir: string): Promise<Map<string, AgentSn
 
     const agentDir = path.join(agentsDir, agentId);
     const sessionsPath = path.join(agentDir, "sessions", "sessions.json");
-    const store = (await readJsonFile<Record<string, SessionEntry>>(sessionsPath)) ?? {};
-    const entries = Object.values(store);
-    const sessions = entries.length;
+    const sessionsFile = await readJsonFile(sessionsPath);
+    diagnostics.push(...sessionsFile.diagnostics);
 
-    let model: string | undefined;
-    let lastUpdatedAt: number | undefined;
+    const parsed = parseSessionsStore(sessionsFile.value, sessionsPath);
+    diagnostics.push(...parsed.diagnostics);
 
-    for (const entry of entries) {
-      const updatedAt = normalizeNumber(entry.updatedAt);
-      if (updatedAt !== undefined && (lastUpdatedAt === undefined || updatedAt > lastUpdatedAt)) {
-        lastUpdatedAt = updatedAt;
-        model = parseModelFromSession(entry);
-      }
-    }
-
+    const sessions = parsed.value.length;
+    const { lastUpdatedAt, model } = latestSessionMetadata(parsed.value);
     const bubble = await readLatestBubble(agentDir);
+
     out.set(agentId, { agentId, sessions, lastUpdatedAt, model, bubble });
   }
 
-  return out;
+  return { agentMap: out, diagnostics };
 }
 
-function normalizeRunStatus(run: PersistedSubagentRun): OfficeRunStatus {
-  const outcome = run.outcome;
-  const outcomeStatus = normalizeText(outcome?.status);
-  if (outcomeStatus === "error") {
-    return "error";
-  }
-  const endedAt = normalizeNumber(run.endedAt);
-  if (endedAt !== undefined) {
-    return "ok";
-  }
-  return "active";
-}
-
-async function loadSubagentRuns(stateDir: string): Promise<OfficeRun[]> {
+async function loadSubagentRuns(stateDir: string): Promise<RunLoadResult> {
   const runsPath = path.join(stateDir, "subagents", "runs.json");
-  const store = await readJsonFile<PersistedSubagentStore>(runsPath);
-  if (!store || typeof store !== "object" || !store.runs || typeof store.runs !== "object") {
-    return [];
-  }
+  const runsFile = await readJsonFile(runsPath);
+  const parsed = parseSubagentStore(runsFile.value, runsPath);
 
-  const out: OfficeRun[] = [];
-  for (const [mapRunId, rawRun] of Object.entries(store.runs)) {
-    if (!rawRun || typeof rawRun !== "object") {
-      continue;
-    }
-
-    const runId = normalizeText(rawRun.runId) ?? mapRunId;
-    const childSessionKey = normalizeText(rawRun.childSessionKey);
-    const requesterSessionKey = normalizeText(rawRun.requesterSessionKey);
-    if (!runId || !childSessionKey || !requesterSessionKey) {
-      continue;
-    }
-
-    const childAgentId = parseAgentIdFromSessionKey(childSessionKey) ?? "unknown";
-    const parentAgentId = parseAgentIdFromSessionKey(requesterSessionKey) ?? childAgentId;
-
-    out.push({
-      runId,
-      childSessionKey,
-      requesterSessionKey,
-      childAgentId,
-      parentAgentId,
-      status: normalizeRunStatus(rawRun),
-      task: normalizeText(rawRun.task) ?? "(no task text)",
-      label: normalizeText(rawRun.label),
-      cleanup: normalizeText(rawRun.cleanup) === "delete" ? "delete" : "keep",
-      createdAt: normalizeNumber(rawRun.createdAt) ?? Date.now(),
-      startedAt: normalizeNumber(rawRun.startedAt),
-      endedAt: normalizeNumber(rawRun.endedAt),
-      cleanupCompletedAt: normalizeNumber(rawRun.cleanupCompletedAt),
-    });
-  }
-
-  return out.sort((a, b) => b.createdAt - a.createdAt);
+  return {
+    runs: parsed.value,
+    diagnostics: [...runsFile.diagnostics, ...parsed.diagnostics],
+  };
 }
 
 function buildEventsFromRuns(runs: OfficeRun[]): OfficeEvent[] {
@@ -431,7 +341,7 @@ function resolveAgentStatus(params: {
   return "offline";
 }
 
-function createDemoSnapshot(stateDir: string): OfficeSnapshot {
+function createDemoSnapshot(stateDir: string, diagnostics: SnapshotDiagnostic[] = []): OfficeSnapshot {
   const now = Date.now();
   const demoRuns: OfficeRun[] = [
     {
@@ -537,6 +447,7 @@ function createDemoSnapshot(stateDir: string): OfficeSnapshot {
       stateDir,
       live: false,
     },
+    diagnostics,
     entities,
     runs: demoRuns,
     events: buildEventsFromRuns(demoRuns),
@@ -545,10 +456,17 @@ function createDemoSnapshot(stateDir: string): OfficeSnapshot {
 
 export async function buildOfficeSnapshot(): Promise<OfficeSnapshot> {
   const stateDir = resolveStateDir();
-  const [agentMap, runs] = await Promise.all([loadAgentSnapshots(stateDir), loadSubagentRuns(stateDir)]);
+  const [agentResult, runResult] = await Promise.all([
+    loadAgentSnapshots(stateDir),
+    loadSubagentRuns(stateDir),
+  ]);
+
+  const agentMap = agentResult.agentMap;
+  const runs = runResult.runs;
+  const diagnostics = [...agentResult.diagnostics, ...runResult.diagnostics];
 
   if (agentMap.size === 0 && runs.length === 0) {
-    return createDemoSnapshot(stateDir);
+    return createDemoSnapshot(stateDir, diagnostics);
   }
 
   const activeByAgent = new Map<string, number>();
@@ -625,6 +543,7 @@ export async function buildOfficeSnapshot(): Promise<OfficeSnapshot> {
       stateDir,
       live: true,
     },
+    diagnostics,
     entities,
     runs,
     events: buildEventsFromRuns(runs),

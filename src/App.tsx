@@ -31,6 +31,7 @@ function App() {
   const subagents = snapshot.entities.filter((entity) => entity.kind === "subagent");
   const running = subagents.filter((entity) => entity.status === "active").length;
   const failed = subagents.filter((entity) => entity.status === "error").length;
+  const diagnostics = snapshot.diagnostics.slice(0, 2);
 
   return (
     <main className="app-shell">
@@ -62,6 +63,19 @@ function App() {
         <OfficeStage snapshot={snapshot} />
         <EventRail events={snapshot.events} />
       </section>
+
+      {diagnostics.length > 0 ? (
+        <section className="diagnostic-strip" role="status" aria-live="polite">
+          <strong>Data Warnings ({snapshot.diagnostics.length})</strong>
+          <ul>
+            {diagnostics.map((diagnostic) => (
+              <li key={`${diagnostic.code}:${diagnostic.source}`}>
+                [{diagnostic.code}] {diagnostic.source}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       <footer className="footer-bar">
         <span>State Dir: {snapshot.source.stateDir}</span>
