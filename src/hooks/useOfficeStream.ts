@@ -173,8 +173,13 @@ export function useOfficeStream() {
         try {
           const snapshot = JSON.parse((event as MessageEvent<string>).data) as OfficeSnapshot;
           applySnapshot(snapshot, true);
-        } catch {
-          // ignore malformed snapshot frame
+        } catch (err: unknown) {
+          const rawData = (event as MessageEvent<string>).data;
+          if (err instanceof Error) {
+            console.warn("Malformed SSE snapshot frame", rawData, err);
+          } else {
+            console.warn("Malformed SSE snapshot frame", rawData);
+          }
         }
       });
 
@@ -182,8 +187,14 @@ export function useOfficeStream() {
         let payload: LifecyclePayload | undefined;
         try {
           payload = JSON.parse((event as MessageEvent<string>).data) as LifecyclePayload;
-        } catch {
+        } catch (err: unknown) {
           payload = undefined;
+          const rawData = (event as MessageEvent<string>).data;
+          if (err instanceof Error) {
+            console.warn("Malformed SSE lifecycle frame", rawData, err);
+          } else {
+            console.warn("Malformed SSE lifecycle frame", rawData);
+          }
         }
 
         if (!payload || !payload.event || typeof payload.seq !== "number") {
