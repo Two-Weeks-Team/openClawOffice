@@ -112,12 +112,28 @@ async function pollStreamSnapshot() {
 
     for (const frame of frames) {
       for (const subscriber of streamSubscribers) {
-        subscriber.sendLifecycle(frame);
+        try {
+          subscriber.sendLifecycle(frame);
+        } catch (err) {
+          try {
+            subscriber.sendError(err instanceof Error ? err.message : String(err));
+          } catch {
+            // ignore subscriber transport failures
+          }
+        }
       }
     }
 
     for (const subscriber of streamSubscribers) {
-      subscriber.sendSnapshot(snapshot);
+      try {
+        subscriber.sendSnapshot(snapshot);
+      } catch (err) {
+        try {
+          subscriber.sendError(err instanceof Error ? err.message : String(err));
+        } catch {
+          // ignore subscriber transport failures
+        }
+      }
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -188,9 +204,6 @@ function handleStream(req: IncomingMessage, res: ServerResponse) {
   const subscriber = createSubscriber(req, res);
   const cursor = collectCursor(req);
 
-  streamSubscribers.add(subscriber);
-  ensureStreamPoller();
-
   void (async () => {
     try {
       const snapshot = await ensureInitialSnapshot();
@@ -201,6 +214,9 @@ function handleStream(req: IncomingMessage, res: ServerResponse) {
           subscriber.sendLifecycle(frame);
         }
       }
+
+      streamSubscribers.add(subscriber);
+      ensureStreamPoller();
     } catch (err) {
       subscriber.sendError(err instanceof Error ? err.message : String(err));
     }

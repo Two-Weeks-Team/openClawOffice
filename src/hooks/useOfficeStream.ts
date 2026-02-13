@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { OfficeEvent, OfficeSnapshot } from "../types/office";
 
 type OfficeStreamState = {
@@ -91,7 +91,7 @@ export function useOfficeStream() {
     let source: EventSource | null = null;
     let stopped = false;
 
-    const clearTimer = (timerRef: MutableRefObject<number | null>) => {
+    const clearTimer = (timerRef: RefObject<number | null>) => {
       if (timerRef.current !== null) {
         window.clearTimeout(timerRef.current);
         timerRef.current = null;
@@ -221,20 +221,18 @@ export function useOfficeStream() {
         });
       });
 
-      source.addEventListener("error", (event) => {
-        const message = parseSseErrorMessage(event);
-        if (!message) {
+      source.onerror = (event) => {
+        if (stopped) {
           return;
         }
-        setState((prev) => ({
-          ...prev,
-          connected: false,
-          error: message,
-        }));
-      });
 
-      source.onerror = () => {
-        if (stopped) {
+        const message = parseSseErrorMessage(event);
+        if (message) {
+          setState((prev) => ({
+            ...prev,
+            connected: false,
+            error: message,
+          }));
           return;
         }
 
@@ -266,6 +264,6 @@ export function useOfficeStream() {
       liveSource: state.liveSource,
       error: state.error,
     }),
-    [state],
+    [state.snapshot, state.connected, state.liveSource, state.error],
   );
 }
