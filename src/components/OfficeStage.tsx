@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { buildPlacements, type RoomSpec } from "../lib/layout";
 import type { OfficeEntity, OfficeRun, OfficeSnapshot } from "../types/office";
 
@@ -12,6 +12,7 @@ type Props = {
   roomFilterId?: string;
   focusMode?: boolean;
   onRoomOptionsChange?: (roomIds: string[]) => void;
+  onFilterMatchCountChange?: (count: number) => void;
   onSelectEntity?: (entityId: string) => void;
 };
 
@@ -386,10 +387,12 @@ export function OfficeStage({
   roomFilterId = "all",
   focusMode = false,
   onRoomOptionsChange,
+  onFilterMatchCountChange,
   onSelectEntity,
 }: Props) {
   const [manifest, setManifest] = useState<ManifestShape | null>(null);
   const [zoneConfig, setZoneConfig] = useState<unknown>(null);
+  const previousRoomOptionsKeyRef = useRef("");
 
   const layoutState = useMemo(
     () =>
@@ -403,14 +406,45 @@ export function OfficeStage({
 
   const rooms = layoutState.rooms;
   const placements = layoutState.placements;
+  const filteredEntityIdSet = useMemo(() => new Set(filterEntityIds), [filterEntityIds]);
+  const normalizedRoomFilterId =
+    roomFilterId.trim() !== "" && roomFilterId !== "all" ? roomFilterId : null;
+  const hasRoomFilter = Boolean(normalizedRoomFilterId);
+  const hasOpsFilter = hasEntityFilter || hasRoomFilter;
 
   useEffect(() => {
     if (!onRoomOptionsChange) {
       return;
     }
     const roomIds = [...rooms.map((room) => room.id)].sort((a, b) => a.localeCompare(b));
+    const roomOptionsKey = roomIds.join(",");
+    if (roomOptionsKey === previousRoomOptionsKeyRef.current) {
+      return;
+    }
+    previousRoomOptionsKeyRef.current = roomOptionsKey;
     onRoomOptionsChange(roomIds);
   }, [onRoomOptionsChange, rooms]);
+
+  const matchedEntityCount = useMemo(() => {
+    let count = 0;
+    for (const placement of placements) {
+      const entity = placement.entity;
+      const matchesEntityFilter = !hasEntityFilter || filteredEntityIdSet.has(entity.id);
+      const matchesRoomFilter =
+        !normalizedRoomFilterId || placement.roomId === normalizedRoomFilterId;
+      if (matchesEntityFilter && matchesRoomFilter) {
+        count += 1;
+      }
+    }
+    return count;
+  }, [filteredEntityIdSet, hasEntityFilter, normalizedRoomFilterId, placements]);
+
+  useEffect(() => {
+    if (!onFilterMatchCountChange) {
+      return;
+    }
+    onFilterMatchCountChange(matchedEntityCount);
+  }, [matchedEntityCount, onFilterMatchCountChange]);
 
   useEffect(() => {
     let cancelled = false;
@@ -520,11 +554,6 @@ export function OfficeStage({
       ? highlightAgentId.trim()
       : null;
   const highlightedRun = normalizedHighlightRunId ? runById.get(normalizedHighlightRunId) : undefined;
-  const filteredEntityIdSet = useMemo(() => new Set(filterEntityIds), [filterEntityIds]);
-  const normalizedRoomFilterId =
-    roomFilterId.trim() !== "" && roomFilterId !== "all" ? roomFilterId : null;
-  const hasRoomFilter = Boolean(normalizedRoomFilterId);
-  const hasOpsFilter = hasEntityFilter || hasRoomFilter;
 
   const sortedPlacements = useMemo(
     () => [...placements].sort((a, b) => a.y - b.y),
@@ -586,16 +615,17 @@ export function OfficeStage({
           (normalizedHighlightAgentId &&
             (run.parentAgentId === normalizedHighlightAgentId ||
               run.childAgentId === normalizedHighlightAgentId));
+        const isOpsHighlighted = hasOpsFilter && linkMatchesOps;
+        const hasHighlight = isHighlighted || isOpsHighlighted;
 
         return {
           id: `${run.runId}:${sx}:${sy}:${tx}:${ty}`,
           cls: [
             runLineClass(run),
             lifecycleClass,
-            isHighlighted ? "run-highlight" : "",
+            hasHighlight ? "run-highlight" : "",
             hasTimelineHighlight && !isHighlighted ? "run-muted" : "",
             hasOpsFilter && focusMode && !linkMatchesOps ? "run-muted" : "",
-            hasOpsFilter && linkMatchesOps ? "run-highlight" : "",
           ]
             .filter(Boolean)
             .join(" "),

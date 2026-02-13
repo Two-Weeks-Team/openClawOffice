@@ -22,6 +22,10 @@ type ToastState = {
   message: string;
 } | null;
 
+function quoteShellToken(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
 function StatCard(props: { label: string; value: number | string; accent?: string }) {
   return (
     <article className="stat-card" style={props.accent ? { borderColor: props.accent } : undefined}>
@@ -36,6 +40,7 @@ function App() {
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
   const [activeEventId, setActiveEventId] = useState<string | null>(null);
   const [roomOptions, setRoomOptions] = useState<string[]>([]);
+  const [matchCount, setMatchCount] = useState<number | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
   const [timelineFilters, setTimelineFilters] = useState<TimelineFilters>(() => ({
     runId: parseRunIdDeepLink(window.location.search),
@@ -200,20 +205,21 @@ function App() {
   };
 
   const onCopyLogGuide = async () => {
-    const stateDir = snapshot.source.stateDir;
-    const selectedLogPath =
-      selectedEntity?.kind === "agent"
-        ? `${stateDir}/agents/${selectedEntity.agentId}/sessions`
-        : selectedRun
-          ? `${stateDir}/agents/${selectedRun.childAgentId}/sessions`
-          : activeEvent
-            ? `${stateDir}/agents/${activeEvent.agentId}/sessions`
-            : null;
-    if (!selectedLogPath) {
+    let agentId: string | null = null;
+    if (selectedEntity?.kind === "agent") {
+      agentId = selectedEntity.agentId;
+    } else if (selectedRun) {
+      agentId = selectedRun.childAgentId;
+    } else if (activeEvent) {
+      agentId = activeEvent.agentId;
+    }
+
+    if (!agentId) {
       showToast("error", "No log path context. Select an entity or timeline event first.");
       return;
     }
-    const guide = `cd "${selectedLogPath}"\nls -lt *.jsonl`;
+    const selectedLogPath = `${snapshot.source.stateDir}/agents/${agentId}/sessions`;
+    const guide = `cd -- ${quoteShellToken(selectedLogPath)}\nls -lt -- *.jsonl`;
     await copyText(guide, "Copied log path guide.");
   };
 
@@ -350,7 +356,7 @@ function App() {
             Jump to run
           </button>
           <span className="ops-match-count">
-            match {filteredEntityIds.length}/{snapshot.entities.length}
+            match {(matchCount ?? filteredEntityIds.length).toString()}/{snapshot.entities.length}
           </span>
         </div>
       </section>
@@ -366,6 +372,7 @@ function App() {
           roomFilterId={opsFilters.roomId}
           focusMode={opsFilters.focusMode}
           onRoomOptionsChange={setRoomOptions}
+          onFilterMatchCountChange={setMatchCount}
           onSelectEntity={(entityId) => {
             setSelectedEntityId((prev) => (prev === entityId ? null : entityId));
           }}

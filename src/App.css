@@ -134,7 +134,7 @@ body {
   font-size: 0.63rem;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: #95cbdd;
+  color: var(--muted);
 }
 
 .ops-field input,
@@ -622,6 +622,10 @@ body {
 .entity-token.is-muted {
   opacity: 0.34;
   filter: saturate(0.65);
+}
+
+.entity-token.is-muted.is-filtered-out {
+  opacity: 0.22;
 }
 
 .entity-token.is-overflowed {
@@ -1310,6 +1314,7 @@ body {
   bottom: 16px;
   z-index: 1200;
   border-radius: 10px;
+  max-width: 380px;
   border: 1px solid rgba(164, 231, 255, 0.38);
   background: rgba(8, 34, 49, 0.96);
   padding: 9px 11px;

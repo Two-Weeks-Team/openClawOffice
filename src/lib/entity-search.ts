@@ -16,23 +16,21 @@ function pushToken(parts: string[], value: string | undefined) {
   }
 }
 
+function addRun(map: Map<string, OfficeRun[]>, agentId: string, run: OfficeRun) {
+  const runs = map.get(agentId);
+  if (runs) {
+    runs.push(run);
+    return;
+  }
+  map.set(agentId, [run]);
+}
+
 function buildRunsByAgent(runs: OfficeRun[]) {
   const map = new Map<string, OfficeRun[]>();
   for (const run of runs) {
-    const parentRuns = map.get(run.parentAgentId);
-    if (parentRuns) {
-      parentRuns.push(run);
-    } else {
-      map.set(run.parentAgentId, [run]);
-    }
-
+    addRun(map, run.parentAgentId, run);
     if (run.childAgentId !== run.parentAgentId) {
-      const childRuns = map.get(run.childAgentId);
-      if (childRuns) {
-        childRuns.push(run);
-      } else {
-        map.set(run.childAgentId, [run]);
-      }
+      addRun(map, run.childAgentId, run);
     }
   }
   return map;
