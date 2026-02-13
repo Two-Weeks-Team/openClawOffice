@@ -144,6 +144,8 @@ body {
 
 .office-stage-wrap {
   position: relative;
+  --tile-scale: 1.6;
+  --tile-opacity: 0.95;
   min-height: 700px;
   border-radius: 22px;
   border: 1px solid var(--line);
@@ -157,6 +159,7 @@ body {
 .office-stage-grid {
   position: absolute;
   inset: 0;
+  z-index: 4;
   background-image:
     linear-gradient(transparent 95%, rgba(122, 228, 255, 0.08) 100%),
     linear-gradient(90deg, transparent 95%, rgba(122, 228, 255, 0.08) 100%);
@@ -166,8 +169,52 @@ body {
   opacity: 0.25;
 }
 
+.iso-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.iso-layer.layer-floor {
+  z-index: 10;
+}
+
+.iso-layer.layer-wall {
+  z-index: 32;
+}
+
+.iso-layer.layer-object {
+  z-index: 48;
+}
+
+.iso-tile {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  image-rendering: pixelated;
+  background-repeat: no-repeat;
+  transform-origin: center;
+  opacity: var(--tile-opacity);
+}
+
+.iso-tile.layer-floor {
+  transform: translate(-50%, -50%) scale(var(--tile-scale));
+  filter: saturate(0.94) brightness(0.9);
+}
+
+.iso-tile.layer-wall {
+  transform: translate(-50%, -72%) scale(calc(var(--tile-scale) * 1.04));
+  filter: saturate(0.86) brightness(0.82);
+}
+
+.iso-tile.layer-object {
+  transform: translate(-50%, -78%) scale(calc(var(--tile-scale) * 1.12));
+  filter: saturate(1.08) brightness(1.02);
+}
+
 .office-room {
   position: absolute;
+  z-index: 120;
   border: 2px solid;
   border-radius: 18px;
   backdrop-filter: blur(1px);
@@ -199,6 +246,7 @@ body {
 .office-lines {
   position: absolute;
   inset: 0;
+  z-index: 260;
   pointer-events: none;
 }
 
@@ -236,7 +284,6 @@ body {
   position: absolute;
   transform: translate(-50%, -50%);
   min-width: 88px;
-  z-index: 3;
 }
 
 .entity-token .sprite-shell {
@@ -342,6 +389,10 @@ body {
 
 .entity-token.is-ok .sprite-shell {
   box-shadow: 0 0 0 2px rgba(130, 255, 190, 0.3), 0 7px 14px rgba(0, 0, 0, 0.3);
+}
+
+.entity-token.is-occluded {
+  opacity: 0.63;
 }
 
 .event-rail {
@@ -483,6 +534,14 @@ body {
 }
 
 @media (max-width: 1180px) {
+  .office-stage-wrap {
+    --tile-scale: 1.35;
+  }
+
+  .iso-layer.layer-object .iso-tile {
+    display: none;
+  }
+
   .stats-bar {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -497,6 +556,15 @@ body {
 }
 
 @media (max-width: 760px) {
+  .office-stage-wrap {
+    --tile-scale: 1.16;
+    --tile-opacity: 0.82;
+  }
+
+  .iso-layer.layer-wall .iso-tile {
+    display: none;
+  }
+
   .app-shell {
     width: 100%;
     padding: 8px;
