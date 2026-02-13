@@ -1,0 +1,166 @@
+{
+  "$schema": "https://openclaw.local/schemas/room-blueprint-v1.json",
+  "version": 1,
+  "tileMetrics": {
+    "minGridCols": 4,
+    "minGridRows": 3,
+    "roomGridColStride": 58,
+    "roomGridRowStride": 52,
+    "tileHalfX": 16,
+    "tileHalfY": 8,
+    "originYOffset": 30,
+    "wallTopYOffset": 18,
+    "wallLeftYOffset": 8,
+    "objectYOffset": 10
+  },
+  "occlusion": {
+    "horizontalInset": 24,
+    "topOffset": 14,
+    "bottomRatio": 0.43
+  },
+  "rooms": [
+    {
+      "roomId": "strategy",
+      "generateFloor": true,
+      "generateWalls": true,
+      "base": {
+        "floorTile": "floor_meeting",
+        "wallTile": "wall_glass",
+        "furnitureTile": "streetlamp",
+        "doorTile": "door_open"
+      },
+      "anchors": [
+        {
+          "id": "strategy-furniture-a",
+          "kind": "furniture",
+          "colRatio": 0.28,
+          "rowRatio": 0.45
+        },
+        {
+          "id": "strategy-furniture-b",
+          "kind": "furniture",
+          "colRatio": 0.7,
+          "rowRatio": 0.56
+        },
+        {
+          "id": "strategy-door-top",
+          "kind": "door",
+          "edge": "top",
+          "colRatio": 0.36
+        }
+      ]
+    },
+    {
+      "roomId": "ops",
+      "generateFloor": true,
+      "generateWalls": true,
+      "base": {
+        "floorTile": "floor_office",
+        "wallTile": "wall_indoor",
+        "furnitureTile": "bench",
+        "doorTile": "door_open"
+      },
+      "anchors": [
+        {
+          "id": "ops-furniture-a",
+          "kind": "furniture",
+          "colRatio": 0.26,
+          "rowRatio": 0.44
+        },
+        {
+          "id": "ops-furniture-b",
+          "kind": "furniture",
+          "colRatio": 0.72,
+          "rowRatio": 0.58
+        },
+        {
+          "id": "ops-door-left",
+          "kind": "door",
+          "edge": "left",
+          "rowRatio": 0.52
+        }
+      ]
+    },
+    {
+      "roomId": "build",
+      "generateFloor": true,
+      "generateWalls": true,
+      "base": {
+        "floorTile": "floor_lobby",
+        "wallTile": "wall_stone",
+        "furnitureTile": "streetlamp",
+        "doorTile": "door_open"
+      },
+      "anchors": [
+        {
+          "id": "build-furniture-a",
+          "kind": "furniture",
+          "colRatio": 0.3,
+          "rowRatio": 0.45
+        },
+        {
+          "id": "build-furniture-b",
+          "kind": "furniture",
+          "colRatio": 0.7,
+          "rowRatio": 0.58
+        }
+      ]
+    },
+    {
+      "roomId": "spawn",
+      "generateFloor": true,
+      "generateWalls": true,
+      "base": {
+        "floorTile": "floor_arcade",
+        "wallTile": "wall_brick",
+        "furnitureTile": "bench",
+        "doorTile": "door_open"
+      },
+      "anchors": [
+        {
+          "id": "spawn-furniture-a",
+          "kind": "furniture",
+          "colRatio": 0.3,
+          "rowRatio": 0.46
+        },
+        {
+          "id": "spawn-furniture-b",
+          "kind": "furniture",
+          "colRatio": 0.72,
+          "rowRatio": 0.56
+        },
+        {
+          "id": "spawn-door-top",
+          "kind": "door",
+          "edge": "top",
+          "colRatio": 0.42
+        }
+      ]
+    },
+    {
+      "roomId": "lounge",
+      "generateFloor": true,
+      "generateWalls": true,
+      "base": {
+        "floorTile": "floor_lounge",
+        "wallTile": "wall_indoor",
+        "furnitureTile": "potted_plant",
+        "doorTile": "door_open"
+      },
+      "anchors": [
+        {
+          "id": "lounge-furniture-a",
+          "kind": "furniture",
+          "colRatio": 0.26,
+          "rowRatio": 0.42
+        },
+        {
+          "id": "lounge-furniture-b",
+          "kind": "furniture",
+          "colRatio": 0.73,
+          "rowRatio": 0.54
+        }
+      ]
+    }
+  ]
+}
