@@ -250,7 +250,6 @@ function handleMetrics(res: ServerResponse, context: ApiRequestContext) {
       durationMs,
     });
   } catch (error) {
-    const durationMs = durationFrom(context.startedAt);
     const details = asErrorDetails(error);
     const code = API_ERROR_CODES.metricsReadFailed;
     setJsonHeaders(res, context.requestId);
@@ -265,6 +264,7 @@ function handleMetrics(res: ServerResponse, context: ApiRequestContext) {
         }),
       ),
     );
+    const durationMs = durationFrom(context.startedAt);
     recordRouteMetric("metrics", false, durationMs);
     logRouteResult({
       context,
