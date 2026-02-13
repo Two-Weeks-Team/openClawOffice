@@ -63,6 +63,13 @@ async function assertMetrics() {
   assert(payload?.stream, "metrics.stream missing");
 }
 
+async function readSseChunk(reader, timeoutMs) {
+  return Promise.race([
+    reader.read().then((result) => ({ ...result, timedOut: false })),
+    delay(timeoutMs).then(() => ({ done: true, value: undefined, timedOut: true })),
+  ]);
+}
+
 async function assertSse() {
   const response = await fetch(`${BASE_URL}/api/office/stream`, {
     headers: {
@@ -78,7 +85,11 @@ async function assertSse() {
   const startedAt = Date.now();
   let buffer = "";
   while (Date.now() - startedAt < SSE_TIMEOUT_MS) {
-    const { done, value } = await reader.read();
+    const remainingMs = Math.max(1, SSE_TIMEOUT_MS - (Date.now() - startedAt));
+    const { done, value, timedOut } = await readSseChunk(reader, remainingMs);
+    if (timedOut) {
+      break;
+    }
     if (done) {
       break;
     }
