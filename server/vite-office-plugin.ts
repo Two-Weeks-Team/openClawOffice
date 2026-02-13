@@ -217,7 +217,6 @@ async function handleSnapshot(res: ServerResponse, context: ApiRequestContext) {
 
 function handleMetrics(res: ServerResponse, context: ApiRequestContext) {
   try {
-    const durationMs = durationFrom(context.startedAt);
     const payload = {
       generatedAt: Date.now(),
       requestId: context.requestId,
@@ -241,6 +240,7 @@ function handleMetrics(res: ServerResponse, context: ApiRequestContext) {
     setJsonHeaders(res, context.requestId);
     res.statusCode = 200;
     res.end(JSON.stringify(payload));
+    const durationMs = durationFrom(context.startedAt);
     recordRouteMetric("metrics", true, durationMs);
     logRouteResult({
       context,
@@ -359,7 +359,11 @@ async function pollStreamSnapshot() {
       details: message,
     });
     for (const subscriber of streamSubscribers) {
-      subscriber.sendError(API_ERROR_CODES.streamRuntimeFailed, message);
+      try {
+        subscriber.sendError(API_ERROR_CODES.streamRuntimeFailed, message);
+      } catch {
+        // ignore subscriber transport failures
+      }
     }
   } finally {
     pollInFlight = false;
@@ -435,7 +439,6 @@ function handleStream(req: IncomingMessage, res: ServerResponse, context: ApiReq
 
   const subscriber = createSubscriber(req, res, context);
   const cursor = collectCursor(req);
-  const startedAt = Date.now();
   let streamReady = false;
   streamMetrics.activeConnections += 1;
   streamMetrics.totalConnections += 1;
@@ -467,7 +470,7 @@ function handleStream(req: IncomingMessage, res: ServerResponse, context: ApiReq
     } catch (err) {
       const details = err instanceof Error ? err.message : String(err);
       streamMetrics.streamErrors += 1;
-      const durationMs = Math.max(0, Date.now() - startedAt);
+      const durationMs = durationFrom(context.startedAt);
       recordRouteMetric("stream", false, durationMs);
       logStructuredEvent({
         level: "error",
@@ -478,7 +481,11 @@ function handleStream(req: IncomingMessage, res: ServerResponse, context: ApiReq
         durationMs,
         details,
       });
-      subscriber.sendError(API_ERROR_CODES.streamInitFailed, details);
+      try {
+        subscriber.sendError(API_ERROR_CODES.streamInitFailed, details);
+      } catch {
+        // ignore subscriber transport failures
+      }
     }
   })();
 
@@ -494,7 +501,7 @@ function handleStream(req: IncomingMessage, res: ServerResponse, context: ApiReq
     stopStreamPollerIfIdle();
     subscriber.close();
     streamMetrics.activeConnections = Math.max(0, streamMetrics.activeConnections - 1);
-    const durationMs = Math.max(0, Date.now() - startedAt);
+    const durationMs = durationFrom(context.startedAt);
     if (streamReady) {
       recordRouteMetric("stream", true, durationMs);
     }

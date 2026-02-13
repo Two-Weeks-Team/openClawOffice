@@ -31,5 +31,5 @@ The API returns structured errors under `error.code` with `requestId`.
 
 ## Correlation ID
 - request header: `x-correlation-id`
-- response header: `X-Correlation-Id`
+- response header: `x-correlation-id` (`X-Correlation-Id` casing may appear on the wire)
 - every API log line carries `requestId` to trace failure scenarios

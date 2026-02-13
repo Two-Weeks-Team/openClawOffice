@@ -85,6 +85,7 @@ export function logStructuredEvent(params: {
   extra?: Record<string, unknown>;
 }) {
   const payload = {
+    ...params.extra,
     ts: new Date().toISOString(),
     level: params.level,
     event: params.event,
@@ -94,7 +95,6 @@ export function logStructuredEvent(params: {
     durationMs: params.durationMs,
     statusCode: params.statusCode,
     details: params.details,
-    ...params.extra,
   };
   const line = JSON.stringify(payload);
   LOG_WRITERS[params.level](line);

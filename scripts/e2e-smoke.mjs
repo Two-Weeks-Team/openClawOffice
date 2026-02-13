@@ -64,8 +64,12 @@ async function assertMetrics() {
 }
 
 async function readSseChunk(reader, timeoutMs) {
+  const readPromise = reader.read().then(
+    (result) => ({ ...result, timedOut: false }),
+    () => ({ done: true, value: undefined, timedOut: false }),
+  );
   return Promise.race([
-    reader.read().then((result) => ({ ...result, timedOut: false })),
+    readPromise,
     delay(timeoutMs).then(() => ({ done: true, value: undefined, timedOut: true })),
   ]);
 }
