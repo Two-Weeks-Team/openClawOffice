@@ -15,9 +15,13 @@ function assert(condition, message) {
   }
 }
 
-async function waitForReady(logBuffer) {
+async function waitForReady(logBuffer, getServerExitDetails) {
   const startedAt = Date.now();
   while (Date.now() - startedAt < START_TIMEOUT_MS) {
+    const exitDetails = getServerExitDetails();
+    if (exitDetails) {
+      throw new Error(`dev server exited before becoming ready (${exitDetails})\n${logBuffer.join("\n")}`);
+    }
     try {
       const response = await fetch(`${BASE_URL}/api/office/snapshot`, {
         headers: { "x-correlation-id": CORRELATION_ID },
@@ -74,6 +78,14 @@ async function readSseChunk(reader, timeoutMs) {
   ]);
 }
 
+async function safeCancelReader(reader) {
+  try {
+    await Promise.race([reader.cancel(), delay(1_000)]);
+  } catch {
+    // ignore cancel failures
+  }
+}
+
 async function assertSse() {
   const response = await fetch(`${BASE_URL}/api/office/stream`, {
     headers: {
@@ -99,22 +111,41 @@ async function assertSse() {
     }
     buffer += decoder.decode(value, { stream: true });
     if (buffer.includes("event: snapshot")) {
-      await reader.cancel();
+      await safeCancelReader(reader);
       return;
     }
   }
-  await reader.cancel();
+  await safeCancelReader(reader);
   throw new Error(`did not receive snapshot SSE frame within ${SSE_TIMEOUT_MS}ms`);
 }
 
-async function shutdownServer(server) {
-  if (!server || server.killed) {
+function terminateServer(server, signal) {
+  if (!server || server.exitCode !== null) {
     return;
   }
-  server.kill("SIGTERM");
+  try {
+    if (process.platform === "win32") {
+      server.kill(signal);
+      return;
+    }
+    if (server.pid) {
+      process.kill(-server.pid, signal);
+      return;
+    }
+  } catch {
+    // ignore process termination errors
+  }
+}
+
+async function shutdownServer(server) {
+  if (!server || server.exitCode !== null) {
+    return;
+  }
+  terminateServer(server, "SIGTERM");
   await Promise.race([once(server, "exit"), delay(2_000)]);
   if (server.exitCode === null) {
-    server.kill("SIGKILL");
+    terminateServer(server, "SIGKILL");
+    await Promise.race([once(server, "exit"), delay(2_000)]);
   }
 }
 
@@ -123,7 +154,14 @@ async function main() {
   const server = spawn(pnpmCmd, ["dev"], {
     env: { ...process.env, CI: "1" },
     stdio: ["ignore", "pipe", "pipe"],
+    detached: process.platform !== "win32",
   });
+  const getServerExitDetails = () => {
+    if (server.exitCode === null && server.signalCode === null) {
+      return undefined;
+    }
+    return `code=${server.exitCode ?? "null"}, signal=${server.signalCode ?? "null"}`;
+  };
 
   const captureLog = (chunk, prefix) => {
     const text = String(chunk).trim();
@@ -140,7 +178,7 @@ async function main() {
   server.stderr.on("data", (chunk) => captureLog(chunk, "[err] "));
 
   try {
-    await waitForReady(logBuffer);
+    await waitForReady(logBuffer, getServerExitDetails);
     await assertSnapshot();
     await assertSse();
     await assertMetrics();
