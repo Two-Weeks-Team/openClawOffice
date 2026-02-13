@@ -6,6 +6,12 @@ type TranscriptEntry = {
   seq: number;
 };
 
+type TranscriptTailState = {
+  entries: TranscriptEntry[];
+  keyIndex: Map<string, number>;
+  lastRoleSeen: TranscriptRole;
+};
+
 const MAX_RECURSION_DEPTH = 4;
 const DEFAULT_LOOKBACK = 8;
 const DEFAULT_MAX_CHARS = 110;
@@ -166,6 +172,65 @@ function selectEntry(entries: TranscriptEntry[], lookback: number): TranscriptEn
   return recent[recent.length - 1];
 }
 
+function processTranscriptLine(line: string, seq: number, state: TranscriptTailState) {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(line) as unknown;
+  } catch {
+    return;
+  }
+
+  if (!isRecord(parsed)) {
+    return;
+  }
+
+  const role = resolveRole(parsed);
+  if (role !== "unknown") {
+    state.lastRoleSeen = role;
+  }
+
+  const text = pickRowText(parsed);
+  if (!text) {
+    return;
+  }
+
+  const key = resolveMessageKey(parsed, role);
+  const partial = isPartialRow(parsed);
+  const entries = state.entries;
+
+  if (key && state.keyIndex.has(key)) {
+    const index = state.keyIndex.get(key);
+    if (index !== undefined && entries[index]) {
+      entries[index].text = mergeText(entries[index].text, text);
+      entries[index].seq = seq;
+    }
+    return;
+  }
+
+  const last = entries[entries.length - 1];
+  if (partial && last && last.role === role) {
+    last.text = mergeText(last.text, text);
+    last.seq = seq;
+    if (key) {
+      state.keyIndex.set(key, entries.length - 1);
+    }
+    return;
+  }
+
+  if (last && last.role === role && last.text === text) {
+    last.seq = seq;
+    if (key) {
+      state.keyIndex.set(key, entries.length - 1);
+    }
+    return;
+  }
+
+  entries.push({ role, text, seq });
+  if (key) {
+    state.keyIndex.set(key, entries.length - 1);
+  }
+}
+
 export function buildTranscriptBubble(
   rawJsonl: string,
   options?: { lookback?: number; maxChars?: number },
@@ -173,9 +238,11 @@ export function buildTranscriptBubble(
   const lookback = options?.lookback ?? DEFAULT_LOOKBACK;
   const maxChars = options?.maxChars ?? DEFAULT_MAX_CHARS;
 
-  const entries: TranscriptEntry[] = [];
-  const keyIndex = new Map<string, number>();
-  let lastRoleSeen: TranscriptRole = "unknown";
+  const state: TranscriptTailState = {
+    entries: [],
+    keyIndex: new Map<string, number>(),
+    lastRoleSeen: "unknown",
+  };
 
   const lines = rawJsonl
     .split(/\r?\n/)
@@ -187,71 +254,16 @@ export function buildTranscriptBubble(
     if (!line) {
       continue;
     }
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(line) as unknown;
-    } catch {
-      continue;
-    }
-
-    if (!isRecord(parsed)) {
-      continue;
-    }
-
-    const role = resolveRole(parsed);
-    if (role !== "unknown") {
-      lastRoleSeen = role;
-    }
-
-    const text = pickRowText(parsed);
-    if (!text) {
-      continue;
-    }
-
-    const key = resolveMessageKey(parsed, role);
-    const partial = isPartialRow(parsed);
-
-    if (key && keyIndex.has(key)) {
-      const index = keyIndex.get(key);
-      if (index !== undefined && entries[index]) {
-        entries[index].text = mergeText(entries[index].text, text);
-        entries[index].seq = seq;
-      }
-      continue;
-    }
-
-    const last = entries[entries.length - 1];
-    if (partial && last && last.role === role) {
-      last.text = mergeText(last.text, text);
-      last.seq = seq;
-      if (key) {
-        keyIndex.set(key, entries.length - 1);
-      }
-      continue;
-    }
-
-    if (last && last.role === role && last.text === text) {
-      last.seq = seq;
-      if (key) {
-        keyIndex.set(key, entries.length - 1);
-      }
-      continue;
-    }
-
-    entries.push({ role, text, seq });
-    if (key) {
-      keyIndex.set(key, entries.length - 1);
-    }
+    processTranscriptLine(line, seq, state);
   }
 
-  const selected = selectEntry(entries, lookback);
+  const selected = selectEntry(state.entries, lookback);
   if (selected?.text) {
     return shorten(selected.text, maxChars);
   }
 
-  if (lastRoleSeen !== "unknown") {
-    return ROLE_FALLBACK[lastRoleSeen];
+  if (state.lastRoleSeen !== "unknown") {
+    return ROLE_FALLBACK[state.lastRoleSeen];
   }
 
   return undefined;
