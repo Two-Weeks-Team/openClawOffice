@@ -115,12 +115,16 @@ describe("buildDetailPanelModel", () => {
     const model = buildDetailPanelModel(makeSnapshot(), null);
     expect(model.status).toBe("empty");
     expect(model.paths.runStorePath).toBe("/tmp/openclaw/subagents/runs.json");
+    expect(model.recentRuns).toHaveLength(0);
+    expect(model.runDiff).toBeNull();
   });
 
   it("returns missing status when selected id is not present", () => {
     const model = buildDetailPanelModel(makeSnapshot(), "agent:ghost");
     expect(model.status).toBe("missing");
     expect(model.entity).toBeNull();
+    expect(model.recentRuns).toHaveLength(0);
+    expect(model.runDiff).toBeNull();
   });
 
   it("builds agent cross references for runs and events", () => {
@@ -131,6 +135,7 @@ describe("buildDetailPanelModel", () => {
     }
 
     expect(model.relatedRuns.map((run) => run.runId)).toEqual(["run-2", "run-3", "run-1"]);
+    expect(model.recentRuns.map((item) => item.run.runId)).toEqual(["run-2", "run-3", "run-1"]);
     expect(model.metrics.errorRuns).toBe(1);
     expect(model.metrics.runCount).toBe(3);
     expect(model.paths.sessionStorePath).toBe("/tmp/openclaw/agents/main/sessions/sessions.json");
@@ -139,6 +144,9 @@ describe("buildDetailPanelModel", () => {
       "run-3:spawn:1",
       "run-1:start:1",
     ]);
+    expect(model.runDiff?.baseline.run.runId).toBe("run-3");
+    expect(model.runDiff?.candidate.run.runId).toBe("run-2");
+    expect(model.runDiff?.eventCountDelta).toBe(0);
   });
 
   it("builds subagent references using linked run", () => {
@@ -150,8 +158,26 @@ describe("buildDetailPanelModel", () => {
 
     expect(model.linkedRun?.runId).toBe("run-1");
     expect(model.relatedRuns.map((run) => run.runId)).toEqual(["run-1"]);
+    expect(model.recentRuns.map((item) => item.run.runId)).toEqual(["run-1"]);
+    expect(model.runDiff).toBeNull();
     expect(model.relatedEvents.map((event) => event.runId)).toEqual(["run-1"]);
     expect(model.paths.childSessionLogPath).toBe("/tmp/openclaw/agents/research/sessions");
     expect(model.paths.parentSessionLogPath).toBe("/tmp/openclaw/agents/main/sessions");
+  });
+
+  it("keeps runDiff empty when success vs error pair is not available", () => {
+    const snapshot = makeSnapshot();
+    snapshot.runs = snapshot.runs.map((run) =>
+      run.status === "ok" ? { ...run, status: "active" as const } : run,
+    );
+    snapshot.runGraph = buildRunGraph(snapshot.runs);
+
+    const model = buildDetailPanelModel(snapshot, "agent:main");
+    expect(model.status).toBe("ready");
+    if (model.status !== "ready") {
+      return;
+    }
+    expect(model.recentRuns.length).toBeGreaterThan(0);
+    expect(model.runDiff).toBeNull();
   });
 });

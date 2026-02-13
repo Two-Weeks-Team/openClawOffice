@@ -11,8 +11,18 @@ import type {
 type Props = {
   snapshot: OfficeSnapshot;
   selectedEntityId: string | null;
+  onJumpToRun?: (runId: string) => void;
   onClose: () => void;
 };
+
+type DetailPanelTab = "overview" | "sessions" | "runs" | "diff";
+
+const DETAIL_PANEL_TABS: Array<{ id: DetailPanelTab; label: string }> = [
+  { id: "overview", label: "Overview" },
+  { id: "sessions", label: "Sessions" },
+  { id: "runs", label: "Runs" },
+  { id: "diff", label: "Diff" },
+];
 
 function formatRelative(at: number, now: number): string {
   const ms = Math.max(0, now - at);
@@ -30,6 +40,23 @@ function formatAt(at?: number): string {
     return "-";
   }
   return new Date(at).toLocaleString();
+}
+
+function formatLatency(latencyMs: number | null): string {
+  if (latencyMs === null) {
+    return "-";
+  }
+  if (latencyMs < 1000) {
+    return `${latencyMs} ms`;
+  }
+  return `${(latencyMs / 1000).toFixed(2)} s`;
+}
+
+function formatDelta(value: number, suffix = ""): string {
+  if (value === 0) {
+    return `0${suffix}`;
+  }
+  return `${value > 0 ? "+" : ""}${value}${suffix}`;
 }
 
 const RUN_STATUS_LABELS: Record<OfficeRunStatus, string> = {
@@ -54,8 +81,9 @@ function eventTypeLabel(event: OfficeEvent): string {
   return EVENT_TYPE_LABELS[event.type] ?? event.type.toUpperCase();
 }
 
-export function EntityDetailPanel({ snapshot, selectedEntityId, onClose }: Props) {
+export function EntityDetailPanel({ snapshot, selectedEntityId, onJumpToRun, onClose }: Props) {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<DetailPanelTab>("overview");
 
   const model = useMemo(
     () => buildDetailPanelModel(snapshot, selectedEntityId),
@@ -133,7 +161,7 @@ export function EntityDetailPanel({ snapshot, selectedEntityId, onClose }: Props
       <header className="detail-panel-header">
         <div>
           <h2>Entity Detail</h2>
-          <p>Click an entity token to inspect sessions, runs, messages, and metrics.</p>
+          <p>Inspect sessions, recent runs, and success vs error diffs from one panel.</p>
         </div>
         <button
           type="button"
@@ -144,6 +172,25 @@ export function EntityDetailPanel({ snapshot, selectedEntityId, onClose }: Props
           Close
         </button>
       </header>
+
+      {readyModel ? (
+        <div className="detail-tabs" role="tablist" aria-label="Entity detail tabs">
+          {DETAIL_PANEL_TABS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === tab.id}
+              className={`detail-tab-button${activeTab === tab.id ? " is-active" : ""}`}
+              onClick={() => {
+                setActiveTab(tab.id);
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       {model.status === "empty" ? (
         <div className="detail-empty">
@@ -166,164 +213,333 @@ export function EntityDetailPanel({ snapshot, selectedEntityId, onClose }: Props
 
       {readyModel ? (
         <div className="detail-body">
-          <section className="detail-section">
-            <h3>Overview</h3>
-            <dl className="detail-kv">
-              <div>
-                <dt>Entity</dt>
-                <dd>
-                  {readyModel.entity.label} ({readyModel.entity.kind})
-                </dd>
-              </div>
-              <div>
-                <dt>Status</dt>
-                <dd>{readyModel.entity.status}</dd>
-              </div>
-              <div>
-                <dt>Agent ID</dt>
-                <dd>{readyModel.entity.agentId}</dd>
-              </div>
-              <div>
-                <dt>Parent Agent</dt>
-                <dd>{readyModel.entity.parentAgentId ?? "-"}</dd>
-              </div>
-              {renderCopyValue("Run ID", "runId", readyModel.linkedRun?.runId ?? readyModel.entity.runId)}
-              <div>
-                <dt>Model</dt>
-                <dd>{readyModel.models.join(", ") || "unknown"}</dd>
-              </div>
-              <div>
-                <dt>Last Updated</dt>
-                <dd>{formatAt(readyModel.entity.lastUpdatedAt)}</dd>
-              </div>
-              <div>
-                <dt>Cleanup</dt>
-                <dd>
-                  {readyModel.linkedRun
-                    ? `${readyModel.linkedRun.cleanup} / ${
-                        readyModel.linkedRun.cleanupCompletedAt ? "completed" : "pending"
-                      }`
-                    : "-"}
-                </dd>
-              </div>
-            </dl>
-            {readyModel.entity.task || readyModel.linkedRun?.task ? (
-              <p className="detail-task">{readyModel.entity.task ?? readyModel.linkedRun?.task}</p>
-            ) : null}
-          </section>
+          {activeTab === "overview" ? (
+            <>
+              <section className="detail-section">
+                <h3>Overview</h3>
+                <dl className="detail-kv">
+                  <div>
+                    <dt>Entity</dt>
+                    <dd>
+                      {readyModel.entity.label} ({readyModel.entity.kind})
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Status</dt>
+                    <dd>{readyModel.entity.status}</dd>
+                  </div>
+                  <div>
+                    <dt>Agent ID</dt>
+                    <dd>{readyModel.entity.agentId}</dd>
+                  </div>
+                  <div>
+                    <dt>Parent Agent</dt>
+                    <dd>{readyModel.entity.parentAgentId ?? "-"}</dd>
+                  </div>
+                  {renderCopyValue(
+                    "Run ID",
+                    "runId",
+                    readyModel.linkedRun?.runId ?? readyModel.entity.runId,
+                  )}
+                  <div>
+                    <dt>Model</dt>
+                    <dd>{readyModel.models.join(", ") || "unknown"}</dd>
+                  </div>
+                  <div>
+                    <dt>Last Updated</dt>
+                    <dd>{formatAt(readyModel.entity.lastUpdatedAt)}</dd>
+                  </div>
+                  <div>
+                    <dt>Cleanup</dt>
+                    <dd>
+                      {readyModel.linkedRun
+                        ? `${readyModel.linkedRun.cleanup} / ${
+                            readyModel.linkedRun.cleanupCompletedAt ? "completed" : "pending"
+                          }`
+                        : "-"}
+                    </dd>
+                  </div>
+                </dl>
+                {readyModel.entity.task || readyModel.linkedRun?.task ? (
+                  <p className="detail-task">{readyModel.entity.task ?? readyModel.linkedRun?.task}</p>
+                ) : null}
+              </section>
 
-          <section className="detail-section">
-            <h3>Sessions</h3>
-            <dl className="detail-kv">
-              <div>
-                <dt>Session Count</dt>
-                <dd>{readyModel.metrics.sessions}</dd>
-              </div>
-              {renderCopyValue("Child Session Key", "childSession", readyModel.linkedRun?.childSessionKey)}
-              {renderCopyValue(
-                "Requester Session Key",
-                "requesterSession",
-                readyModel.linkedRun?.requesterSessionKey,
+              <section className="detail-section">
+                <h3>Messages</h3>
+                {readyModel.relatedEvents.length === 0 ? (
+                  <p className="detail-muted">No related lifecycle events were found.</p>
+                ) : (
+                  <ol className="detail-message-list">
+                    {readyModel.relatedEvents.map((event) => (
+                      <li key={event.id} className="detail-message-item">
+                        <div className="detail-message-top">
+                          <span className={`detail-tag event-${event.type}`}>{eventTypeLabel(event)}</span>
+                          <time title={new Date(event.at).toLocaleString()}>
+                            {formatRelative(event.at, snapshot.generatedAt)}
+                          </time>
+                        </div>
+                        <p>{event.text}</p>
+                        <small>
+                          run {event.runId} | {event.parentAgentId} {"->"} {event.agentId}
+                        </small>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </section>
+
+              <section className="detail-section">
+                <h3>Metrics</h3>
+                <div className="detail-metrics">
+                  <article>
+                    <span>Sessions</span>
+                    <strong>{readyModel.metrics.sessions}</strong>
+                  </article>
+                  <article>
+                    <span>Runs</span>
+                    <strong>{readyModel.metrics.runCount}</strong>
+                  </article>
+                  <article>
+                    <span>Run Errors</span>
+                    <strong>{readyModel.metrics.errorRuns}</strong>
+                  </article>
+                  <article>
+                    <span>Events</span>
+                    <strong>{readyModel.metrics.eventCount}</strong>
+                  </article>
+                  <article>
+                    <span>Active Subs</span>
+                    <strong>{readyModel.metrics.activeSubagents}</strong>
+                  </article>
+                  <article>
+                    <span>Token Est.</span>
+                    <strong>{readyModel.metrics.tokenEstimate}</strong>
+                  </article>
+                </div>
+                <dl className="detail-kv detail-kv-compact">
+                  {renderCopyValue("Run Store Path", "runStore", readyModel.paths.runStorePath)}
+                </dl>
+              </section>
+            </>
+          ) : null}
+
+          {activeTab === "sessions" ? (
+            <section className="detail-section">
+              <h3>Sessions</h3>
+              <dl className="detail-kv">
+                <div>
+                  <dt>Session Count</dt>
+                  <dd>{readyModel.metrics.sessions}</dd>
+                </div>
+                {renderCopyValue("Child Session Key", "childSession", readyModel.linkedRun?.childSessionKey)}
+                {renderCopyValue(
+                  "Requester Session Key",
+                  "requesterSession",
+                  readyModel.linkedRun?.requesterSessionKey,
+                )}
+                {renderCopyValue("Session Store", "sessionStore", readyModel.paths.sessionStorePath)}
+                {renderCopyValue("Session Logs", "sessionLogs", readyModel.paths.sessionLogPath)}
+                {renderCopyValue("Child Logs", "childLogs", readyModel.paths.childSessionLogPath)}
+                {renderCopyValue("Parent Logs", "parentLogs", readyModel.paths.parentSessionLogPath)}
+              </dl>
+            </section>
+          ) : null}
+
+          {activeTab === "runs" ? (
+            <section className="detail-section">
+              <h3>Runs (Recent 6)</h3>
+              {readyModel.recentRuns.length === 0 ? (
+                <p className="detail-muted">No related runs were found.</p>
+              ) : (
+                <ol className="detail-run-list">
+                  {readyModel.recentRuns.map((item) => (
+                    <li key={item.run.runId} className="detail-run-item">
+                      <div className="detail-run-top">
+                        <strong>{item.run.runId}</strong>
+                        <div className="detail-run-actions">
+                          <button
+                            type="button"
+                            className="detail-copy-button"
+                            onClick={() => {
+                              void copyText(`run:${item.run.runId}`, item.run.runId);
+                            }}
+                          >
+                            {copiedKey === `run:${item.run.runId}` ? "Copied" : "Copy"}
+                          </button>
+                          {onJumpToRun ? (
+                            <button
+                              type="button"
+                              className="detail-copy-button"
+                              onClick={() => {
+                                onJumpToRun(item.run.runId);
+                              }}
+                            >
+                              Jump
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                      <div className="detail-run-meta">
+                        <span className={`detail-tag ${item.run.status}`}>{runStatusLabel(item.run)}</span>
+                        <span>
+                          {item.run.parentAgentId} {"->"} {item.run.childAgentId}
+                        </span>
+                        <span>model: {item.model}</span>
+                        <span>tokens: {item.tokenEstimate}</span>
+                        <span>latency: {formatLatency(item.latencyMs)}</span>
+                        <span>events: {item.eventCount}</span>
+                        <span>cleanup: {item.run.cleanup}</span>
+                      </div>
+                      <p className="detail-run-task">{item.run.task}</p>
+                      <p className="detail-run-time">
+                        created {formatAt(item.run.createdAt)} | start {formatAt(item.run.startedAt)} | end{" "}
+                        {formatAt(item.run.endedAt)}
+                      </p>
+                    </li>
+                  ))}
+                </ol>
               )}
-              {renderCopyValue("Session Store", "sessionStore", readyModel.paths.sessionStorePath)}
-              {renderCopyValue("Session Logs", "sessionLogs", readyModel.paths.sessionLogPath)}
-              {renderCopyValue("Child Logs", "childLogs", readyModel.paths.childSessionLogPath)}
-              {renderCopyValue("Parent Logs", "parentLogs", readyModel.paths.parentSessionLogPath)}
-            </dl>
-          </section>
+            </section>
+          ) : null}
 
-          <section className="detail-section">
-            <h3>Runs</h3>
-            {readyModel.relatedRuns.length === 0 ? (
-              <p className="detail-muted">No related runs were found.</p>
-            ) : (
-              <ol className="detail-run-list">
-                {readyModel.relatedRuns.map((run) => (
-                  <li key={run.runId} className="detail-run-item">
-                    <div className="detail-run-top">
-                      <strong>{run.runId}</strong>
-                      <button
-                        type="button"
-                        className="detail-copy-button"
-                        onClick={() => {
-                          void copyText(`run:${run.runId}`, run.runId);
-                        }}
-                      >
-                        {copiedKey === `run:${run.runId}` ? "Copied" : "Copy"}
-                      </button>
-                    </div>
-                    <div className="detail-run-meta">
-                      <span className={`detail-tag ${run.status}`}>{runStatusLabel(run)}</span>
-                      <span>{run.parentAgentId} {"->"} {run.childAgentId}</span>
-                      <span>cleanup: {run.cleanup}</span>
-                    </div>
-                    <p className="detail-run-task">{run.task}</p>
-                    <p className="detail-run-time">
-                      created {formatAt(run.createdAt)} | start {formatAt(run.startedAt)} | end{" "}
-                      {formatAt(run.endedAt)}
+          {activeTab === "diff" ? (
+            <section className="detail-section">
+              <h3>Run Diff (Success vs Error)</h3>
+              {(() => {
+                const runDiff = readyModel.runDiff;
+                if (!runDiff) {
+                  return (
+                    <p className="detail-muted">
+                      Need at least one recent SUCCESS run and one ERROR run to compute a diff.
                     </p>
-                  </li>
-                ))}
-              </ol>
-            )}
-          </section>
+                  );
+                }
 
-          <section className="detail-section">
-            <h3>Messages</h3>
-            {readyModel.relatedEvents.length === 0 ? (
-              <p className="detail-muted">No related lifecycle events were found.</p>
-            ) : (
-              <ol className="detail-message-list">
-                {readyModel.relatedEvents.map((event) => (
-                  <li key={event.id} className="detail-message-item">
-                    <div className="detail-message-top">
-                      <span className={`detail-tag event-${event.type}`}>{eventTypeLabel(event)}</span>
-                      <time title={new Date(event.at).toLocaleString()}>
-                        {formatRelative(event.at, snapshot.generatedAt)}
-                      </time>
+                return (
+                  <>
+                    <dl className="detail-kv">
+                      <div>
+                        <dt>Baseline Run</dt>
+                        <dd>
+                          <span className="detail-inline-copy">
+                            <code>{runDiff.baseline.run.runId}</code>
+                            <button
+                              type="button"
+                              className="detail-copy-button"
+                              onClick={() => {
+                                void copyText(
+                                  `diff-baseline:${runDiff.baseline.run.runId}`,
+                                  runDiff.baseline.run.runId,
+                                );
+                              }}
+                            >
+                              {copiedKey === `diff-baseline:${runDiff.baseline.run.runId}` ? "Copied" : "Copy"}
+                            </button>
+                            {onJumpToRun ? (
+                              <button
+                                type="button"
+                                className="detail-copy-button"
+                                onClick={() => {
+                                  onJumpToRun(runDiff.baseline.run.runId);
+                                }}
+                              >
+                                Jump
+                              </button>
+                            ) : null}
+                          </span>
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Error Run</dt>
+                        <dd>
+                          <span className="detail-inline-copy">
+                            <code>{runDiff.candidate.run.runId}</code>
+                            <button
+                              type="button"
+                              className="detail-copy-button"
+                              onClick={() => {
+                                void copyText(
+                                  `diff-candidate:${runDiff.candidate.run.runId}`,
+                                  runDiff.candidate.run.runId,
+                                );
+                              }}
+                            >
+                              {copiedKey === `diff-candidate:${runDiff.candidate.run.runId}`
+                                ? "Copied"
+                                : "Copy"}
+                            </button>
+                            {onJumpToRun ? (
+                              <button
+                                type="button"
+                                className="detail-copy-button"
+                                onClick={() => {
+                                  onJumpToRun(runDiff.candidate.run.runId);
+                                }}
+                              >
+                                Jump
+                              </button>
+                            ) : null}
+                          </span>
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Model</dt>
+                        <dd>
+                          {runDiff.baseline.model} {"->"} {runDiff.candidate.model}
+                          {runDiff.modelChanged ? " (changed)" : " (same)"}
+                        </dd>
+                      </div>
+                    </dl>
+                    <div className="detail-diff-grid">
+                      <article>
+                        <span>Token Delta</span>
+                        <strong
+                          className={
+                            runDiff.tokenEstimateDelta > 0
+                              ? "detail-diff-plus"
+                              : runDiff.tokenEstimateDelta < 0
+                                ? "detail-diff-minus"
+                                : ""
+                          }
+                        >
+                          {formatDelta(runDiff.tokenEstimateDelta)}
+                        </strong>
+                      </article>
+                      <article>
+                        <span>Latency Delta</span>
+                        <strong
+                          className={
+                            runDiff.latencyDeltaMs !== null && runDiff.latencyDeltaMs > 0
+                              ? "detail-diff-plus"
+                              : runDiff.latencyDeltaMs !== null && runDiff.latencyDeltaMs < 0
+                                ? "detail-diff-minus"
+                                : ""
+                          }
+                        >
+                          {runDiff.latencyDeltaMs === null ? "-" : formatDelta(runDiff.latencyDeltaMs, " ms")}
+                        </strong>
+                      </article>
+                      <article>
+                        <span>Event Delta</span>
+                        <strong
+                          className={
+                            runDiff.eventCountDelta > 0
+                              ? "detail-diff-plus"
+                              : runDiff.eventCountDelta < 0
+                                ? "detail-diff-minus"
+                                : ""
+                          }
+                        >
+                          {formatDelta(runDiff.eventCountDelta)}
+                        </strong>
+                      </article>
                     </div>
-                    <p>{event.text}</p>
-                    <small>
-                      run {event.runId} | {event.parentAgentId} {"->"} {event.agentId}
-                    </small>
-                  </li>
-                ))}
-              </ol>
-            )}
-          </section>
-
-          <section className="detail-section">
-            <h3>Metrics</h3>
-            <div className="detail-metrics">
-              <article>
-                <span>Sessions</span>
-                <strong>{readyModel.metrics.sessions}</strong>
-              </article>
-              <article>
-                <span>Runs</span>
-                <strong>{readyModel.metrics.runCount}</strong>
-              </article>
-              <article>
-                <span>Run Errors</span>
-                <strong>{readyModel.metrics.errorRuns}</strong>
-              </article>
-              <article>
-                <span>Events</span>
-                <strong>{readyModel.metrics.eventCount}</strong>
-              </article>
-              <article>
-                <span>Active Subs</span>
-                <strong>{readyModel.metrics.activeSubagents}</strong>
-              </article>
-              <article>
-                <span>Token Est.</span>
-                <strong>{readyModel.metrics.tokenEstimate}</strong>
-              </article>
-            </div>
-            <dl className="detail-kv detail-kv-compact">
-              {renderCopyValue("Run Store Path", "runStore", readyModel.paths.runStorePath)}
-            </dl>
-          </section>
+                  </>
+                );
+              })()}
+            </section>
+          ) : null}
         </div>
       ) : null}
     </aside>

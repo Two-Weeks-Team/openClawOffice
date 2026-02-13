@@ -223,15 +223,24 @@ function App() {
     await copyText(guide, "Copied log path guide.");
   };
 
+  const jumpToRunId = (runId: string, source: "toolbar" | "panel" = "toolbar") => {
+    setTimelineFilters((prev) => ({ ...prev, runId, status: "all" }));
+    setActiveEventId(null);
+    showToast(
+      "info",
+      source === "toolbar"
+        ? `Timeline jumped to runId filter: ${runId}`
+        : `Detail panel jumped to runId filter: ${runId}`,
+    );
+  };
+
   const onJumpToRun = () => {
     const runId = selectedRun?.runId ?? selectedEntity?.runId ?? activeEvent?.runId;
     if (!runId) {
       showToast("error", "No runId available for jump.");
       return;
     }
-    setTimelineFilters((prev) => ({ ...prev, runId, status: "all" }));
-    setActiveEventId(null);
-    showToast("info", `Timeline jumped to runId filter: ${runId}`);
+    jumpToRunId(runId, "toolbar");
   };
 
   return (
@@ -390,6 +399,12 @@ function App() {
           <EntityDetailPanel
             snapshot={snapshot}
             selectedEntityId={selectedEntityId}
+            onJumpToRun={(runId) => {
+              if (!runId.trim()) {
+                return;
+              }
+              jumpToRunId(runId, "panel");
+            }}
             onClose={() => {
               setSelectedEntityId(null);
             }}
