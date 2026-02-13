@@ -30,7 +30,7 @@ type TileCatalog = {
 };
 
 type ManifestShape = {
-  sources?: Record<string, { tileSize?: number; spacing?: number }>;
+  sources?: Record<string, { tileSize?: unknown; spacing?: unknown }>;
   tileset?: { tiles?: Array<{ id?: string; source?: string; col?: number; row?: number }> };
 };
 
@@ -63,7 +63,7 @@ const DEFAULT_SOURCES: Record<string, TileSourceSpec> = {
     spacing: 1,
   },
   urban: {
-    atlas: "/assets/kenney/tiles/city_tilemap.png",
+    atlas: "/assets/kenney/urban/urban_tilemap.png",
     tileSize: 16,
     spacing: 0,
   },
@@ -169,14 +169,29 @@ function spriteStyle(entityId: string) {
   };
 }
 
+function toFiniteNumber(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return undefined;
+}
+
 function buildTileCatalog(manifest: ManifestShape | null) {
   const sourceSpecs = new Map<string, TileSourceSpec>();
   for (const [source, spec] of Object.entries(DEFAULT_SOURCES)) {
     const manifestSpec = manifest?.sources?.[source];
+    const manifestTileSize = toFiniteNumber(manifestSpec?.tileSize);
+    const manifestSpacing = toFiniteNumber(manifestSpec?.spacing);
     sourceSpecs.set(source, {
       atlas: spec.atlas,
-      tileSize: manifestSpec?.tileSize ?? spec.tileSize,
-      spacing: manifestSpec?.spacing ?? spec.spacing,
+      tileSize: manifestTileSize ?? spec.tileSize,
+      spacing: manifestSpacing ?? spec.spacing,
     });
   }
 

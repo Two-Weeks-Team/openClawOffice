@@ -144,6 +144,7 @@ body {
 
 .office-stage-wrap {
   position: relative;
+
   --tile-scale: 1.6;
   --tile-opacity: 0.95;
   --z-layer-floor: 10;
