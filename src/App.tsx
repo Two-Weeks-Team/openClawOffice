@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import "./App.css";
 import { EntityDetailPanel } from "./components/EntityDetailPanel";
 import { EventRail } from "./components/EventRail";
 import { OfficeStage } from "./components/OfficeStage";
 import { useOfficeStream } from "./hooks/useOfficeStream";
+import { parseRunIdDeepLink, type TimelineFilters } from "./lib/timeline";
 
 function StatCard(props: { label: string; value: number | string; accent?: string }) {
   return (
@@ -17,6 +18,27 @@ function StatCard(props: { label: string; value: number | string; accent?: strin
 function App() {
   const { snapshot, connected, liveSource, error } = useOfficeStream();
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
+  const [activeEventId, setActiveEventId] = useState<string | null>(null);
+  const [timelineFilters, setTimelineFilters] = useState<TimelineFilters>(() => ({
+    runId: parseRunIdDeepLink(window.location.search),
+    agentId: "",
+    status: "all",
+  }));
+  const activeEvent = useMemo(
+    () => snapshot?.events.find((event) => event.id === activeEventId) ?? null,
+    [activeEventId, snapshot],
+  );
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const runId = timelineFilters.runId.trim();
+    if (runId) {
+      url.searchParams.set("runId", runId);
+    } else {
+      url.searchParams.delete("runId");
+    }
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [timelineFilters.runId]);
 
   if (!snapshot) {
     return (
@@ -35,6 +57,8 @@ function App() {
   const running = subagents.filter((entity) => entity.status === "active").length;
   const failed = subagents.filter((entity) => entity.status === "error").length;
   const diagnostics = snapshot.diagnostics.slice(0, 2);
+  const highlightRunId = activeEvent?.runId ?? (timelineFilters.runId.trim() || null);
+  const highlightAgentId = activeEvent?.agentId ?? (timelineFilters.agentId.trim() || null);
 
   return (
     <main className="app-shell">
@@ -66,12 +90,21 @@ function App() {
         <OfficeStage
           snapshot={snapshot}
           selectedEntityId={selectedEntityId}
+          highlightRunId={highlightRunId}
+          highlightAgentId={highlightAgentId}
           onSelectEntity={(entityId) => {
             setSelectedEntityId((prev) => (prev === entityId ? null : entityId));
           }}
         />
         <div className="workspace-side">
-          <EventRail events={snapshot.events} />
+          <EventRail
+            events={snapshot.events}
+            now={snapshot.generatedAt}
+            filters={timelineFilters}
+            onFiltersChange={setTimelineFilters}
+            activeEventId={activeEventId}
+            onActiveEventIdChange={setActiveEventId}
+          />
           <EntityDetailPanel
             snapshot={snapshot}
             selectedEntityId={selectedEntityId}

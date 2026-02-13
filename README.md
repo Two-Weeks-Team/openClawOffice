@@ -39,6 +39,7 @@ Web-based visual command center for OpenClaw agents and subagents.
 - Room-level debug overlay (`cap/target/overflow`) for layout diagnostics
 - Lifecycle motion tokens for spawn/start/end/error/cleanup + reduced-motion fallback
 - Entity detail panel (`Overview / Sessions / Runs / Messages / Metrics`) with copy actions
+- Timeline debugger with `runId/agentId/status` filters + playback + run deep link
 
 ## Motion Lifecycle Guide
 
@@ -65,6 +66,14 @@ Web-based visual command center for OpenClaw agents and subagents.
 3. 장애 상태 엔티티 선택 후 Messages에서 `error/end/cleanup` 순서를 시간축으로 추적
 4. Session key/run ID를 복사해 터미널/로그 검색으로 즉시 전환
 5. Metrics에서 run/error/event 밀도를 확인해 타임라인 대비 병목 후보를 빠르게 좁힘
+
+## Timeline Deep Link
+
+타임라인 패널은 필터/재생과 스테이지 하이라이트를 동기화합니다.
+
+- `runId` 필터 딥링크: `?runId=<run-id>`
+- 타임라인 재생 중 현재 이벤트는 스테이지 엔티티/링크 하이라이트와 동기화
+- 타임라인 인덱싱/필터/재생 시나리오는 `src/lib/timeline.test.ts`로 검증
 
 ## Data source
 

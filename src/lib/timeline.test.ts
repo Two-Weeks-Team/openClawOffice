@@ -1,0 +1,89 @@
+import { describe, expect, it } from "vitest";
+import type { OfficeEvent } from "../types/office";
+import {
+  buildTimelineIndex,
+  filterTimelineEvents,
+  nextPlaybackEventId,
+  parseRunIdDeepLink,
+} from "./timeline";
+
+function makeEvents(): OfficeEvent[] {
+  return [
+    {
+      id: "run-a:spawn",
+      type: "spawn",
+      runId: "run-a",
+      at: 100,
+      agentId: "child-a",
+      parentAgentId: "parent-a",
+      text: "spawn a",
+    },
+    {
+      id: "run-a:start",
+      type: "start",
+      runId: "run-a",
+      at: 110,
+      agentId: "child-a",
+      parentAgentId: "parent-a",
+      text: "start a",
+    },
+    {
+      id: "run-b:error",
+      type: "error",
+      runId: "run-b",
+      at: 120,
+      agentId: "child-b",
+      parentAgentId: "parent-a",
+      text: "error b",
+    },
+    {
+      id: "run-b:cleanup",
+      type: "cleanup",
+      runId: "run-b",
+      at: 130,
+      agentId: "child-b",
+      parentAgentId: "parent-a",
+      text: "cleanup b",
+    },
+  ];
+}
+
+describe("timeline index", () => {
+  it("indexes events by run, agent, and status", () => {
+    const index = buildTimelineIndex(makeEvents());
+    expect(index.ordered.map((event) => event.id)).toEqual([
+      "run-b:cleanup",
+      "run-b:error",
+      "run-a:start",
+      "run-a:spawn",
+    ]);
+    expect(index.byRunId.get("run-a")?.length).toBe(2);
+    expect(index.byAgentId.get("parent-a")?.length).toBe(4);
+    expect(index.byStatus.get("error")?.[0]?.id).toBe("run-b:error");
+  });
+
+  it("filters events with runId/agentId/status combinations", () => {
+    const index = buildTimelineIndex(makeEvents());
+    const filtered = filterTimelineEvents(index, {
+      runId: "run-b",
+      agentId: "parent-a",
+      status: "error",
+    });
+    expect(filtered.map((event) => event.id)).toEqual(["run-b:error"]);
+  });
+});
+
+describe("timeline helpers", () => {
+  it("parses runId from deep link query", () => {
+    expect(parseRunIdDeepLink("?runId=run-123")).toBe("run-123");
+    expect(parseRunIdDeepLink("?agentId=main")).toBe("");
+  });
+
+  it("returns next playback id in order", () => {
+    const ascending = [...makeEvents()].sort((a, b) => a.at - b.at);
+    expect(nextPlaybackEventId(ascending, null)).toBe("run-a:spawn");
+    expect(nextPlaybackEventId(ascending, "run-a:spawn")).toBe("run-a:start");
+    expect(nextPlaybackEventId(ascending, "run-b:cleanup")).toBeNull();
+    expect(nextPlaybackEventId(ascending, "run-b:error", -1)).toBe("run-a:start");
+  });
+});
