@@ -41,10 +41,7 @@ export type DetailPanelMetrics = {
   tokenEstimate: number;
 };
 
-export type DetailPanelModel = {
-  status: DetailPanelStatus;
-  selectedEntityId: string | null;
-  entity: OfficeEntity | null;
+type DetailPanelBase = {
   linkedRun: OfficeRun | null;
   relatedRuns: OfficeRun[];
   relatedEvents: OfficeEvent[];
@@ -52,6 +49,23 @@ export type DetailPanelModel = {
   metrics: DetailPanelMetrics;
   paths: DetailPanelPaths;
 };
+
+export type DetailPanelModel =
+  | ({
+      status: "empty";
+      selectedEntityId: null;
+      entity: null;
+    } & DetailPanelBase)
+  | ({
+      status: "missing";
+      selectedEntityId: string;
+      entity: null;
+    } & DetailPanelBase)
+  | ({
+      status: "ready";
+      selectedEntityId: string;
+      entity: OfficeEntity;
+    } & DetailPanelBase);
 
 const EMPTY_METRICS: DetailPanelMetrics = {
   sessions: 0,

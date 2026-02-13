@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { buildDetailPanelModel } from "../lib/detail-panel";
-import type { OfficeEvent, OfficeRun, OfficeSnapshot } from "../types/office";
+import type {
+  OfficeEvent,
+  OfficeEventType,
+  OfficeRun,
+  OfficeRunStatus,
+  OfficeSnapshot,
+} from "../types/office";
 
 type Props = {
   snapshot: OfficeSnapshot;
@@ -26,30 +32,26 @@ function formatAt(at?: number): string {
   return new Date(at).toLocaleString();
 }
 
+const RUN_STATUS_LABELS: Record<OfficeRunStatus, string> = {
+  error: "ERROR",
+  ok: "DONE",
+  active: "ACTIVE",
+};
+
+const EVENT_TYPE_LABELS: Record<OfficeEventType, string> = {
+  cleanup: "CLEANUP",
+  start: "START",
+  spawn: "SPAWN",
+  error: "ERROR",
+  end: "END",
+};
+
 function runStatusLabel(run: OfficeRun): string {
-  if (run.status === "error") {
-    return "ERROR";
-  }
-  if (run.status === "ok") {
-    return "DONE";
-  }
-  return "ACTIVE";
+  return RUN_STATUS_LABELS[run.status] ?? run.status.toUpperCase();
 }
 
 function eventTypeLabel(event: OfficeEvent): string {
-  if (event.type === "cleanup") {
-    return "CLEANUP";
-  }
-  if (event.type === "start") {
-    return "START";
-  }
-  if (event.type === "spawn") {
-    return "SPAWN";
-  }
-  if (event.type === "error") {
-    return "ERROR";
-  }
-  return "END";
+  return EVENT_TYPE_LABELS[event.type] ?? event.type.toUpperCase();
 }
 
 export function EntityDetailPanel({ snapshot, selectedEntityId, onClose }: Props) {
@@ -100,13 +102,7 @@ export function EntityDetailPanel({ snapshot, selectedEntityId, onClose }: Props
     }
   };
 
-  const readyModel =
-    model.status === "ready" && model.entity
-      ? {
-          ...model,
-          entity: model.entity,
-        }
-      : null;
+  const readyModel = model.status === "ready" ? model : null;
 
   const renderCopyValue = (label: string, key: string, value: string | undefined) => (
     <div>
