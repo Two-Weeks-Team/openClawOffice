@@ -1,0 +1,148 @@
+import { spawn } from "node:child_process";
+import { once } from "node:events";
+import process from "node:process";
+import { setTimeout as delay } from "node:timers/promises";
+
+const BASE_URL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:5179";
+const START_TIMEOUT_MS = 30_000;
+const SSE_TIMEOUT_MS = 12_000;
+const CORRELATION_ID = "e2e-smoke-correlation-id";
+const pnpmCmd = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+
+function assert(condition, message) {
+  if (!condition) {
+    throw new Error(message);
+  }
+}
+
+async function waitForReady(logBuffer) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < START_TIMEOUT_MS) {
+    try {
+      const response = await fetch(`${BASE_URL}/api/office/snapshot`, {
+        headers: { "x-correlation-id": CORRELATION_ID },
+      });
+      if (response.ok) {
+        return;
+      }
+    } catch {
+      // not ready yet
+    }
+    await delay(500);
+  }
+  throw new Error(`dev server did not become ready within ${START_TIMEOUT_MS}ms\n${logBuffer.join("\n")}`);
+}
+
+async function assertSnapshot() {
+  const response = await fetch(`${BASE_URL}/api/office/snapshot`, {
+    headers: { "x-correlation-id": CORRELATION_ID },
+  });
+  assert(response.ok, `snapshot endpoint failed with ${response.status}`);
+  assert(
+    response.headers.get("x-correlation-id") === CORRELATION_ID,
+    "snapshot endpoint did not echo x-correlation-id",
+  );
+  const payload = await response.json();
+  assert(typeof payload.generatedAt === "number", "snapshot.generatedAt must be a number");
+  assert(Array.isArray(payload.entities), "snapshot.entities must be an array");
+  assert(Array.isArray(payload.events), "snapshot.events must be an array");
+  assert(payload.source?.live === true || payload.source?.live === false, "snapshot.source.live missing");
+}
+
+async function assertMetrics() {
+  const response = await fetch(`${BASE_URL}/api/office/metrics`, {
+    headers: { "x-correlation-id": CORRELATION_ID },
+  });
+  assert(response.ok, `metrics endpoint failed with ${response.status}`);
+  assert(
+    response.headers.get("x-correlation-id") === CORRELATION_ID,
+    "metrics endpoint did not echo x-correlation-id",
+  );
+  const payload = await response.json();
+  assert(payload?.routes?.snapshot, "metrics.routes.snapshot missing");
+  assert(payload?.stream, "metrics.stream missing");
+}
+
+async function assertSse() {
+  const response = await fetch(`${BASE_URL}/api/office/stream`, {
+    headers: {
+      Accept: "text/event-stream",
+      "x-correlation-id": CORRELATION_ID,
+    },
+  });
+  assert(response.ok, `stream endpoint failed with ${response.status}`);
+  assert(response.body, "stream endpoint has no body");
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  const startedAt = Date.now();
+  let buffer = "";
+  while (Date.now() - startedAt < SSE_TIMEOUT_MS) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    buffer += decoder.decode(value, { stream: true });
+    if (buffer.includes("event: snapshot")) {
+      await reader.cancel();
+      return;
+    }
+  }
+  await reader.cancel();
+  throw new Error(`did not receive snapshot SSE frame within ${SSE_TIMEOUT_MS}ms`);
+}
+
+async function shutdownServer(server) {
+  if (!server || server.killed) {
+    return;
+  }
+  server.kill("SIGTERM");
+  await Promise.race([once(server, "exit"), delay(2_000)]);
+  if (server.exitCode === null) {
+    server.kill("SIGKILL");
+  }
+}
+
+async function main() {
+  const logBuffer = [];
+  const server = spawn(pnpmCmd, ["dev"], {
+    env: { ...process.env, CI: "1" },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  const captureLog = (chunk, prefix) => {
+    const text = String(chunk).trim();
+    if (!text) {
+      return;
+    }
+    logBuffer.push(`${prefix}${text}`);
+    if (logBuffer.length > 60) {
+      logBuffer.shift();
+    }
+  };
+
+  server.stdout.on("data", (chunk) => captureLog(chunk, "[dev] "));
+  server.stderr.on("data", (chunk) => captureLog(chunk, "[err] "));
+
+  try {
+    await waitForReady(logBuffer);
+    await assertSnapshot();
+    await assertSse();
+    await assertMetrics();
+    console.log("e2e smoke passed");
+  } catch (error) {
+    const details = error instanceof Error ? error.message : String(error);
+    console.error(`e2e smoke failed: ${details}`);
+    if (logBuffer.length > 0) {
+      console.error("recent dev server logs:");
+      for (const line of logBuffer.slice(-20)) {
+        console.error(line);
+      }
+    }
+    process.exitCode = 1;
+  } finally {
+    await shutdownServer(server);
+  }
+}
+
+void main();
