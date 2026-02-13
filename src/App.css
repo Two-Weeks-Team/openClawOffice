@@ -146,6 +146,10 @@ body {
   position: relative;
   --tile-scale: 1.6;
   --tile-opacity: 0.95;
+  --z-layer-floor: 10;
+  --z-layer-wall: 32;
+  --z-layer-object: 48;
+  --z-room: 120;
   min-height: 700px;
   border-radius: 22px;
   border: 1px solid var(--line);
@@ -176,15 +180,15 @@ body {
 }
 
 .iso-layer.layer-floor {
-  z-index: 10;
+  z-index: var(--z-layer-floor);
 }
 
 .iso-layer.layer-wall {
-  z-index: 32;
+  z-index: var(--z-layer-wall);
 }
 
 .iso-layer.layer-object {
-  z-index: 48;
+  z-index: var(--z-layer-object);
 }
 
 .iso-tile {
@@ -214,7 +218,7 @@ body {
 
 .office-room {
   position: absolute;
-  z-index: 120;
+  z-index: var(--z-room);
   border: 2px solid;
   border-radius: 18px;
   backdrop-filter: blur(1px);

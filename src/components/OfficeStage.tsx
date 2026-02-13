@@ -92,6 +92,32 @@ const ROOM_SKINS: Record<string, { floor: string; wall: string; object: string }
   lounge: { floor: "floor_lounge", wall: "wall_indoor", object: "potted_plant" },
 };
 
+const FLOOR_Z_OFFSET = 40;
+const WALL_Z_OFFSET = 190;
+const OBJECT_Z_OFFSET = 230;
+const ENTITY_Z_OFFSET = 320;
+
+const MIN_GRID_COLS = 4;
+const MIN_GRID_ROWS = 3;
+const ROOM_GRID_COL_STRIDE = 58;
+const ROOM_GRID_ROW_STRIDE = 52;
+
+const TILE_HALF_X = 16;
+const TILE_HALF_Y = 8;
+const ROOM_ORIGIN_Y_OFFSET = 30;
+const WALL_TOP_Y_OFFSET = 18;
+const WALL_LEFT_Y_OFFSET = 8;
+const OBJECT_Y_OFFSET = 10;
+
+const OBJECT_SLOT_ONE_COL_RATIO = 0.28;
+const OBJECT_SLOT_ONE_ROW_RATIO = 0.45;
+const OBJECT_SLOT_TWO_COL_RATIO = 0.7;
+const OBJECT_SLOT_TWO_ROW_RATIO = 0.56;
+
+const OCCLUSION_HORIZONTAL_INSET = 24;
+const OCCLUSION_TOP_OFFSET = 14;
+const OCCLUSION_BOTTOM_RATIO = 0.43;
+
 function hashString(input: string): number {
   let hash = 0;
   for (let i = 0; i < input.length; i += 1) {
@@ -203,9 +229,6 @@ function buildLayerTiles(params: {
   const tiles: LayerTile[] = [];
   const occlusionByRoom = new Map<string, OcclusionBounds>();
 
-  const tileHalfX = 16;
-  const tileHalfY = 8;
-
   for (const room of rooms) {
     const skin = ROOM_SKINS[room.id] ?? ROOM_SKINS.ops;
     const floorTile = tileCatalog.get(skin.floor) ?? tileCatalog.get("floor_office");
@@ -216,79 +239,85 @@ function buildLayerTiles(params: {
       continue;
     }
 
-    const cols = Math.max(4, Math.floor(room.width / 58));
-    const rows = Math.max(3, Math.floor(room.height / 52));
+    const cols = Math.max(MIN_GRID_COLS, Math.floor(room.width / ROOM_GRID_COL_STRIDE));
+    const rows = Math.max(MIN_GRID_ROWS, Math.floor(room.height / ROOM_GRID_ROW_STRIDE));
     const originX = room.x + room.width / 2;
-    const originY = room.y + 30;
+    const originY = room.y + ROOM_ORIGIN_Y_OFFSET;
 
     for (let row = 0; row < rows; row += 1) {
       for (let col = 0; col < cols; col += 1) {
-        const x = originX + (col - row) * tileHalfX;
-        const y = originY + (col + row) * tileHalfY;
+        const x = originX + (col - row) * TILE_HALF_X;
+        const y = originY + (col + row) * TILE_HALF_Y;
         tiles.push({
           id: `${room.id}:floor:${row}:${col}`,
           roomId: room.id,
           layer: "floor",
           x,
           y,
-          z: 40 + Math.round(y),
+          z: FLOOR_Z_OFFSET + Math.round(y),
           sprite: floorTile,
         });
       }
     }
 
     for (let col = 0; col < cols; col += 1) {
-      const x = originX + (col + 1) * tileHalfX;
-      const y = originY + col * tileHalfY - 18;
+      const x = originX + (col + 1) * TILE_HALF_X;
+      const y = originY + col * TILE_HALF_Y - WALL_TOP_Y_OFFSET;
       tiles.push({
         id: `${room.id}:wall:top:${col}`,
         roomId: room.id,
         layer: "wall",
         x,
         y,
-        z: 190 + Math.round(y),
+        z: WALL_Z_OFFSET + Math.round(y),
         sprite: wallTile,
       });
     }
 
     for (let row = 0; row < rows; row += 1) {
-      const x = originX - (row + 1) * tileHalfX;
-      const y = originY + row * tileHalfY - 8;
+      const x = originX - (row + 1) * TILE_HALF_X;
+      const y = originY + row * TILE_HALF_Y - WALL_LEFT_Y_OFFSET;
       tiles.push({
         id: `${room.id}:wall:left:${row}`,
         roomId: room.id,
         layer: "wall",
         x,
         y,
-        z: 190 + Math.round(y),
+        z: WALL_Z_OFFSET + Math.round(y),
         sprite: wallTile,
       });
     }
 
     const objectSlots: Array<[number, number]> = [
-      [Math.max(1, Math.floor(cols * 0.28)), Math.max(1, Math.floor(rows * 0.45))],
-      [Math.max(2, Math.floor(cols * 0.7)), Math.max(1, Math.floor(rows * 0.56))],
+      [
+        Math.max(1, Math.floor(cols * OBJECT_SLOT_ONE_COL_RATIO)),
+        Math.max(1, Math.floor(rows * OBJECT_SLOT_ONE_ROW_RATIO)),
+      ],
+      [
+        Math.max(2, Math.floor(cols * OBJECT_SLOT_TWO_COL_RATIO)),
+        Math.max(1, Math.floor(rows * OBJECT_SLOT_TWO_ROW_RATIO)),
+      ],
     ];
 
     objectSlots.forEach(([col, row], index) => {
-      const x = originX + (col - row) * tileHalfX;
-      const y = originY + (col + row) * tileHalfY - 10;
+      const x = originX + (col - row) * TILE_HALF_X;
+      const y = originY + (col + row) * TILE_HALF_Y - OBJECT_Y_OFFSET;
       tiles.push({
         id: `${room.id}:object:${index}`,
         roomId: room.id,
         layer: "object",
         x,
         y,
-        z: 230 + Math.round(y),
+        z: OBJECT_Z_OFFSET + Math.round(y),
         sprite: objectTile,
       });
     });
 
     occlusionByRoom.set(room.id, {
-      left: room.x + 24,
-      right: room.x + room.width - 24,
-      top: room.y + 14,
-      bottom: room.y + room.height * 0.43,
+      left: room.x + OCCLUSION_HORIZONTAL_INSET,
+      right: room.x + room.width - OCCLUSION_HORIZONTAL_INSET,
+      top: room.y + OCCLUSION_TOP_OFFSET,
+      bottom: room.y + room.height * OCCLUSION_BOTTOM_RATIO,
     });
   }
 
@@ -461,7 +490,7 @@ export function OfficeStage({ snapshot }: Props) {
           <article
             key={entity.id}
             className={`entity-token ${statusClass(entity)} ${entity.kind} ${isOccluded ? "is-occluded" : ""}`}
-            style={{ left: placement.x, top: placement.y, zIndex: 320 + Math.round(placement.y) }}
+            style={{ left: placement.x, top: placement.y, zIndex: ENTITY_Z_OFFSET + Math.round(placement.y) }}
           >
             <div className="sprite-shell">
               <div className="sprite" style={spriteStyle(entity.id)} />
