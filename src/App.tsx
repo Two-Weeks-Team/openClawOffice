@@ -397,6 +397,7 @@ function App() {
             onActiveEventIdChange={setActiveEventId}
           />
           <EntityDetailPanel
+            key={selectedEntityId ?? "detail-empty"}
             snapshot={snapshot}
             selectedEntityId={selectedEntityId}
             onJumpToRun={(runId) => {
