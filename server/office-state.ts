@@ -221,7 +221,11 @@ async function loadAgentSnapshots(stateDir: string): Promise<AgentLoadResult> {
   try {
     folders = await fs.readdir(agentsDir, { withFileTypes: true });
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+    const errorCode =
+      err && typeof err === "object" && "code" in err && typeof err.code === "string"
+        ? err.code
+        : undefined;
+    if (errorCode !== "ENOENT") {
       diagnostics.push({
         level: "warning",
         code: "AGENT_DIR_READ_FAILED",
