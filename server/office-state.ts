@@ -7,6 +7,7 @@ import {
   parseSubagentStore,
   type SessionSummary,
 } from "./runtime-parser";
+import { buildTranscriptBubble } from "./transcript-tailer";
 import type {
   OfficeEntity,
   OfficeEntityStatus,
@@ -45,14 +46,6 @@ function resolveStateDir() {
     return fallback;
   }
   return path.resolve(fromEnv);
-}
-
-function normalizeText(value: unknown): string | undefined {
-  if (typeof value !== "string") {
-    return undefined;
-  }
-  const trimmed = value.replace(/\s+/g, " ").trim();
-  return trimmed.length > 0 ? trimmed : undefined;
 }
 
 function shortText(value: string | undefined, max = 120): string | undefined {
@@ -104,42 +97,6 @@ async function readJsonFile(pathname: string): Promise<{ value: unknown; diagnos
   }
 }
 
-function extractLineText(parsed: unknown): string | undefined {
-  if (!parsed || typeof parsed !== "object") {
-    return undefined;
-  }
-  const row = parsed as Record<string, unknown>;
-
-  const direct = normalizeText(row.text) ?? normalizeText(row.message);
-  if (direct) {
-    return direct;
-  }
-
-  const content = row.content;
-  if (typeof content === "string") {
-    return normalizeText(content);
-  }
-  if (Array.isArray(content)) {
-    for (const block of content) {
-      if (!block || typeof block !== "object") {
-        continue;
-      }
-      const typed = block as Record<string, unknown>;
-      const blockText = normalizeText(typed.text) ?? normalizeText(typed.content);
-      if (blockText) {
-        return blockText;
-      }
-    }
-  }
-
-  const delta = row.delta;
-  if (typeof delta === "string") {
-    return normalizeText(delta);
-  }
-
-  return undefined;
-}
-
 async function readLatestBubble(agentDir: string): Promise<string | undefined> {
   const sessionsDir = path.join(agentDir, "sessions");
   let files: Dirent[] = [];
@@ -180,26 +137,7 @@ async function readLatestBubble(agentDir: string): Promise<string | undefined> {
   } catch {
     return undefined;
   }
-
-  const lines = raw
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .reverse();
-
-  for (const line of lines) {
-    try {
-      const parsed = JSON.parse(line) as unknown;
-      const text = extractLineText(parsed);
-      if (text) {
-        return shortText(text, 110);
-      }
-    } catch {
-      continue;
-    }
-  }
-
-  return undefined;
+  return buildTranscriptBubble(raw, { maxChars: 110 });
 }
 
 function latestSessionMetadata(sessions: SessionSummary[]): { lastUpdatedAt?: number; model?: string } {
