@@ -46,7 +46,7 @@ async function assertSnapshot() {
   assert(typeof payload.generatedAt === "number", "snapshot.generatedAt must be a number");
   assert(Array.isArray(payload.entities), "snapshot.entities must be an array");
   assert(Array.isArray(payload.events), "snapshot.events must be an array");
-  assert(payload.source?.live === true || payload.source?.live === false, "snapshot.source.live missing");
+  assert(typeof payload.source?.live === "boolean", "snapshot.source.live missing");
 }
 
 async function assertMetrics() {

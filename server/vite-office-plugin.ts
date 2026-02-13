@@ -229,7 +229,9 @@ function handleMetrics(res: ServerResponse, context: ApiRequestContext) {
             success: metric.success,
             failure: metric.failure,
             averageDurationMs:
-              metric.requests === 0 ? 0 : Number((metric.totalDurationMs / metric.requests).toFixed(3)),
+              metric.requests === 0
+                ? 0
+                : Math.round((metric.totalDurationMs / metric.requests) * 1000) / 1000,
             maxDurationMs: metric.maxDurationMs,
           },
         ]),
@@ -516,21 +518,18 @@ function attachOfficeRoutes(server: ViteDevServer | PreviewServer) {
 
     if (method === "GET" && pathname === "/api/office/snapshot") {
       const context = buildRequestContext(req, pathname);
-      res.setHeader("X-Correlation-Id", context.requestId);
       void handleSnapshot(res, context);
       return;
     }
 
     if (method === "GET" && pathname === "/api/office/stream") {
       const context = buildRequestContext(req, pathname);
-      res.setHeader("X-Correlation-Id", context.requestId);
       handleStream(req, res, context);
       return;
     }
 
     if (method === "GET" && pathname === "/api/office/metrics") {
       const context = buildRequestContext(req, pathname);
-      res.setHeader("X-Correlation-Id", context.requestId);
       handleMetrics(res, context);
       return;
     }

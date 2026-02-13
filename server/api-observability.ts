@@ -16,6 +16,11 @@ export type ApiErrorCode = (typeof API_ERROR_CODES)[keyof typeof API_ERROR_CODES
 type ApiLogLevel = "info" | "warn" | "error";
 
 const CORRELATION_ID_PATTERN = /^[A-Za-z0-9._:-]{6,96}$/;
+const LOG_WRITERS: Record<ApiLogLevel, (line: string) => void> = {
+  info: (line) => console.log(line),
+  warn: (line) => console.warn(line),
+  error: (line) => console.error(line),
+};
 
 function normalizeHeaderValue(value: string | string[] | undefined): string | undefined {
   const raw = Array.isArray(value) ? value[value.length - 1] : value;
@@ -92,13 +97,5 @@ export function logStructuredEvent(params: {
     ...params.extra,
   };
   const line = JSON.stringify(payload);
-  if (params.level === "error") {
-    console.error(line);
-    return;
-  }
-  if (params.level === "warn") {
-    console.warn(line);
-    return;
-  }
-  console.log(line);
+  LOG_WRITERS[params.level](line);
 }

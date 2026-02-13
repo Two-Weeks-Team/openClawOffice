@@ -39,8 +39,12 @@ type RunLoadResult = {
 };
 
 function resolveStateDir() {
+  const fallback = path.join(os.homedir(), ".openclaw");
   const fromEnv = process.env.OPENCLAW_STATE_DIR?.trim();
-  return fromEnv || path.join(os.homedir(), ".openclaw");
+  if (!fromEnv || fromEnv.includes("\0")) {
+    return fallback;
+  }
+  return path.resolve(fromEnv);
 }
 
 function normalizeText(value: unknown): string | undefined {
