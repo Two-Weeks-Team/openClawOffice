@@ -17,6 +17,8 @@ export type SemanticRoomMappingDiagnostic = {
   message: string;
 };
 
+type PresetRoomId = "strategy" | "ops" | "build" | "spawn" | "lounge";
+
 type CurationLike = {
   tileset?: {
     tiles?: Array<{ id?: unknown }>;
@@ -33,13 +35,15 @@ const SEMANTIC_CANDIDATES: Record<SemanticAssetKey, string[]> = {
   lounge_greenery: ["potted_plant", "bench"],
 };
 
-const ROOM_OBJECT_PRESETS: Record<string, SemanticAssetKey[]> = {
+const DEFAULT_ROOM_OBJECT_PRESET: SemanticAssetKey[] = ["desk_pair", "plant_small"];
+
+const ROOM_OBJECT_PRESETS = {
   strategy: ["meeting_table", "plant_small", "corridor_lamp"],
   ops: ["desk_pair", "corridor_lamp"],
   build: ["build_beacon", "desk_pair"],
   spawn: ["arcade_console", "corridor_lamp"],
   lounge: ["lounge_greenery", "meeting_table"],
-};
+} as const satisfies Record<PresetRoomId, readonly SemanticAssetKey[]>;
 
 type Registry = Record<SemanticAssetKey, string[]>;
 
@@ -79,7 +83,8 @@ export function buildSemanticAssetRegistry(curation: unknown): Registry {
 }
 
 export function roomObjectPreset(roomId: string): SemanticAssetKey[] {
-  return ROOM_OBJECT_PRESETS[roomId] ?? ["desk_pair", "plant_small"];
+  const preset = ROOM_OBJECT_PRESETS[roomId as PresetRoomId];
+  return preset ? [...preset] : [...DEFAULT_ROOM_OBJECT_PRESET];
 }
 
 export function resolveSemanticTileId(

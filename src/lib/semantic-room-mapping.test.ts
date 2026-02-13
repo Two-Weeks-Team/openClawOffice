@@ -111,6 +111,58 @@ describe("semantic room mapping", () => {
     expect(mapped.diagnostics.map((item) => item.code)).toContain("SEMANTIC_KEY_UNKNOWN");
   });
 
+  it("preserves an existing tile when semantic and tile are both set", () => {
+    const registry = buildSemanticAssetRegistry({
+      tileset: {
+        tiles: [{ id: "bench" }],
+      },
+    });
+    const mapped = applySemanticRoomMappings({
+      rawBlueprint: {
+        rooms: [
+          {
+            roomId: "ops",
+            anchors: [{ id: "a1", kind: "furniture", semantic: "desk_pair", tile: "custom_tile" }],
+          },
+        ],
+      },
+      registry,
+    });
+
+    const firstAnchor = (
+      mapped.blueprint as { rooms: Array<{ anchors: Array<{ tile?: string; semantic?: string }> }> }
+    ).rooms[0]?.anchors?.[0];
+    expect(firstAnchor?.semantic).toBe("desk_pair");
+    expect(firstAnchor?.tile).toBe("custom_tile");
+    expect(mapped.diagnostics).toHaveLength(0);
+  });
+
+  it("reports unresolved semantic tiles when registry entry is empty", () => {
+    const registry = buildSemanticAssetRegistry({
+      tileset: {
+        tiles: [{ id: "bench" }],
+      },
+    });
+    registry.desk_pair = [];
+
+    const mapped = applySemanticRoomMappings({
+      rawBlueprint: {
+        rooms: [
+          {
+            roomId: "ops",
+            anchors: [{ id: "a1", kind: "furniture", semantic: "desk_pair" }],
+          },
+        ],
+      },
+      registry,
+    });
+
+    const firstAnchor = (mapped.blueprint as { rooms: Array<{ anchors: Array<{ tile?: string }> }> }).rooms[0]
+      ?.anchors?.[0];
+    expect(firstAnchor?.tile).toBeUndefined();
+    expect(mapped.diagnostics.map((item) => item.code)).toContain("SEMANTIC_TILE_UNRESOLVED");
+  });
+
   it("falls back to base furniture tile when resolved semantic tile sprite is missing", () => {
     const registry = buildSemanticAssetRegistry({
       tileset: {

@@ -74,6 +74,7 @@
   - `anchor.tile` is already present: keep it as-is.
   - `anchor.semantic` is present: resolve semantic -> tile candidate.
   - furniture anchor without `tile`/`semantic`: apply room preset semantic sequence.
+  - room preset not defined for `roomId`: use default preset `["desk_pair", "plant_small"]`.
   - unresolved/missing tile sprite at compile time: fallback to `base.furnitureTile`.
 - Semantic diagnostics:
   - `SEMANTIC_KEY_UNKNOWN`: unknown semantic key string in anchor.
