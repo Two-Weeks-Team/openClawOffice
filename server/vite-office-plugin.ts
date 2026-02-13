@@ -439,7 +439,9 @@ function handleStream(req: IncomingMessage, res: ServerResponse, context: ApiReq
 
   const subscriber = createSubscriber(req, res, context);
   const cursor = collectCursor(req);
+  let closed = false;
   let streamReady = false;
+  const isStreamClosed = () => closed || isClosed(req);
   streamMetrics.activeConnections += 1;
   streamMetrics.totalConnections += 1;
   logStructuredEvent({
@@ -454,16 +456,25 @@ function handleStream(req: IncomingMessage, res: ServerResponse, context: ApiReq
   void (async () => {
     try {
       const snapshot = await ensureInitialSnapshot();
+      if (isStreamClosed()) {
+        return;
+      }
       subscriber.sendSnapshot(snapshot);
       streamMetrics.snapshotFramesSent += 1;
 
       if (cursor > 0) {
         for (const frame of streamBridge.getBackfill(cursor)) {
+          if (isStreamClosed()) {
+            return;
+          }
           subscriber.sendLifecycle(frame);
           streamMetrics.lifecycleFramesSent += 1;
         }
       }
 
+      if (isStreamClosed()) {
+        return;
+      }
       streamSubscribers.add(subscriber);
       streamReady = true;
       ensureStreamPoller();
@@ -490,12 +501,16 @@ function handleStream(req: IncomingMessage, res: ServerResponse, context: ApiReq
   })();
 
   const ping = setInterval(() => {
-    if (!isClosed(req)) {
+    if (!isStreamClosed()) {
       res.write(`: ping ${Date.now()}\n\n`);
     }
   }, STREAM_PING_INTERVAL_MS);
 
   const onClose = () => {
+    if (closed) {
+      return;
+    }
+    closed = true;
     clearInterval(ping);
     streamSubscribers.delete(subscriber);
     stopStreamPollerIfIdle();
