@@ -11,6 +11,9 @@
   --good: #6ef8ba;
   --warn: #ffc870;
   --bad: #ff8e8e;
+  --motion-fast: 240ms;
+  --motion-mid: 620ms;
+  --motion-slow: 1.1s;
 }
 
 * {
@@ -281,18 +284,40 @@ body {
 .run-link {
   fill: none;
   stroke-width: 2.2;
-  opacity: 0.9;
-  stroke-dasharray: 4 4;
-  animation: pulse-line 1.1s linear infinite;
+  stroke-linecap: round;
+  opacity: 0.84;
+  stroke-dasharray: 6 5;
+  filter: drop-shadow(0 0 4px rgba(150, 216, 255, 0.24));
+  animation: pulse-line 1.25s linear infinite;
+  transition:
+    opacity var(--motion-fast) ease,
+    stroke-width var(--motion-fast) ease,
+    filter var(--motion-fast) ease;
 }
 
 .run-link.run-active {
   stroke: #ffd57a;
 }
 
+.run-link.run-active.run-recent {
+  stroke-width: 2.9;
+  opacity: 1;
+  filter: drop-shadow(0 0 7px rgba(255, 206, 132, 0.58));
+  animation:
+    pulse-line 760ms linear infinite,
+    line-beat 960ms ease-in-out infinite;
+}
+
+.run-link.run-active.run-stale {
+  stroke-width: 1.8;
+  opacity: 0.32;
+  stroke-dasharray: 3 8;
+  animation: pulse-line 2.2s linear infinite;
+}
+
 .run-link.run-ok {
   stroke: #85ffc4;
-  opacity: 0.7;
+  opacity: 0.54;
 }
 
 .run-link.run-error {
@@ -308,10 +333,24 @@ body {
   }
 }
 
+@keyframes line-beat {
+  0%,
+  100% {
+    opacity: 0.82;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
 .entity-token {
   position: absolute;
   transform: translate(-50%, -50%);
   min-width: 88px;
+  transition:
+    opacity var(--motion-mid) ease,
+    transform var(--motion-mid) ease,
+    filter var(--motion-mid) ease;
 }
 
 .entity-token .sprite-shell {
@@ -326,6 +365,15 @@ body {
   align-items: center;
   justify-content: center;
   box-shadow: 0 7px 14px rgba(0, 0, 0, 0.3);
+}
+
+.entity-token .sprite-shell::before,
+.entity-token .sprite-shell::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  border-radius: 16px;
+  opacity: 0;
 }
 
 .entity-token .sprite {
@@ -376,7 +424,17 @@ body {
   color: #def7ff;
   line-height: 1.35;
   text-align: center;
-  animation: bubble-rise 420ms ease-out;
+  animation: bubble-fade-in var(--motion-fast) ease-out;
+}
+
+.entity-token .bubble.is-fresh {
+  animation:
+    bubble-rise 420ms ease-out,
+    bubble-attention 2.8s ease-in-out infinite;
+}
+
+.entity-token .bubble.is-calm {
+  animation: bubble-fade-in var(--motion-fast) ease-out;
 }
 
 .entity-token .bubble::after {
@@ -403,6 +461,25 @@ body {
   }
 }
 
+@keyframes bubble-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes bubble-attention {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 0 rgba(149, 235, 255, 0));
+  }
+  50% {
+    filter: drop-shadow(0 0 6px rgba(149, 235, 255, 0.46));
+  }
+}
+
 .entity-token.is-active .sprite-shell {
   box-shadow: 0 0 0 2px rgba(255, 207, 117, 0.3), 0 7px 14px rgba(0, 0, 0, 0.3);
 }
@@ -421,6 +498,157 @@ body {
 
 .entity-token.is-occluded {
   opacity: 0.63;
+}
+
+.entity-token.is-overflowed {
+  filter: saturate(0.84) brightness(0.92);
+}
+
+.entity-token.motion-spawn .sprite-shell::before {
+  inset: -8px;
+  border: 1px solid rgba(255, 219, 143, 0.78);
+  opacity: 0.95;
+  animation: spawn-pulse 900ms ease-out 2 forwards;
+}
+
+.entity-token.motion-run .sprite-shell::after {
+  inset: -8px;
+  border: 1px dashed rgba(255, 217, 128, 0.72);
+  opacity: 0.78;
+  animation: run-orbit 1.9s linear infinite;
+}
+
+.entity-token.motion-start .sprite-shell::after {
+  border-color: rgba(255, 237, 179, 0.94);
+  opacity: 1;
+  animation: run-orbit-start 720ms linear 3;
+}
+
+.entity-token.motion-start .token-meta strong {
+  animation: start-pop 520ms ease-out;
+}
+
+.entity-token.motion-error {
+  animation: error-shake 520ms ease-in-out infinite;
+}
+
+.entity-token.motion-error .sprite-shell {
+  animation: error-glow 760ms ease-in-out infinite;
+}
+
+.entity-token.motion-error .bubble {
+  border-color: rgba(255, 159, 159, 0.66);
+}
+
+.entity-token.motion-end .sprite-shell::before {
+  inset: -6px;
+  border: 1px solid rgba(146, 255, 194, 0.74);
+  opacity: 0.9;
+  animation: end-settle 820ms ease-out 2;
+}
+
+.entity-token.motion-end .token-meta span {
+  color: #caffe1;
+}
+
+.entity-token.motion-cleanup {
+  animation: cleanup-fade var(--motion-slow) ease-out forwards;
+}
+
+.entity-token.motion-cleanup .bubble {
+  animation: bubble-fade-in 160ms ease-out;
+  opacity: 0.64;
+}
+
+@keyframes spawn-pulse {
+  0% {
+    transform: scale(0.82);
+    opacity: 0;
+  }
+  35% {
+    opacity: 0.95;
+  }
+  100% {
+    transform: scale(1.34);
+    opacity: 0;
+  }
+}
+
+@keyframes run-orbit {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes run-orbit-start {
+  from {
+    transform: rotate(0deg) scale(0.85);
+  }
+  to {
+    transform: rotate(360deg) scale(1.02);
+  }
+}
+
+@keyframes start-pop {
+  0% {
+    transform: translateY(1px) scale(0.95);
+  }
+  60% {
+    transform: translateY(-1px) scale(1.06);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes error-shake {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) translateX(0);
+  }
+  25% {
+    transform: translate(-50%, -50%) translateX(-2px);
+  }
+  75% {
+    transform: translate(-50%, -50%) translateX(2px);
+  }
+}
+
+@keyframes error-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 2px rgba(255, 142, 142, 0.34), 0 7px 14px rgba(0, 0, 0, 0.3);
+    filter: saturate(1);
+  }
+  50% {
+    box-shadow: 0 0 0 3px rgba(255, 120, 120, 0.6), 0 0 20px rgba(255, 101, 101, 0.4);
+    filter: saturate(1.25);
+  }
+}
+
+@keyframes end-settle {
+  0% {
+    transform: scale(1.08);
+    opacity: 0.85;
+  }
+  100% {
+    transform: scale(0.96);
+    opacity: 0;
+  }
+}
+
+@keyframes cleanup-fade {
+  from {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  to {
+    opacity: 0.45;
+    transform: translate(-50%, -49%) scale(0.97);
+  }
 }
 
 .event-rail {
@@ -559,6 +787,29 @@ body {
 
 .error-text {
   color: #ffb9b9;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-bar,
+  .run-link,
+  .entity-token,
+  .entity-token .sprite-shell,
+  .entity-token .sprite-shell::before,
+  .entity-token .sprite-shell::after,
+  .entity-token .bubble {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .run-link {
+    stroke-dasharray: none;
+    opacity: 0.8;
+  }
+
+  .entity-token.motion-cleanup,
+  .entity-token.motion-error {
+    transform: translate(-50%, -50%);
+  }
 }
 
 @media (max-width: 1180px) {

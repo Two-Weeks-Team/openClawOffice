@@ -119,6 +119,15 @@ const OCCLUSION_HORIZONTAL_INSET = 24;
 const OCCLUSION_TOP_OFFSET = 14;
 const OCCLUSION_BOTTOM_RATIO = 0.43;
 
+const SPAWN_PULSE_WINDOW_MS = 12_000;
+const BUBBLE_VISIBLE_WINDOW_MS = 45_000;
+const RUN_RECENT_WINDOW_MS = 10_000;
+const RUN_STALE_WINDOW_MS = 120_000;
+const START_ORBIT_WINDOW_MS = 12_000;
+const END_SETTLE_WINDOW_MS = 20_000;
+const CLEANUP_FADE_WINDOW_MS = 30_000;
+const ERROR_SHAKE_WINDOW_MS = 18_000;
+
 function hashString(input: string): number {
   let hash = 0;
   for (let i = 0; i < input.length; i += 1) {
@@ -466,6 +475,14 @@ export function OfficeStage({ snapshot }: Props) {
     return map;
   }, [placements]);
 
+  const runById = useMemo(() => {
+    const map = new Map<string, OfficeRun>();
+    for (const run of snapshot.runs) {
+      map.set(run.runId, run);
+    }
+    return map;
+  }, [snapshot.runs]);
+
   const sortedPlacements = useMemo(
     () => [...placements].sort((a, b) => a.y - b.y),
     [placements],
@@ -487,15 +504,23 @@ export function OfficeStage({ snapshot }: Props) {
         const ty = target.y;
         const cx = (sx + tx) / 2;
         const cy = Math.min(sy, ty) - 42;
+        const runStartedAt = run.startedAt ?? run.createdAt;
+        const runAgeMs = Math.max(0, snapshot.generatedAt - runStartedAt);
+        const lifecycleClass =
+          runAgeMs <= RUN_RECENT_WINDOW_MS
+            ? "run-recent"
+            : runAgeMs >= RUN_STALE_WINDOW_MS
+              ? "run-stale"
+              : "";
 
         return {
           id: `${run.runId}:${sx}:${sy}:${tx}:${ty}`,
-          cls: runLineClass(run),
+          cls: [runLineClass(run), lifecycleClass].filter(Boolean).join(" "),
           d: `M ${sx} ${sy} Q ${cx} ${cy} ${tx} ${ty}`,
         };
       })
       .filter((value): value is { id: string; cls: string; d: string } => Boolean(value));
-  }, [snapshot.runs, placementById]);
+  }, [snapshot.generatedAt, snapshot.runs, placementById]);
 
   return (
     <div className="office-stage-wrap">
@@ -560,17 +585,57 @@ export function OfficeStage({ snapshot }: Props) {
       {sortedPlacements.map((placement) => {
         const entity = placement.entity;
         const occlusion = layerState.occlusionByRoom.get(placement.roomId);
+        const linkedRun =
+          entity.kind === "subagent" && entity.runId ? runById.get(entity.runId) : undefined;
+        const getAge = (timestamp?: number, fallback: number = Number.POSITIVE_INFINITY) =>
+          typeof timestamp === "number" ? Math.max(0, snapshot.generatedAt - timestamp) : fallback;
+        const entityAgeMs = getAge(entity.lastUpdatedAt);
+        const spawnAgeMs = getAge(linkedRun?.createdAt, entityAgeMs);
+        const runStartAt = linkedRun?.startedAt ?? linkedRun?.createdAt;
+        const startAgeMs = getAge(runStartAt, entityAgeMs);
+        const endAgeMs = getAge(linkedRun?.endedAt, entityAgeMs);
+        const cleanupAgeMs = getAge(linkedRun?.cleanupCompletedAt);
+        const showSpawnPulse =
+          entity.kind === "subagent" && entity.status === "active" && spawnAgeMs <= SPAWN_PULSE_WINDOW_MS;
+        const showStartOrbit =
+          entity.status === "active" &&
+          entity.kind === "subagent" &&
+          startAgeMs <= START_ORBIT_WINDOW_MS;
+        const showRunOrbit = entity.status === "active";
+        const showErrorMotion = entity.status === "error" && entityAgeMs <= ERROR_SHAKE_WINDOW_MS;
+        const showEndSettle = entity.kind === "subagent" && entity.status === "ok" && endAgeMs <= END_SETTLE_WINDOW_MS;
+        const showCleanupFade =
+          entity.kind === "subagent" &&
+          entity.status === "ok" &&
+          cleanupAgeMs <= CLEANUP_FADE_WINDOW_MS;
+        const bubbleVisible =
+          Boolean(entity.bubble) &&
+          (entity.status === "active" ||
+            entity.status === "error" ||
+            entityAgeMs <= BUBBLE_VISIBLE_WINDOW_MS);
+        const bubbleClass = spawnAgeMs <= SPAWN_PULSE_WINDOW_MS ? "is-fresh" : "is-calm";
         const isOccluded = occlusion
           ? placement.x >= occlusion.left &&
             placement.x <= occlusion.right &&
             placement.y >= occlusion.top &&
             placement.y <= occlusion.bottom
           : false;
+        const motionClasses = [
+          showSpawnPulse ? "motion-spawn" : "",
+          showStartOrbit ? "motion-start" : "",
+          showRunOrbit ? "motion-run" : "",
+          showErrorMotion ? "motion-error" : "",
+          showEndSettle ? "motion-end" : "",
+          showCleanupFade ? "motion-cleanup" : "",
+          placement.overflowed ? "is-overflowed" : "",
+        ]
+          .filter(Boolean)
+          .join(" ");
 
         return (
           <article
             key={entity.id}
-            className={`entity-token ${statusClass(entity)} ${entity.kind} ${isOccluded ? "is-occluded" : ""}`}
+            className={`entity-token ${statusClass(entity)} ${entity.kind} ${isOccluded ? "is-occluded" : ""} ${motionClasses}`}
             style={{ left: placement.x, top: placement.y, zIndex: ENTITY_Z_OFFSET + Math.round(placement.y) }}
           >
             <div className="sprite-shell">
@@ -585,7 +650,7 @@ export function OfficeStage({ snapshot }: Props) {
                   : entity.status}
               </span>
             </div>
-            {entity.bubble ? <p className="bubble">{entity.bubble}</p> : null}
+            {bubbleVisible ? <p className={`bubble ${bubbleClass}`}>{entity.bubble}</p> : null}
           </article>
         );
       })}

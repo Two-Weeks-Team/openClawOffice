@@ -37,6 +37,23 @@ Web-based visual command center for OpenClaw agents and subagents.
 - Responsive LOD policy (desktop: full layers, smaller viewport: object/wall detail reduction)
 - Zone rule engine (JSON DSL) with priority routing + room capacity overflow policy
 - Room-level debug overlay (`cap/target/overflow`) for layout diagnostics
+- Lifecycle motion tokens for spawn/start/end/error/cleanup + reduced-motion fallback
+
+## Motion Lifecycle Guide
+
+`OfficeStage` 상태 전이는 CSS 모션 토큰으로 정의되며, 중복 이벤트가 들어와도
+최근 윈도우 기반으로 모션 강도를 제한합니다.
+
+- `spawn`: 서브에이전트 생성 직후 pulse ring (`motion-spawn`)
+- `start`: 실행 시작 직후 orbit boost (`motion-start`)
+- `run-active`: 실행 중 궤도/연결선 흐름 유지 (`motion-run`, `run-link.run-active`)
+- `end`: 종료 직후 settle pulse (`motion-end`)
+- `error`: shake + glow 경고 (`motion-error`)
+- `cleanup`: 정리 단계 fade-out (`motion-cleanup`)
+
+연결선은 run age에 따라 recent/stale 클래스를 분리해 강조를 조정합니다.
+접근성 모드(`prefers-reduced-motion: reduce`)에서는 stage 애니메이션을 최소화하고
+정적 스타일로 상태만 유지합니다.
 
 ## Data source
 
