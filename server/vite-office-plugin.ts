@@ -22,6 +22,7 @@ const streamBridge = new OfficeStreamBridge();
 const streamSubscribers = new Set<StreamSubscriber>();
 let streamPoller: NodeJS.Timeout | null = null;
 let pollInFlight = false;
+let initialSnapshotPromise: Promise<OfficeSnapshot> | null = null;
 
 function setJsonHeaders(res: ServerResponse) {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -29,7 +30,7 @@ function setJsonHeaders(res: ServerResponse) {
 }
 
 function isClosed(req: IncomingMessage) {
-  return req.destroyed || (req as IncomingMessage & { aborted?: boolean }).aborted === true;
+  return req.destroyed;
 }
 
 function collectCursor(req: IncomingMessage): number {
@@ -70,6 +71,25 @@ async function handleSnapshot(res: ServerResponse) {
   }
 }
 
+async function ensureInitialSnapshot(): Promise<OfficeSnapshot> {
+  const existing = streamBridge.getLatestSnapshot();
+  if (existing) {
+    return existing;
+  }
+
+  if (!initialSnapshotPromise) {
+    initialSnapshotPromise = buildOfficeSnapshot().finally(() => {
+      initialSnapshotPromise = null;
+    });
+  }
+
+  const snapshot = await initialSnapshotPromise;
+  if (!streamBridge.getLatestSnapshot()) {
+    streamBridge.ingestSnapshot(snapshot);
+  }
+  return streamBridge.getLatestSnapshot() ?? snapshot;
+}
+
 async function pollStreamSnapshot() {
   if (pollInFlight) {
     return;
@@ -77,6 +97,12 @@ async function pollStreamSnapshot() {
 
   pollInFlight = true;
   try {
+    const hasSnapshot = Boolean(streamBridge.getLatestSnapshot());
+    if (!hasSnapshot) {
+      await ensureInitialSnapshot();
+      return;
+    }
+
     const snapshot = await buildOfficeSnapshot();
     const frames = streamBridge.ingestSnapshot(snapshot);
 
@@ -167,12 +193,7 @@ function handleStream(req: IncomingMessage, res: ServerResponse) {
 
   void (async () => {
     try {
-      let snapshot = streamBridge.getLatestSnapshot();
-      if (!snapshot) {
-        snapshot = await buildOfficeSnapshot();
-        streamBridge.ingestSnapshot(snapshot);
-      }
-
+      const snapshot = await ensureInitialSnapshot();
       subscriber.sendSnapshot(snapshot);
 
       if (cursor > 0) {

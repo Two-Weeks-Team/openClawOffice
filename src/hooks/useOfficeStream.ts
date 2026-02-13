@@ -15,7 +15,6 @@ type LifecyclePayload = {
 
 const POLL_INTERVAL_MS = 4_000;
 const RECONNECT_DELAY_MS = 1_200;
-const RESYNC_DELAY_MS = 140;
 const MAX_EVENTS = 220;
 
 async function fetchSnapshot(signal: AbortSignal): Promise<OfficeSnapshot> {
@@ -47,6 +46,35 @@ function mergeLifecycleEvent(snapshot: OfficeSnapshot, event: OfficeEvent): Offi
   };
 }
 
+function parseSseErrorMessage(event: Event): string | undefined {
+  if (!("data" in event) || typeof (event as MessageEvent<string>).data !== "string") {
+    return undefined;
+  }
+
+  const rawData = (event as MessageEvent<string>).data;
+  try {
+    const payload = JSON.parse(rawData) as unknown;
+    if (
+      payload &&
+      typeof payload === "object" &&
+      "error" in payload &&
+      typeof payload.error === "string" &&
+      payload.error.trim().length > 0
+    ) {
+      return payload.error;
+    }
+  } catch (err: unknown) {
+    if (err instanceof SyntaxError) {
+      console.warn("Malformed SSE error payload", rawData, err);
+    } else {
+      console.error("Unexpected SSE error payload parse failure", err);
+    }
+    return undefined;
+  }
+
+  return undefined;
+}
+
 export function useOfficeStream() {
   const [state, setState] = useState<OfficeStreamState>({
     snapshot: null,
@@ -56,7 +84,6 @@ export function useOfficeStream() {
 
   const pollTimer = useRef<number | null>(null);
   const reconnectTimer = useRef<number | null>(null);
-  const resyncTimer = useRef<number | null>(null);
   const lastLifecycleSeq = useRef(0);
 
   useEffect(() => {
@@ -103,17 +130,6 @@ export function useOfficeStream() {
           }));
         }
       }
-    };
-
-    const scheduleResync = () => {
-      if (stopped || resyncTimer.current !== null) {
-        return;
-      }
-
-      resyncTimer.current = window.setTimeout(() => {
-        resyncTimer.current = null;
-        void loadSnapshot(true);
-      }, RESYNC_DELAY_MS);
     };
 
     const startPolling = () => {
@@ -192,8 +208,18 @@ export function useOfficeStream() {
             error: undefined,
           };
         });
+      });
 
-        scheduleResync();
+      source.addEventListener("error", (event) => {
+        const message = parseSseErrorMessage(event);
+        if (!message) {
+          return;
+        }
+        setState((prev) => ({
+          ...prev,
+          connected: false,
+          error: message,
+        }));
       });
 
       source.onerror = () => {
@@ -218,7 +244,6 @@ export function useOfficeStream() {
       controller.abort();
       stopPolling();
       clearTimer(reconnectTimer);
-      clearTimer(resyncTimer);
       source?.close();
     };
   }, []);

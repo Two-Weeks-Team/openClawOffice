@@ -55,7 +55,11 @@ export class OfficeStreamBridge {
   }
 
   getBackfill(afterSeq: number): LifecycleEnvelope[] {
-    return this.queue.filter((entry) => entry.seq > afterSeq);
+    const firstIndex = this.queue.findIndex((entry) => entry.seq > afterSeq);
+    if (firstIndex === -1) {
+      return [];
+    }
+    return this.queue.slice(firstIndex);
   }
 
   ingestSnapshot(snapshot: OfficeSnapshot): LifecycleEnvelope[] {
@@ -92,17 +96,12 @@ export class OfficeStreamBridge {
 
   private rememberEvents(events: OfficeEvent[]) {
     for (const event of events) {
-      this.rememberEventId(event.id);
+      if (this.seenEventIds.has(event.id)) {
+        continue;
+      }
+      this.seenEventIds.add(event.id);
+      this.seenOrder.push(event.id);
     }
-  }
-
-  private rememberEventId(id: string) {
-    if (this.seenEventIds.has(id)) {
-      return;
-    }
-
-    this.seenEventIds.add(id);
-    this.seenOrder.push(id);
 
     if (this.seenOrder.length > this.options.maxSeen) {
       const removeCount = this.seenOrder.length - this.options.maxSeen;
