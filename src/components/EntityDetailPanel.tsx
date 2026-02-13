@@ -174,6 +174,8 @@ export function EntityDetailPanel({ snapshot, selectedEntityId, onJumpToRun, onC
               key={tab.id}
               type="button"
               role="tab"
+              id={`detail-tab-${tab.id}`}
+              aria-controls={`detail-tabpanel-${tab.id}`}
               aria-selected={activeTab === tab.id}
               className={`detail-tab-button${activeTab === tab.id ? " is-active" : ""}`}
               onClick={() => {
@@ -208,7 +210,11 @@ export function EntityDetailPanel({ snapshot, selectedEntityId, onJumpToRun, onC
       {readyModel ? (
         <div className="detail-body">
           {activeTab === "overview" ? (
-            <>
+            <div
+              role="tabpanel"
+              id="detail-tabpanel-overview"
+              aria-labelledby="detail-tab-overview"
+            >
               <section className="detail-section">
                 <h3>Overview</h3>
                 <dl className="detail-kv">
@@ -315,98 +321,104 @@ export function EntityDetailPanel({ snapshot, selectedEntityId, onJumpToRun, onC
                   {renderCopyValue("Run Store Path", "runStore", readyModel.paths.runStorePath)}
                 </dl>
               </section>
-            </>
+            </div>
           ) : null}
 
           {activeTab === "sessions" ? (
-            <section className="detail-section">
-              <h3>Sessions</h3>
-              <dl className="detail-kv">
-                <div>
-                  <dt>Session Count</dt>
-                  <dd>{readyModel.metrics.sessions}</dd>
-                </div>
-                {renderCopyValue("Child Session Key", "childSession", readyModel.linkedRun?.childSessionKey)}
-                {renderCopyValue(
-                  "Requester Session Key",
-                  "requesterSession",
-                  readyModel.linkedRun?.requesterSessionKey,
-                )}
-                {renderCopyValue("Session Store", "sessionStore", readyModel.paths.sessionStorePath)}
-                {renderCopyValue("Session Logs", "sessionLogs", readyModel.paths.sessionLogPath)}
-                {renderCopyValue("Child Logs", "childLogs", readyModel.paths.childSessionLogPath)}
-                {renderCopyValue("Parent Logs", "parentLogs", readyModel.paths.parentSessionLogPath)}
-              </dl>
-            </section>
+            <div role="tabpanel" id="detail-tabpanel-sessions" aria-labelledby="detail-tab-sessions">
+              <section className="detail-section">
+                <h3>Sessions</h3>
+                <dl className="detail-kv">
+                  <div>
+                    <dt>Session Count</dt>
+                    <dd>{readyModel.metrics.sessions}</dd>
+                  </div>
+                  {renderCopyValue("Child Session Key", "childSession", readyModel.linkedRun?.childSessionKey)}
+                  {renderCopyValue(
+                    "Requester Session Key",
+                    "requesterSession",
+                    readyModel.linkedRun?.requesterSessionKey,
+                  )}
+                  {renderCopyValue("Session Store", "sessionStore", readyModel.paths.sessionStorePath)}
+                  {renderCopyValue("Session Logs", "sessionLogs", readyModel.paths.sessionLogPath)}
+                  {renderCopyValue("Child Logs", "childLogs", readyModel.paths.childSessionLogPath)}
+                  {renderCopyValue("Parent Logs", "parentLogs", readyModel.paths.parentSessionLogPath)}
+                </dl>
+              </section>
+            </div>
           ) : null}
 
           {activeTab === "runs" ? (
-            <section className="detail-section">
-              <h3>Runs (Recent 6)</h3>
-              {readyModel.recentRuns.length === 0 ? (
-                <p className="detail-muted">No related runs were found.</p>
-              ) : (
-                <ol className="detail-run-list">
-                  {readyModel.recentRuns.map((item) => (
-                    <li key={item.run.runId} className="detail-run-item">
-                      <div className="detail-run-top">
-                        <strong>{item.run.runId}</strong>
-                        <div className="detail-run-actions">
-                          <button
-                            type="button"
-                            className="detail-copy-button"
-                            onClick={() => {
-                              void copyText(`run:${item.run.runId}`, item.run.runId);
-                            }}
-                          >
-                            {copiedKey === `run:${item.run.runId}` ? "Copied" : "Copy"}
-                          </button>
-                          {onJumpToRun ? (
+            <div role="tabpanel" id="detail-tabpanel-runs" aria-labelledby="detail-tab-runs">
+              <section className="detail-section">
+                <h3>Runs (Recent 6)</h3>
+                {readyModel.recentRuns.length === 0 ? (
+                  <p className="detail-muted">No related runs were found.</p>
+                ) : (
+                  <ol className="detail-run-list">
+                    {readyModel.recentRuns.map((item) => (
+                      <li key={item.run.runId} className="detail-run-item">
+                        <div className="detail-run-top">
+                          <strong>{item.run.runId}</strong>
+                          <div className="detail-run-actions">
                             <button
                               type="button"
                               className="detail-copy-button"
                               onClick={() => {
-                                onJumpToRun(item.run.runId);
+                                void copyText(`run:${item.run.runId}`, item.run.runId);
                               }}
                             >
-                              Jump
+                              {copiedKey === `run:${item.run.runId}` ? "Copied" : "Copy"}
                             </button>
-                          ) : null}
+                            {onJumpToRun ? (
+                              <button
+                                type="button"
+                                className="detail-copy-button"
+                                onClick={() => {
+                                  onJumpToRun(item.run.runId);
+                                }}
+                              >
+                                Jump
+                              </button>
+                            ) : null}
+                          </div>
                         </div>
-                      </div>
-                      <div className="detail-run-meta">
-                        <span className={`detail-tag ${item.run.status}`}>{runStatusLabel(item.run)}</span>
-                        <span>
-                          {item.run.parentAgentId} {"->"} {item.run.childAgentId}
-                        </span>
-                        <span>model: {item.model}</span>
-                        <span>tokens: {item.tokenEstimate}</span>
-                        <span>latency: {formatLatency(item.latencyMs)}</span>
-                        <span>events: {item.eventCount}</span>
-                        <span>cleanup: {item.run.cleanup}</span>
-                      </div>
-                      <p className="detail-run-task">{item.run.task}</p>
-                      <p className="detail-run-time">
-                        created {formatAt(item.run.createdAt)} | start {formatAt(item.run.startedAt)} | end{" "}
-                        {formatAt(item.run.endedAt)}
-                      </p>
-                    </li>
-                  ))}
-                </ol>
-              )}
-            </section>
+                        <div className="detail-run-meta">
+                          <span className={`detail-tag ${item.run.status}`}>{runStatusLabel(item.run)}</span>
+                          <span>
+                            {item.run.parentAgentId} {"->"} {item.run.childAgentId}
+                          </span>
+                          <span>model: {item.model}</span>
+                          <span>tokens: {item.tokenEstimate}</span>
+                          <span>latency: {formatLatency(item.latencyMs)}</span>
+                          <span>events: {item.eventCount}</span>
+                          <span>cleanup: {item.run.cleanup}</span>
+                        </div>
+                        <p className="detail-run-task">{item.run.task}</p>
+                        <p className="detail-run-time">
+                          created {formatAt(item.run.createdAt)} | start {formatAt(item.run.startedAt)} | end{" "}
+                          {formatAt(item.run.endedAt)}
+                        </p>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </section>
+            </div>
           ) : null}
 
           {activeTab === "diff" ? (
-            <section className="detail-section">
-              <h3>Run Diff (Success vs Error)</h3>
-              <RunDiffView
-                runDiff={readyModel.runDiff}
-                copiedKey={copiedKey}
-                onCopy={copyText}
-                onJumpToRun={onJumpToRun}
-              />
-            </section>
+            <div role="tabpanel" id="detail-tabpanel-diff" aria-labelledby="detail-tab-diff">
+              <section className="detail-section">
+                <h3>Run Diff (Success vs Error)</h3>
+                <RunDiffView
+                  runDiff={readyModel.runDiff}
+                  copiedKey={copiedKey}
+                  onCopy={copyText}
+                  onJumpToRun={onJumpToRun}
+                />
+              </section>
+            </div>
           ) : null}
         </div>
       ) : null}

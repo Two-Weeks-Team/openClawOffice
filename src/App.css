@@ -1334,11 +1334,11 @@ body {
   font-size: 0.9rem;
 }
 
-.detail-diff-plus {
+.detail-diff-worse {
   color: #ffc9c9;
 }
 
-.detail-diff-minus {
+.detail-diff-better {
   color: #c9ffd8;
 }
 
