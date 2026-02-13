@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { buildDetailPanelModel } from "../lib/detail-panel";
+import { RunDiffView } from "./RunDiffView";
 import type {
   OfficeEvent,
   OfficeEventType,
@@ -50,13 +51,6 @@ function formatLatency(latencyMs: number | null): string {
     return `${latencyMs} ms`;
   }
   return `${(latencyMs / 1000).toFixed(2)} s`;
-}
-
-function formatDelta(value: number, suffix = ""): string {
-  if (value === 0) {
-    return `0${suffix}`;
-  }
-  return `${value > 0 ? "+" : ""}${value}${suffix}`;
 }
 
 const RUN_STATUS_LABELS: Record<OfficeRunStatus, string> = {
@@ -406,138 +400,12 @@ export function EntityDetailPanel({ snapshot, selectedEntityId, onJumpToRun, onC
           {activeTab === "diff" ? (
             <section className="detail-section">
               <h3>Run Diff (Success vs Error)</h3>
-              {(() => {
-                const runDiff = readyModel.runDiff;
-                if (!runDiff) {
-                  return (
-                    <p className="detail-muted">
-                      Need at least one recent SUCCESS run and one ERROR run to compute a diff.
-                    </p>
-                  );
-                }
-
-                return (
-                  <>
-                    <dl className="detail-kv">
-                      <div>
-                        <dt>Baseline Run</dt>
-                        <dd>
-                          <span className="detail-inline-copy">
-                            <code>{runDiff.baseline.run.runId}</code>
-                            <button
-                              type="button"
-                              className="detail-copy-button"
-                              onClick={() => {
-                                void copyText(
-                                  `diff-baseline:${runDiff.baseline.run.runId}`,
-                                  runDiff.baseline.run.runId,
-                                );
-                              }}
-                            >
-                              {copiedKey === `diff-baseline:${runDiff.baseline.run.runId}` ? "Copied" : "Copy"}
-                            </button>
-                            {onJumpToRun ? (
-                              <button
-                                type="button"
-                                className="detail-copy-button"
-                                onClick={() => {
-                                  onJumpToRun(runDiff.baseline.run.runId);
-                                }}
-                              >
-                                Jump
-                              </button>
-                            ) : null}
-                          </span>
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>Error Run</dt>
-                        <dd>
-                          <span className="detail-inline-copy">
-                            <code>{runDiff.candidate.run.runId}</code>
-                            <button
-                              type="button"
-                              className="detail-copy-button"
-                              onClick={() => {
-                                void copyText(
-                                  `diff-candidate:${runDiff.candidate.run.runId}`,
-                                  runDiff.candidate.run.runId,
-                                );
-                              }}
-                            >
-                              {copiedKey === `diff-candidate:${runDiff.candidate.run.runId}`
-                                ? "Copied"
-                                : "Copy"}
-                            </button>
-                            {onJumpToRun ? (
-                              <button
-                                type="button"
-                                className="detail-copy-button"
-                                onClick={() => {
-                                  onJumpToRun(runDiff.candidate.run.runId);
-                                }}
-                              >
-                                Jump
-                              </button>
-                            ) : null}
-                          </span>
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>Model</dt>
-                        <dd>
-                          {runDiff.baseline.model} {"->"} {runDiff.candidate.model}
-                          {runDiff.modelChanged ? " (changed)" : " (same)"}
-                        </dd>
-                      </div>
-                    </dl>
-                    <div className="detail-diff-grid">
-                      <article>
-                        <span>Token Delta</span>
-                        <strong
-                          className={
-                            runDiff.tokenEstimateDelta > 0
-                              ? "detail-diff-plus"
-                              : runDiff.tokenEstimateDelta < 0
-                                ? "detail-diff-minus"
-                                : ""
-                          }
-                        >
-                          {formatDelta(runDiff.tokenEstimateDelta)}
-                        </strong>
-                      </article>
-                      <article>
-                        <span>Latency Delta</span>
-                        <strong
-                          className={
-                            runDiff.latencyDeltaMs !== null && runDiff.latencyDeltaMs > 0
-                              ? "detail-diff-plus"
-                              : runDiff.latencyDeltaMs !== null && runDiff.latencyDeltaMs < 0
-                                ? "detail-diff-minus"
-                                : ""
-                          }
-                        >
-                          {runDiff.latencyDeltaMs === null ? "-" : formatDelta(runDiff.latencyDeltaMs, " ms")}
-                        </strong>
-                      </article>
-                      <article>
-                        <span>Event Delta</span>
-                        <strong
-                          className={
-                            runDiff.eventCountDelta > 0
-                              ? "detail-diff-plus"
-                              : runDiff.eventCountDelta < 0
-                                ? "detail-diff-minus"
-                                : ""
-                          }
-                        >
-                          {formatDelta(runDiff.eventCountDelta)}
-                        </strong>
-                      </article>
-                    </div>
-                  </>
-                );
-              })()}
+              <RunDiffView
+                runDiff={readyModel.runDiff}
+                copiedKey={copiedKey}
+                onCopy={copyText}
+                onJumpToRun={onJumpToRun}
+              />
             </section>
           ) : null}
         </div>
