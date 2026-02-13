@@ -828,6 +828,17 @@ body {
   color: var(--muted);
 }
 
+.detail-empty kbd {
+  display: inline-block;
+  min-width: 20px;
+  padding: 1px 5px;
+  border-radius: 6px;
+  border: 1px solid rgba(167, 233, 255, 0.38);
+  background: rgba(15, 49, 69, 0.85);
+  color: #e2f7ff;
+  font-size: 0.66rem;
+}
+
 .detail-empty-missing strong {
   color: #ffc0c0;
 }

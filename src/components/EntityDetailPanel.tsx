@@ -148,7 +148,9 @@ export function EntityDetailPanel({ snapshot, selectedEntityId, onClose }: Props
       {model.status === "empty" ? (
         <div className="detail-empty">
           <strong>No entity selected</strong>
-          <p>Select an agent or subagent on the stage. Press `Esc` to close anytime.</p>
+          <p>
+            Select an agent or subagent on the stage. Press <kbd>Esc</kbd> to close anytime.
+          </p>
         </div>
       ) : null}
 
