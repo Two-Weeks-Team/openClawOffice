@@ -1,0 +1,129 @@
+import type { OfficeEvent, OfficeSnapshot } from "./office-types";
+
+export type LifecycleEnvelope = {
+  seq: number;
+  event: OfficeEvent;
+};
+
+type BridgeOptions = {
+  maxQueue: number;
+  maxSeen: number;
+};
+
+const DEFAULT_OPTIONS: BridgeOptions = {
+  maxQueue: 1200,
+  maxSeen: 4000,
+};
+
+function lifecycleEventOrder(a: OfficeEvent, b: OfficeEvent): number {
+  if (a.at !== b.at) {
+    return a.at - b.at;
+  }
+  const runOrder = a.runId.localeCompare(b.runId);
+  if (runOrder !== 0) {
+    return runOrder;
+  }
+  const typeOrder = a.type.localeCompare(b.type);
+  if (typeOrder !== 0) {
+    return typeOrder;
+  }
+  return a.id.localeCompare(b.id);
+}
+
+export class OfficeStreamBridge {
+  private readonly options: BridgeOptions;
+
+  private seq = 0;
+
+  private latestSnapshot: OfficeSnapshot | null = null;
+
+  private readonly seenEventIds = new Set<string>();
+
+  private readonly seenOrder: string[] = [];
+
+  private readonly queue: LifecycleEnvelope[] = [];
+
+  constructor(options?: Partial<BridgeOptions>) {
+    this.options = {
+      ...DEFAULT_OPTIONS,
+      ...options,
+    };
+  }
+
+  getLatestSnapshot() {
+    return this.latestSnapshot;
+  }
+
+  getBackfill(afterSeq: number): LifecycleEnvelope[] {
+    return this.queue.filter((entry) => entry.seq > afterSeq);
+  }
+
+  ingestSnapshot(snapshot: OfficeSnapshot): LifecycleEnvelope[] {
+    this.latestSnapshot = snapshot;
+
+    const firstSnapshot = this.seenEventIds.size === 0;
+    if (firstSnapshot) {
+      this.rememberEvents(snapshot.events);
+      return [];
+    }
+
+    const unseen = snapshot.events.filter((event) => !this.seenEventIds.has(event.id));
+    if (unseen.length === 0) {
+      return [];
+    }
+
+    unseen.sort(lifecycleEventOrder);
+    this.rememberEvents(unseen);
+
+    const frames: LifecycleEnvelope[] = [];
+    for (const event of unseen) {
+      this.seq += 1;
+      const frame = { seq: this.seq, event };
+      this.queue.push(frame);
+      frames.push(frame);
+    }
+
+    if (this.queue.length > this.options.maxQueue) {
+      this.queue.splice(0, this.queue.length - this.options.maxQueue);
+    }
+
+    return frames;
+  }
+
+  private rememberEvents(events: OfficeEvent[]) {
+    for (const event of events) {
+      this.rememberEventId(event.id);
+    }
+  }
+
+  private rememberEventId(id: string) {
+    if (this.seenEventIds.has(id)) {
+      return;
+    }
+
+    this.seenEventIds.add(id);
+    this.seenOrder.push(id);
+
+    if (this.seenOrder.length > this.options.maxSeen) {
+      const removeCount = this.seenOrder.length - this.options.maxSeen;
+      const removed = this.seenOrder.splice(0, removeCount);
+      for (const removedId of removed) {
+        this.seenEventIds.delete(removedId);
+      }
+    }
+  }
+}
+
+export function parseLifecycleCursor(value: string | null | undefined): number {
+  if (!value) {
+    return 0;
+  }
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return 0;
+  }
+  if (parsed <= 0) {
+    return 0;
+  }
+  return Math.floor(parsed);
+}
