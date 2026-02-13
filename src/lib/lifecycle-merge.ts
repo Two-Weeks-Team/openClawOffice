@@ -21,10 +21,7 @@ export function mergeLifecycleEvent(
   let right = deduped.length;
   while (left < right) {
     const middle = (left + right) >> 1;
-    const candidate = deduped[middle];
-    if (!candidate) {
-      break;
-    }
+    const candidate = deduped[middle]!;
     const comparison = compareEvents(event, candidate);
     if (comparison < 0) {
       right = middle;

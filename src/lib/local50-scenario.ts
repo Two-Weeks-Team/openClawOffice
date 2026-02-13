@@ -89,22 +89,13 @@ function buildRuns(agentIds: string[], runCount: number, seedTime: number): Offi
 
 function buildEvents(runs: OfficeRun[], eventCount: number, seedTime: number): OfficeEvent[] {
   const events: OfficeEvent[] = [];
+  const eventTypes: OfficeEvent["type"][] = ["spawn", "start", "end", "error", "cleanup"];
   for (let index = 0; index < eventCount; index += 1) {
     const run = runs[index % runs.length];
     if (!run) {
       continue;
     }
-    const eventTypeIndex = index % 5;
-    const type: OfficeEvent["type"] =
-      eventTypeIndex === 0
-        ? "spawn"
-        : eventTypeIndex === 1
-          ? "start"
-          : eventTypeIndex === 2
-            ? "end"
-            : eventTypeIndex === 3
-              ? "error"
-              : "cleanup";
+    const type = eventTypes[index % eventTypes.length] ?? "spawn";
     const at = seedTime - index * 700;
     events.push({
       id: `evt-${String(index + 1).padStart(5, "0")}`,
