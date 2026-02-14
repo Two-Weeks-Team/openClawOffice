@@ -29,6 +29,35 @@ export type BuildTimelineLanesParams = {
   resolveRoomId?: (agentId: string, event: OfficeEvent) => string | null | undefined;
 };
 
+export type TimelineLaneItem =
+  | {
+      kind: "event";
+      key: string;
+      event: OfficeEvent;
+    }
+  | {
+      kind: "summary";
+      summaryKind: "run-burst" | "dense-window";
+      key: string;
+      label: string;
+      runId: string | null;
+      events: OfficeEvent[];
+      eventCount: number;
+      runCount: number;
+      latestAt: number;
+      oldestAt: number;
+      spanMs: number;
+    };
+
+export type BuildTimelineLaneItemsParams = {
+  lane: TimelineLane;
+  enableCompression?: boolean;
+  burstGroupMinSize?: number;
+  burstGapMs?: number;
+  denseLaneThresholdPerMinute?: number;
+  denseVisibleEventBudget?: number;
+};
+
 export type TimelineIndex = {
   ordered: OfficeEvent[];
   byRunId: Map<string, OfficeEvent[]>;
@@ -309,4 +338,171 @@ export function buildTimelineLanes({
     }
     return left.label.localeCompare(right.label);
   });
+}
+
+function formatSummaryWindow(spanMs: number): string {
+  if (spanMs < 60_000) {
+    return `${Math.max(1, Math.round(spanMs / 1000))}s`;
+  }
+  return `${Math.max(1, Math.round(spanMs / 60_000))}m`;
+}
+
+function eventItemKey(laneKey: string, event: OfficeEvent): string {
+  return `${laneKey}:event:${event.id}`;
+}
+
+function toEventItem(laneKey: string, event: OfficeEvent): TimelineLaneItem {
+  return {
+    kind: "event",
+    key: eventItemKey(laneKey, event),
+    event,
+  };
+}
+
+function toSummaryItem(input: {
+  laneKey: string;
+  summaryKind: "run-burst" | "dense-window";
+  runId: string | null;
+  events: OfficeEvent[];
+}): TimelineLaneItem {
+  const latest = input.events[0];
+  const oldest = input.events[input.events.length - 1];
+  const latestAt = latest?.at ?? 0;
+  const oldestAt = oldest?.at ?? latestAt;
+  const spanMs = Math.max(0, latestAt - oldestAt);
+  const runCount = new Set(input.events.map((event) => event.runId)).size;
+
+  const label =
+    input.summaryKind === "run-burst"
+      ? `run ${input.runId ?? "unknown"} burst: ${input.events.length} events in ${formatSummaryWindow(spanMs)}`
+      : `${input.events.length} events compressed (${runCount} runs / ${formatSummaryWindow(spanMs)})`;
+
+  return {
+    kind: "summary",
+    summaryKind: input.summaryKind,
+    key: `${input.laneKey}:${input.summaryKind}:${latest?.id ?? "none"}:${oldest?.id ?? "none"}`,
+    label,
+    runId: input.runId,
+    events: input.events,
+    eventCount: input.events.length,
+    runCount,
+    latestAt,
+    oldestAt,
+    spanMs,
+  };
+}
+
+function buildBurstItems(
+  lane: TimelineLane,
+  burstGroupMinSize: number,
+  burstGapMs: number,
+): TimelineLaneItem[] {
+  if (lane.events.length === 0) {
+    return [];
+  }
+
+  const items: TimelineLaneItem[] = [];
+  let contiguous: OfficeEvent[] = [];
+
+  const flushContiguous = () => {
+    if (contiguous.length === 0) {
+      return;
+    }
+    if (contiguous.length >= burstGroupMinSize) {
+      items.push(
+        toSummaryItem({
+          laneKey: lane.key,
+          summaryKind: "run-burst",
+          runId: contiguous[0]?.runId ?? null,
+          events: contiguous,
+        }),
+      );
+    } else {
+      for (const event of contiguous) {
+        items.push(toEventItem(lane.key, event));
+      }
+    }
+    contiguous = [];
+  };
+
+  for (const event of lane.events) {
+    const previous = contiguous[contiguous.length - 1];
+    if (!previous) {
+      contiguous = [event];
+      continue;
+    }
+
+    const sameRun = previous.runId === event.runId;
+    const gapMs = Math.max(0, previous.at - event.at);
+    if (sameRun && gapMs <= burstGapMs) {
+      contiguous.push(event);
+      continue;
+    }
+
+    flushContiguous();
+    contiguous = [event];
+  }
+
+  flushContiguous();
+  return items;
+}
+
+export function timelineLaneItemEventCount(item: TimelineLaneItem): number {
+  if (item.kind === "event") {
+    return 1;
+  }
+  return item.eventCount;
+}
+
+export function buildTimelineLaneItems({
+  lane,
+  enableCompression = true,
+  burstGroupMinSize = 3,
+  burstGapMs = 45_000,
+  denseLaneThresholdPerMinute = 12,
+  denseVisibleEventBudget = 10,
+}: BuildTimelineLaneItemsParams): TimelineLaneItem[] {
+  if (!enableCompression) {
+    return lane.events.map((event) => toEventItem(lane.key, event));
+  }
+
+  const burstItems = buildBurstItems(lane, Math.max(2, burstGroupMinSize), Math.max(1_000, burstGapMs));
+  const shouldDenseCollapse =
+    lane.densityPerMinute >= denseLaneThresholdPerMinute &&
+    lane.events.length > denseVisibleEventBudget;
+  if (!shouldDenseCollapse) {
+    return burstItems;
+  }
+
+  const visibleItems: TimelineLaneItem[] = [];
+  const hiddenEvents: OfficeEvent[] = [];
+  let consumedEvents = 0;
+
+  for (const item of burstItems) {
+    const itemEventCount = timelineLaneItemEventCount(item);
+    if (consumedEvents < denseVisibleEventBudget) {
+      visibleItems.push(item);
+      consumedEvents += itemEventCount;
+      continue;
+    }
+
+    if (item.kind === "event") {
+      hiddenEvents.push(item.event);
+    } else {
+      hiddenEvents.push(...item.events);
+    }
+  }
+
+  if (hiddenEvents.length === 0) {
+    return burstItems;
+  }
+
+  const denseSummary = toSummaryItem({
+    laneKey: lane.key,
+    summaryKind: "dense-window",
+    runId: null,
+    events: hiddenEvents,
+  });
+
+  return [...visibleItems, denseSummary];
 }

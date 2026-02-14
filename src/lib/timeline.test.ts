@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { OfficeEvent, OfficeRun } from "../types/office";
 import { buildRunGraph } from "./run-graph";
 import {
+  buildTimelineLaneItems,
   buildTimelineLanes,
   buildTimelineIndex,
   filterTimelineEvents,
@@ -239,5 +240,103 @@ describe("timeline lanes", () => {
       ["child-a", 2],
       ["child-c", 1],
     ]);
+  });
+
+  it("groups contiguous same-run bursts into summary items", () => {
+    const baseAt = 1_700_000_100_000;
+    const burstEvents: OfficeEvent[] = [
+      {
+        id: "run-z:cleanup",
+        type: "cleanup",
+        runId: "run-z",
+        at: baseAt + 30_000,
+        agentId: "child-z",
+        parentAgentId: "parent-z",
+        text: "cleanup z",
+      },
+      {
+        id: "run-z:end",
+        type: "end",
+        runId: "run-z",
+        at: baseAt + 20_000,
+        agentId: "child-z",
+        parentAgentId: "parent-z",
+        text: "end z",
+      },
+      {
+        id: "run-z:error",
+        type: "error",
+        runId: "run-z",
+        at: baseAt + 10_000,
+        agentId: "child-z",
+        parentAgentId: "parent-z",
+        text: "error z",
+      },
+      {
+        id: "run-y:spawn",
+        type: "spawn",
+        runId: "run-y",
+        at: baseAt,
+        agentId: "child-y",
+        parentAgentId: "parent-y",
+        text: "spawn y",
+      },
+    ];
+
+    const lane = buildTimelineLanes({
+      events: burstEvents,
+      mode: "room",
+      resolveRoomId: () => "ops",
+    })[0];
+    expect(lane).toBeDefined();
+
+    const items = buildTimelineLaneItems({ lane: lane! });
+    expect(items.length).toBe(2);
+    expect(items[0]?.kind).toBe("summary");
+    if (items[0]?.kind === "summary") {
+      expect(items[0].summaryKind).toBe("run-burst");
+      expect(items[0].eventCount).toBe(3);
+      expect(items[0].runCount).toBe(1);
+    }
+    expect(items[1]?.kind).toBe("event");
+  });
+
+  it("auto-collapses dense tails into a lane summary item", () => {
+    const baseAt = 1_700_000_200_000;
+    const denseEvents: OfficeEvent[] = Array.from({ length: 14 }, (_, index) => {
+      const runId = index % 2 === 0 ? "run-a" : "run-b";
+      return {
+        id: `${runId}:${index}`,
+        type: index % 5 === 0 ? "error" : "start",
+        runId,
+        at: baseAt - index * 5_000,
+        agentId: `child-${runId}`,
+        parentAgentId: "parent-dense",
+        text: `event ${index}`,
+      } satisfies OfficeEvent;
+    });
+
+    const lane = buildTimelineLanes({
+      events: denseEvents,
+      mode: "agent",
+    })[0];
+    expect(lane).toBeDefined();
+
+    const compressed = buildTimelineLaneItems({
+      lane: lane!,
+      burstGroupMinSize: 3,
+      denseLaneThresholdPerMinute: 2,
+      denseVisibleEventBudget: 6,
+    });
+    expect(compressed.some((item) => item.kind === "summary" && item.summaryKind === "dense-window")).toBe(
+      true,
+    );
+
+    const uncompressed = buildTimelineLaneItems({
+      lane: lane!,
+      enableCompression: false,
+    });
+    expect(uncompressed.every((item) => item.kind === "event")).toBe(true);
+    expect(uncompressed.length).toBe(denseEvents.length);
   });
 });
