@@ -306,6 +306,22 @@ function touchCenter(a: TouchPoint, b: TouchPoint) {
   };
 }
 
+function statusFocusAccent(status: OfficeEntity["status"]): string {
+  if (status === "error") {
+    return "255, 150, 150";
+  }
+  if (status === "active") {
+    return "255, 217, 136";
+  }
+  if (status === "ok") {
+    return "130, 255, 190";
+  }
+  if (status === "idle") {
+    return "139, 226, 255";
+  }
+  return "173, 231, 250";
+}
+
 export function OfficeStage({
   snapshot,
   selectedEntityId = null,
@@ -762,6 +778,40 @@ export function OfficeStage({
     width: clamp(viewportSize.width / camera.zoom, 0, STAGE_WIDTH),
     height: clamp(viewportSize.height / camera.zoom, 0, STAGE_HEIGHT),
   };
+  const hasFocusSelection = focusMode && Boolean(selectedPlacement);
+  const focusPoint = hasFocusSelection && selectedPlacement
+    ? {
+        x: selectedPlacement.x * camera.zoom + resolvedCameraPan.panX,
+        y: selectedPlacement.y * camera.zoom + resolvedCameraPan.panY,
+      }
+    : null;
+  const focusAccentColor = selectedPlacement
+    ? statusFocusAccent(selectedPlacement.entity.status)
+    : statusFocusAccent("idle");
+  const focusRadius = Math.max(
+    150,
+    Math.min(Math.max(viewportSize.width, STAGE_WIDTH), Math.max(viewportSize.height, STAGE_HEIGHT)) * 0.22,
+  );
+  const focusFogStyle: CSSProperties | undefined = focusPoint
+    ? {
+        background: `radial-gradient(circle at ${focusPoint.x}px ${focusPoint.y}px, rgba(${focusAccentColor}, 0.28) 0px, rgba(${focusAccentColor}, 0.16) ${focusRadius * 0.58}px, rgba(7, 20, 30, 0.14) ${focusRadius}px, rgba(4, 15, 24, 0.58) ${focusRadius * 1.75}px, rgba(2, 10, 16, 0.78) 100%)`,
+      }
+    : undefined;
+  const focusAccentStyle: CSSProperties | undefined = focusPoint
+    ? {
+        left: focusPoint.x,
+        top: focusPoint.y,
+        boxShadow: `0 0 48px rgba(${focusAccentColor}, 0.5), 0 0 112px rgba(${focusAccentColor}, 0.28)`,
+      }
+    : undefined;
+  const stageClassName = [
+    "office-stage-wrap",
+    focusMode ? "is-focus-mode" : "",
+    hasFocusSelection ? "has-focus-selection" : "",
+    selectedPlacement ? `focus-status-${selectedPlacement.entity.status}` : "focus-status-none",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   const applyZoomAtPoint = (nextZoom: number, anchorX: number, anchorY: number) => {
     const { width, height } = getViewportSize();
@@ -802,7 +852,7 @@ export function OfficeStage({
   };
 
   return (
-    <div className="office-stage-wrap">
+    <div className={stageClassName}>
       <div className="camera-controls">
         <button
           type="button"
@@ -1072,6 +1122,12 @@ export function OfficeStage({
           }
         }}
       >
+        {hasFocusSelection && focusPoint ? (
+          <>
+            <div className="focus-fog-layer" style={focusFogStyle} aria-hidden="true" />
+            <div className="focus-accent-ring" style={focusAccentStyle} aria-hidden="true" />
+          </>
+        ) : null}
         <div className="office-stage-camera" style={cameraStyle}>
           <div className="office-stage-grid" />
 

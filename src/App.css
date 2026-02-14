@@ -376,6 +376,77 @@ body {
   stroke-dasharray: 10 8;
 }
 
+.focus-fog-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 520;
+  pointer-events: none;
+  transition: background 220ms ease, opacity 220ms ease;
+}
+
+.focus-accent-ring {
+  position: absolute;
+  width: 112px;
+  height: 112px;
+  border-radius: 999px;
+  transform: translate(-50%, -50%);
+  z-index: 525;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  transition:
+    left 180ms linear,
+    top 180ms linear,
+    box-shadow 220ms ease;
+}
+
+.office-stage-wrap.has-focus-selection .iso-layer {
+  opacity: 0.46;
+  transition: opacity 220ms ease;
+}
+
+.office-stage-wrap.has-focus-selection .office-room {
+  opacity: 0.34;
+  filter: saturate(0.7) brightness(0.82);
+  transition: opacity 220ms ease, filter 220ms ease;
+}
+
+.office-stage-wrap.has-focus-selection .run-link {
+  opacity: 0.2;
+  filter: none;
+}
+
+.office-stage-wrap.has-focus-selection .entity-token {
+  opacity: 0.24;
+  filter: saturate(0.56) brightness(0.8);
+  transition:
+    opacity 220ms ease,
+    filter 220ms ease,
+    transform 220ms ease;
+}
+
+.office-stage-wrap.has-focus-selection .entity-token.is-selected {
+  opacity: 1;
+  filter: saturate(1.12) brightness(1.08);
+  transform: translate(-50%, -51%) scale(1.05);
+}
+
+.office-stage-wrap.has-focus-selection .entity-token.is-selected .sprite-shell {
+  outline: 2px solid rgba(255, 245, 210, 0.95);
+  outline-offset: 2px;
+}
+
+.office-stage-wrap.focus-status-error .entity-token.is-selected .sprite-shell {
+  box-shadow: 0 0 0 2px rgba(255, 190, 190, 0.88), 0 0 22px rgba(255, 126, 126, 0.58);
+}
+
+.office-stage-wrap.focus-status-active .entity-token.is-selected .sprite-shell {
+  box-shadow: 0 0 0 2px rgba(255, 233, 160, 0.88), 0 0 22px rgba(255, 206, 96, 0.58);
+}
+
+.office-stage-wrap.focus-status-ok .entity-token.is-selected .sprite-shell {
+  box-shadow: 0 0 0 2px rgba(190, 255, 220, 0.88), 0 0 22px rgba(126, 255, 186, 0.58);
+}
+
 .office-stage-grid {
   position: absolute;
   inset: 0;
@@ -2243,7 +2314,9 @@ body {
   .entity-token .sprite-shell,
   .entity-token .sprite-shell::before,
   .entity-token .sprite-shell::after,
-  .entity-token .bubble {
+  .entity-token .bubble,
+  .focus-fog-layer,
+  .focus-accent-ring {
     animation: none !important;
     transition-duration: 0.01ms !important;
   }
@@ -2321,6 +2394,15 @@ body {
     --tile-scale: 1.16;
     --tile-opacity: 0.82;
     min-height: 560px;
+  }
+
+  .focus-accent-ring {
+    width: 88px;
+    height: 88px;
+  }
+
+  .office-stage-wrap.has-focus-selection .entity-token.is-selected {
+    transform: translate(-50%, -50%) scale(1.03);
   }
 
   .camera-controls {
