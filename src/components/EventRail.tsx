@@ -381,7 +381,7 @@ export function EventRail({
                   });
                 }
               }}
-              disabled={!hasLoopRange}
+              disabled={activePlaybackIndex < 0}
             />
             Loop
           </label>
