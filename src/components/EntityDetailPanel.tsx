@@ -1,4 +1,4 @@
-import { Suspense, lazy, useDeferredValue, useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import {
   buildDetailPanelModelCached,
   buildRunDiffForSelection,
@@ -192,7 +192,7 @@ export function EntityDetailPanel({
   onClose,
 }: Props) {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<DetailPanelTab>("overview");
+  const [activeTabByEntityId, setActiveTabByEntityId] = useState<Record<string, DetailPanelTab>>({});
   const [runTagFilter, setRunTagFilter] = useState("");
   const [runKnowledgeDraftByRunId, setRunKnowledgeDraftByRunId] = useState<
     Record<string, RunKnowledgeDraft>
@@ -202,6 +202,22 @@ export function EntityDetailPanel({
   );
   const [runComparisonSelection, setRunComparisonSelection] =
     useState<DetailPanelRunComparisonSelection | null>(null);
+  const activeTabEntityKey = selectedEntityId ?? "__empty__";
+  const activeTab = activeTabByEntityId[activeTabEntityKey] ?? "overview";
+  const setActiveTab = useCallback(
+    (nextTab: DetailPanelTab) => {
+      setActiveTabByEntityId((prev) => {
+        if (prev[activeTabEntityKey] === nextTab) {
+          return prev;
+        }
+        return {
+          ...prev,
+          [activeTabEntityKey]: nextTab,
+        };
+      });
+    },
+    [activeTabEntityKey],
+  );
   const deferredActiveTab = useDeferredValue(activeTab);
   const isRunsTabReady = deferredActiveTab === "runs";
   const isDiffTabReady = deferredActiveTab === "diff";
