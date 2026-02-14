@@ -290,9 +290,11 @@ export function buildBubbleLaneLayout(
       const visibleText = shouldCollapseText
         ? truncateText(card.text, resolved.collapseChars)
         : card.text;
-      const width = card.isSummary ? 182 : estimateCardWidth(visibleText, card.isExpanded);
+      const rawWidth = card.isSummary ? 182 : estimateCardWidth(visibleText, card.isExpanded);
+      const maxWidth = Math.max(96, resolved.stageWidth - resolved.sidePadding * 2);
+      const width = Math.min(rawWidth, maxWidth);
       const leftLimit = resolved.sidePadding;
-      const rightLimit = resolved.stageWidth - resolved.sidePadding - width;
+      const rightLimit = Math.max(leftLimit, resolved.stageWidth - resolved.sidePadding - width);
       const desiredLeft = clamp(card.anchorX - width / 2, leftLimit, rightLimit);
 
       let selectedRow = 0;

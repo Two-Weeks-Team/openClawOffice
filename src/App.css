@@ -1159,7 +1159,7 @@ body {
 .bubble-lane-overlay {
   position: absolute;
   inset: 0;
-  z-index: 1300;
+  z-index: 1230;
   pointer-events: none;
 }
 
@@ -2971,6 +2971,7 @@ body {
   .entity-token .sprite-shell::before,
   .entity-token .sprite-shell::after,
   .entity-token .bubble,
+  .bubble-lane-card,
   .focus-fog-layer,
   .focus-accent-ring {
     animation: none !important;
