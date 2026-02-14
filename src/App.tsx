@@ -969,6 +969,7 @@ function App() {
   const paletteShortcutLabel = formatShortcut("mod+k", shortcutPlatform);
   const helpShortcutLabel = formatShortcut("shift+/", shortcutPlatform);
   const alertCenterShortcutLabel = formatShortcut("mod+shift+a", shortcutPlatform);
+  const focusModeShortcutLabel = formatShortcut("mod+f", shortcutPlatform);
 
   return (
     <main className="app-shell">
@@ -1086,7 +1087,7 @@ function App() {
           </select>
         </label>
 
-        <label className="ops-focus-toggle">
+        <label className="ops-focus-toggle" title={`Shortcut: ${focusModeShortcutLabel}`}>
           <input
             type="checkbox"
             checked={opsFilters.focusMode}
@@ -1094,7 +1095,7 @@ function App() {
               setOpsFilters((prev) => ({ ...prev, focusMode: event.target.checked }));
             }}
           />
-          Focus mode
+          Focus mode ({focusModeShortcutLabel})
         </label>
 
         <div className="ops-actions">
