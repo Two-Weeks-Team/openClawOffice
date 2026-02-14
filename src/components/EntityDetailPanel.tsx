@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useDeferredValue, useEffect, useMemo, useState } from "react";
 import {
-  buildDetailPanelModel,
+  buildDetailPanelModelCached,
   buildRunDiffForSelection,
+  prefetchDetailPanelModels,
   selectDefaultRunComparison,
   type DetailPanelRunComparisonSelection,
 } from "../lib/detail-panel";
@@ -12,7 +13,6 @@ import {
   upsertSavedRunComparison,
   type SavedRunComparison,
 } from "../lib/run-comparison-store";
-import { RunDiffView } from "./RunDiffView";
 import type {
   OfficeEvent,
   OfficeEventType,
@@ -36,6 +36,11 @@ const DETAIL_PANEL_TABS: Array<{ id: DetailPanelTab; label: string }> = [
   { id: "runs", label: "Runs" },
   { id: "diff", label: "Diff" },
 ];
+
+const LazyRunDiffView = lazy(async () => {
+  const module = await import("./RunDiffView");
+  return { default: module.RunDiffView };
+});
 
 function formatRelative(at: number, now: number): string {
   const ms = Math.max(0, now - at);
@@ -95,11 +100,40 @@ export function EntityDetailPanel({ snapshot, selectedEntityId, onJumpToRun, onC
   );
   const [runComparisonSelection, setRunComparisonSelection] =
     useState<DetailPanelRunComparisonSelection | null>(null);
+  const deferredActiveTab = useDeferredValue(activeTab);
+  const isRunsTabReady = deferredActiveTab === "runs";
+  const isDiffTabReady = deferredActiveTab === "diff";
 
   const model = useMemo(
-    () => buildDetailPanelModel(snapshot, selectedEntityId),
+    () => buildDetailPanelModelCached(snapshot, selectedEntityId),
     [snapshot, selectedEntityId],
   );
+  const readyModel = model.status === "ready" ? model : null;
+  const prefetchEntityIds = useMemo(() => {
+    if (!selectedEntityId || !readyModel) {
+      return [] as string[];
+    }
+    const ids = new Set<string>();
+    const availableEntityIds = new Set(snapshot.entities.map((entity) => entity.id));
+
+    if (readyModel.entity.parentAgentId) {
+      ids.add(`agent:${readyModel.entity.parentAgentId}`);
+    }
+    for (const item of readyModel.recentRuns.slice(0, 4)) {
+      ids.add(`agent:${item.run.parentAgentId}`);
+      ids.add(`agent:${item.run.childAgentId}`);
+      ids.add(`subagent:${item.run.runId}`);
+    }
+
+    return [...ids].filter((id) => availableEntityIds.has(id) && id !== selectedEntityId);
+  }, [readyModel, selectedEntityId, snapshot.entities]);
+
+  useEffect(() => {
+    if (prefetchEntityIds.length === 0) {
+      return;
+    }
+    prefetchDetailPanelModels(snapshot, prefetchEntityIds);
+  }, [prefetchEntityIds, snapshot]);
 
   useEffect(() => {
     if (!selectedEntityId) {
@@ -145,15 +179,14 @@ export function EntityDetailPanel({ snapshot, selectedEntityId, onJumpToRun, onC
     }
   };
 
-  const readyModel = model.status === "ready" ? model : null;
   const defaultRunComparisonSelection = useMemo(() => {
-    if (!readyModel) {
+    if (!readyModel || !isDiffTabReady) {
       return null;
     }
     return selectDefaultRunComparison(readyModel.runInsights);
-  }, [readyModel]);
+  }, [isDiffTabReady, readyModel]);
   const effectiveRunComparisonSelection = useMemo(() => {
-    if (!readyModel) {
+    if (!readyModel || !isDiffTabReady) {
       return null;
     }
     const isCurrentSelectionValid =
@@ -165,19 +198,19 @@ export function EntityDetailPanel({ snapshot, selectedEntityId, onJumpToRun, onC
       return runComparisonSelection;
     }
     return defaultRunComparisonSelection;
-  }, [defaultRunComparisonSelection, readyModel, runComparisonSelection]);
+  }, [defaultRunComparisonSelection, isDiffTabReady, readyModel, runComparisonSelection]);
   const activeRunDiff = useMemo(() => {
-    if (!readyModel || !effectiveRunComparisonSelection) {
+    if (!readyModel || !effectiveRunComparisonSelection || !isDiffTabReady) {
       return null;
     }
     return buildRunDiffForSelection(readyModel.runInsights, effectiveRunComparisonSelection);
-  }, [effectiveRunComparisonSelection, readyModel]);
+  }, [effectiveRunComparisonSelection, isDiffTabReady, readyModel]);
   const savedComparisonsForEntity = useMemo(() => {
-    if (!readyModel) {
+    if (!readyModel || !isDiffTabReady) {
       return [];
     }
     return savedComparisons.filter((item) => item.entityId === readyModel.entity.id);
-  }, [readyModel, savedComparisons]);
+  }, [isDiffTabReady, readyModel, savedComparisons]);
 
   const renderCopyValue = (label: string, key: string, value: string | undefined) => (
     <div>
@@ -429,7 +462,16 @@ export function EntityDetailPanel({ snapshot, selectedEntityId, onJumpToRun, onC
             </div>
           ) : null}
 
-          {activeTab === "runs" ? (
+          {activeTab === "runs" && !isRunsTabReady ? (
+            <div role="tabpanel" id="detail-tabpanel-runs" aria-labelledby="detail-tab-runs">
+              <section className="detail-section detail-panel-lazy">
+                <h3>Runs (Recent 6)</h3>
+                <p className="detail-muted">Loading run insights...</p>
+              </section>
+            </div>
+          ) : null}
+
+          {activeTab === "runs" && isRunsTabReady ? (
             <div role="tabpanel" id="detail-tabpanel-runs" aria-labelledby="detail-tab-runs">
               <section className="detail-section">
                 <h3>Runs (Recent 6)</h3>
@@ -488,7 +530,16 @@ export function EntityDetailPanel({ snapshot, selectedEntityId, onJumpToRun, onC
             </div>
           ) : null}
 
-          {activeTab === "diff" ? (
+          {activeTab === "diff" && !isDiffTabReady ? (
+            <div role="tabpanel" id="detail-tabpanel-diff" aria-labelledby="detail-tab-diff">
+              <section className="detail-section detail-panel-lazy">
+                <h3>Run Comparison (Run A vs Run B)</h3>
+                <p className="detail-muted">Loading comparison tools...</p>
+              </section>
+            </div>
+          ) : null}
+
+          {activeTab === "diff" && isDiffTabReady ? (
             <div role="tabpanel" id="detail-tabpanel-diff" aria-labelledby="detail-tab-diff">
               <section className="detail-section">
                 <h3>Run Comparison (Run A vs Run B)</h3>
@@ -612,12 +663,14 @@ export function EntityDetailPanel({ snapshot, selectedEntityId, onJumpToRun, onC
                     </ol>
                   )}
                 </div>
-                <RunDiffView
-                  runDiff={activeRunDiff}
-                  copiedKey={copiedKey}
-                  onCopy={copyText}
-                  onJumpToRun={onJumpToRun}
-                />
+                <Suspense fallback={<p className="detail-muted">Loading run diff view...</p>}>
+                  <LazyRunDiffView
+                    runDiff={activeRunDiff}
+                    copiedKey={copiedKey}
+                    onCopy={copyText}
+                    onJumpToRun={onJumpToRun}
+                  />
+                </Suspense>
               </section>
             </div>
           ) : null}
