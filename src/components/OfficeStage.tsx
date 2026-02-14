@@ -1289,17 +1289,27 @@ export function OfficeStage({
         const isMutedByTimeline = hasTimelineHighlight && !isLinked;
         const isMutedByFocus = hasOpsFilter && focusMode && !matchesOpsFilter && !isWatched;
         const renderPriorityBoost = isWatched ? 220 : isPinned ? 140 : 0;
+        const tokenClassName = [
+          "entity-token",
+          statusClass(entity),
+          entity.kind,
+          isOccluded ? "is-occluded" : "",
+          motionClasses,
+          isSelected ? "is-selected" : "",
+          isPinned ? "is-pinned" : "",
+          isWatched ? "is-watched" : "",
+          isLinked ? "is-linked" : "",
+          hasOpsFilter && matchesOpsFilter ? "is-filter-hit" : "",
+          isMutedByFocus ? "is-filtered-out" : "",
+          isMutedByTimeline || isMutedByFocus ? "is-muted" : "",
+        ]
+          .filter(Boolean)
+          .join(" ");
 
         return (
           <article
             key={entity.id}
-            className={`entity-token ${statusClass(entity)} ${entity.kind} ${isOccluded ? "is-occluded" : ""} ${motionClasses} ${
-              isSelected ? "is-selected" : ""
-            } ${isPinned ? "is-pinned" : ""} ${isWatched ? "is-watched" : ""} ${isLinked ? "is-linked" : ""} ${
-              hasOpsFilter && matchesOpsFilter ? "is-filter-hit" : ""
-            } ${
-              isMutedByFocus ? "is-filtered-out" : ""
-            } ${isMutedByTimeline || isMutedByFocus ? "is-muted" : ""}`}
+            className={tokenClassName}
             style={{
               left: placement.x,
               top: placement.y,
@@ -1310,7 +1320,7 @@ export function OfficeStage({
             aria-label={`Open detail panel for ${entity.label}`}
             aria-pressed={isSelected}
             onClick={(event) => {
-              const multiToggle = event.metaKey || event.ctrlKey || event.shiftKey;
+              const multiToggle = event.metaKey || event.ctrlKey;
               onSelectEntity?.(entity.id, multiToggle ? "toggle" : "single");
             }}
             onKeyDown={(event) => {

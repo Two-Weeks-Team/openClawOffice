@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 import { CommandPalette, type CommandPaletteEntry } from "./components/CommandPalette";
 import { EntityDetailPanel } from "./components/EntityDetailPanel";
@@ -196,6 +196,7 @@ function App() {
     loadAlertRulePreferences,
   );
   const [batchActionState, setBatchActionState] = useState<BatchActionState>(loadBatchActionState);
+  const hasBatchStateHydratedRef = useRef(false);
   const shortcutPlatform = useMemo(() => detectShortcutPlatform(), []);
 
   const showToast = useCallback((kind: NonNullable<ToastState>["kind"], message: string) => {
@@ -273,9 +274,18 @@ function App() {
     }
     return ordered;
   }, [effectiveSelectedEntityId, selectedEntityIds]);
-  const pinnedEntityIdSet = useMemo(() => new Set(batchActionState.pinnedEntityIds), [batchActionState]);
-  const watchedEntityIdSet = useMemo(() => new Set(batchActionState.watchedEntityIds), [batchActionState]);
-  const mutedEntityIdSet = useMemo(() => new Set(batchActionState.mutedEntityIds), [batchActionState]);
+  const pinnedEntityIdSet = useMemo(
+    () => new Set(batchActionState.pinnedEntityIds),
+    [batchActionState.pinnedEntityIds],
+  );
+  const watchedEntityIdSet = useMemo(
+    () => new Set(batchActionState.watchedEntityIds),
+    [batchActionState.watchedEntityIds],
+  );
+  const mutedEntityIdSet = useMemo(
+    () => new Set(batchActionState.mutedEntityIds),
+    [batchActionState.mutedEntityIds],
+  );
   const selectedEntity = useMemo(
     () => snapshot?.entities.find((entity) => entity.id === effectiveSelectedEntityId) ?? null,
     [effectiveSelectedEntityId, snapshot],
@@ -373,6 +383,10 @@ function App() {
   }, [alertRulePreferences]);
 
   useEffect(() => {
+    if (!hasBatchStateHydratedRef.current) {
+      hasBatchStateHydratedRef.current = true;
+      return;
+    }
     persistBatchActionState(batchActionState);
   }, [batchActionState]);
 
@@ -1138,6 +1152,61 @@ function App() {
     };
   }, [closeAlertCenter, isAlertCenterOpen]);
 
+  const mutedTargetSets = useMemo(() => {
+    const mutedRunIds = new Set<string>();
+    const mutedAgentIds = new Set<string>();
+    if (!snapshot) {
+      return { mutedRunIds, mutedAgentIds };
+    }
+    for (const entity of snapshot.entities) {
+      if (!mutedEntityIdSet.has(entity.id)) {
+        continue;
+      }
+      if (entity.kind === "agent") {
+        mutedAgentIds.add(entity.agentId);
+      }
+      if (entity.kind === "subagent" && entity.runId) {
+        mutedRunIds.add(entity.runId);
+      }
+    }
+    return { mutedRunIds, mutedAgentIds };
+  }, [mutedEntityIdSet, snapshot]);
+
+  const visibleAlertSignals = useMemo(() => {
+    if (!snapshot) {
+      return [] as AlertSignal[];
+    }
+    return alertSignals.filter((signal) => {
+      if (isAlertRuleSuppressed(alertRulePreferences, signal.ruleId, snapshot.generatedAt)) {
+        return false;
+      }
+      if (signal.runIds.length === 0 && signal.agentIds.length === 0) {
+        return true;
+      }
+
+      const hasVisibleRun = signal.runIds.some((runId) => {
+        if (mutedTargetSets.mutedRunIds.has(runId)) {
+          return false;
+        }
+        const run = runById.get(runId);
+        if (!run) {
+          return true;
+        }
+        return !mutedTargetSets.mutedAgentIds.has(run.childAgentId);
+      });
+      const hasVisibleAgent = signal.agentIds.some(
+        (agentId) => !mutedTargetSets.mutedAgentIds.has(agentId),
+      );
+      return hasVisibleRun || hasVisibleAgent;
+    });
+  }, [
+    alertRulePreferences,
+    alertSignals,
+    mutedTargetSets,
+    runById,
+    snapshot,
+  ]);
+
   if (!snapshot) {
     return (
       <main className="app-shell">
@@ -1164,40 +1233,6 @@ function App() {
     opsFilters.status !== "all" ||
     opsFilters.roomId !== "all" ||
     opsFilters.recentMinutes !== "all";
-  const mutedRunIds = new Set<string>();
-  const mutedAgentIds = new Set<string>();
-  for (const entity of snapshot.entities) {
-    if (!mutedEntityIdSet.has(entity.id)) {
-      continue;
-    }
-    if (entity.kind === "agent") {
-      mutedAgentIds.add(entity.agentId);
-    }
-    if (entity.kind === "subagent" && entity.runId) {
-      mutedRunIds.add(entity.runId);
-    }
-  }
-  const visibleAlertSignals = alertSignals.filter((signal) => {
-    if (isAlertRuleSuppressed(alertRulePreferences, signal.ruleId, snapshot.generatedAt)) {
-      return false;
-    }
-    if (signal.runIds.length === 0 && signal.agentIds.length === 0) {
-      return true;
-    }
-
-    const hasVisibleRun = signal.runIds.some((runId) => {
-      if (mutedRunIds.has(runId)) {
-        return false;
-      }
-      const run = runById.get(runId);
-      if (!run) {
-        return true;
-      }
-      return !mutedAgentIds.has(run.childAgentId);
-    });
-    const hasVisibleAgent = signal.agentIds.some((agentId) => !mutedAgentIds.has(agentId));
-    return hasVisibleRun || hasVisibleAgent;
-  });
   const hasActiveAlerts = visibleAlertSignals.length > 0;
   const alertToastSignals = visibleAlertSignals.slice(0, 2);
 
@@ -1405,7 +1440,7 @@ function App() {
             Jump to run
           </button>
           <span className="ops-batch-summary">
-            selected {selectedCount} (ctrl/cmd/shift+click) | pin {batchActionState.pinnedEntityIds.length} | watch{" "}
+            selected {selectedCount} (ctrl/cmd+click) | pin {batchActionState.pinnedEntityIds.length} | watch{" "}
             {batchActionState.watchedEntityIds.length} | mute {batchActionState.mutedEntityIds.length}
           </span>
           <span className="ops-match-count">

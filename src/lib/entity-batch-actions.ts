@@ -17,11 +17,13 @@ export type BatchActionKind =
   | "unmute"
   | "clear";
 
-const EMPTY_BATCH_ACTION_STATE: BatchActionState = {
-  pinnedEntityIds: [],
-  watchedEntityIds: [],
-  mutedEntityIds: [],
-};
+function createEmptyBatchActionState(): BatchActionState {
+  return {
+    pinnedEntityIds: [],
+    watchedEntityIds: [],
+    mutedEntityIds: [],
+  };
+}
 
 function normalizeEntityIdList(value: unknown): string[] {
   if (!Array.isArray(value)) {
@@ -32,14 +34,14 @@ function normalizeEntityIdList(value: unknown): string[] {
     if (typeof candidate !== "string" || candidate.trim() === "") {
       continue;
     }
-    normalized.push(candidate);
+    normalized.push(candidate.trim());
   }
   return [...new Set(normalized)];
 }
 
 export function normalizeBatchActionState(input: unknown): BatchActionState {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
-    return EMPTY_BATCH_ACTION_STATE;
+    return createEmptyBatchActionState();
   }
   const candidate = input as Record<string, unknown>;
   return {
@@ -51,16 +53,16 @@ export function normalizeBatchActionState(input: unknown): BatchActionState {
 
 export function loadBatchActionState(): BatchActionState {
   if (typeof window === "undefined" || typeof window.localStorage === "undefined") {
-    return EMPTY_BATCH_ACTION_STATE;
+    return createEmptyBatchActionState();
   }
   try {
     const raw = window.localStorage.getItem(ENTITY_BATCH_ACTIONS_STORAGE_KEY);
     if (!raw) {
-      return EMPTY_BATCH_ACTION_STATE;
+      return createEmptyBatchActionState();
     }
     return normalizeBatchActionState(JSON.parse(raw));
   } catch {
-    return EMPTY_BATCH_ACTION_STATE;
+    return createEmptyBatchActionState();
   }
 }
 
@@ -96,7 +98,13 @@ export function applyBatchAction(
   entityIds: string[],
   action: BatchActionKind,
 ): BatchActionState {
-  const normalizedEntityIds = [...new Set(entityIds.filter((id) => id.trim().length > 0))];
+  const normalizedEntityIds = [
+    ...new Set(
+      entityIds
+        .map((id) => id.trim())
+        .filter((id) => id.length > 0),
+    ),
+  ];
   if (normalizedEntityIds.length === 0) {
     return state;
   }

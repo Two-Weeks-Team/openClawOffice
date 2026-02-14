@@ -14,7 +14,7 @@ const EMPTY_STATE: BatchActionState = {
 describe("entity batch actions", () => {
   it("normalizes storage payload safely", () => {
     const normalized = normalizeBatchActionState({
-      pinnedEntityIds: ["agent:main", "agent:main", "", 1],
+      pinnedEntityIds: ["agent:main", " agent:main ", "", 1],
       watchedEntityIds: ["subagent:run-1"],
       mutedEntityIds: "bad",
     });
