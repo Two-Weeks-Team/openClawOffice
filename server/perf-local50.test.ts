@@ -5,7 +5,12 @@ import { buildEntitySearchIndex, searchEntityIds } from "../src/lib/entity-searc
 import { buildPlacements } from "../src/lib/layout";
 import { mergeLifecycleEvent } from "../src/lib/lifecycle-merge";
 import { createLocal50Scenario } from "../src/lib/local50-scenario";
-import { LOCAL50_PIPELINE_BUDGET, LOCAL50_SCENARIO, LOCAL50_UX_BUDGET } from "../src/lib/perf-budgets";
+import {
+  CAPACITY_BASELINE_PROFILES,
+  LOCAL50_PIPELINE_BUDGET,
+  LOCAL50_UX_BUDGET,
+  type CapacityProfileId,
+} from "../src/lib/perf-budgets";
 import { buildTimelineIndex } from "../src/lib/timeline";
 import type { OfficeEvent, OfficeSnapshot } from "../src/types/office";
 import { parseSessionsStore, parseSubagentStore } from "./runtime-parser";
@@ -27,10 +32,32 @@ type BudgetCheck = {
 
 type Local50BenchmarkReport = {
   generatedAt: string;
-  scenario: typeof LOCAL50_SCENARIO;
+  profile: CapacityProfileId;
+  scenario: {
+    agents: number;
+    runs: number;
+    events: number;
+  };
   metrics: Metric[];
   checks: BudgetCheck[];
 };
+
+const SUPPORTED_BENCHMARK_PROFILES: CapacityProfileId[] = ["local10", "local25", "local50"];
+
+function resolveBenchmarkProfile(): CapacityProfileId {
+  const raw = process.env.LOCAL50_PROFILE;
+  if (!raw) {
+    return "local50";
+  }
+  if (SUPPORTED_BENCHMARK_PROFILES.includes(raw as CapacityProfileId)) {
+    return raw as CapacityProfileId;
+  }
+  return "local50";
+}
+
+const BENCHMARK_PROFILE = resolveBenchmarkProfile();
+const BENCHMARK_SCENARIO = CAPACITY_BASELINE_PROFILES[BENCHMARK_PROFILE].scenario;
+const BENCHMARK_REPORT_NAME = process.env.LOCAL50_REPORT_NAME ?? BENCHMARK_PROFILE;
 
 function heapUsedMb(): number {
   return process.memoryUsage().heapUsed / (1024 * 1024);
@@ -95,7 +122,7 @@ function formatBudgetValue(value: number): string {
 
 function toMarkdownReport(report: Local50BenchmarkReport): string {
   const lines: string[] = [
-    `### Local50 Benchmark Report - ${report.generatedAt}`,
+    `### ${report.profile} Benchmark Report - ${report.generatedAt}`,
     "",
     "| Metric | Budget | Actual | Status |",
     "| --- | --- | --- | --- |",
@@ -126,28 +153,28 @@ function writeBenchmarkReport(report: Local50BenchmarkReport): void {
   const stamp = report.generatedAt.replace(/[:.]/g, "-");
   const json = JSON.stringify(report, null, 2);
   const markdown = toMarkdownReport(report);
-  const latestJsonPath = join(reportDir, "local50-latest.json");
-  const latestMdPath = join(reportDir, "local50-latest.md");
+  const latestJsonPath = join(reportDir, `${BENCHMARK_REPORT_NAME}-latest.json`);
+  const latestMdPath = join(reportDir, `${BENCHMARK_REPORT_NAME}-latest.md`);
 
   mkdirSync(reportDir, { recursive: true });
-  writeFileSync(join(reportDir, `local50-${stamp}.json`), json);
-  writeFileSync(join(reportDir, `local50-${stamp}.md`), markdown);
+  writeFileSync(join(reportDir, `${BENCHMARK_REPORT_NAME}-${stamp}.json`), json);
+  writeFileSync(join(reportDir, `${BENCHMARK_REPORT_NAME}-${stamp}.md`), markdown);
   writeFileSync(latestJsonPath, json);
   writeFileSync(latestMdPath, markdown);
 
-  console.log(`local50 report json: ${latestJsonPath}`);
-  console.log(`local50 report md: ${latestMdPath}`);
+  console.log(`${BENCHMARK_REPORT_NAME} report json: ${latestJsonPath}`);
+  console.log(`${BENCHMARK_REPORT_NAME} report md: ${latestMdPath}`);
 }
 
 describe("local50 benchmark smoke", () => {
   it("measures parse/layout/timeline/search/stream budgets", () => {
-    const scenario = createLocal50Scenario(LOCAL50_SCENARIO);
+    const scenario = createLocal50Scenario({ profile: BENCHMARK_PROFILE });
     const { snapshot } = scenario;
 
     expect(snapshot.entities.length).toBe(
-      LOCAL50_SCENARIO.agents + LOCAL50_SCENARIO.runs,
+      BENCHMARK_SCENARIO.agents + BENCHMARK_SCENARIO.runs,
     );
-    expect(snapshot.events.length).toBe(LOCAL50_SCENARIO.events);
+    expect(snapshot.events.length).toBe(BENCHMARK_SCENARIO.events);
 
     const parseSessionsMetric = runMetric({
       name: "parseSessions(50 agents)",
@@ -294,7 +321,8 @@ describe("local50 benchmark smoke", () => {
 
     const report: Local50BenchmarkReport = {
       generatedAt: new Date().toISOString(),
-      scenario: LOCAL50_SCENARIO,
+      profile: BENCHMARK_PROFILE,
+      scenario: BENCHMARK_SCENARIO,
       metrics: [
         parseSessionsMetric,
         parseRunsMetric,
