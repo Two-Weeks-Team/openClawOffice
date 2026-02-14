@@ -245,6 +245,22 @@ async function main() {
     }
   };
 
+  const buildConsoleSummary = () => ({
+    total: consoleEntries.length,
+    warnings: consoleEntries.filter((entry) => entry.type === "warning").length,
+    errors: consoleEntries.filter((entry) => entry.type === "error").length,
+    recent: consoleEntries.slice(-20),
+  });
+
+  const buildReportBase = () => ({
+    generatedAt: new Date().toISOString(),
+    baseUrl: BASE_URL,
+    syntheticStateDir,
+    checks,
+    console: buildConsoleSummary(),
+    serverLogTail: serverLogs.slice(-30),
+  });
+
   try {
     if (!useExistingServer) {
       await waitForReady(getServerExitDetails);
@@ -420,23 +436,13 @@ async function main() {
     });
 
     const summary = {
-      generatedAt: new Date().toISOString(),
-      baseUrl: BASE_URL,
-      syntheticStateDir,
+      ...buildReportBase(),
       thresholds: {
         overlapPairsMustBeZero: true,
         replayTabMustStayOnRuns: true,
         flowMaxDurationMs: TASK_MAX_DURATION_MS,
         flowMaxClicks: TASK_MAX_CLICKS,
       },
-      checks,
-      console: {
-        total: consoleEntries.length,
-        warnings: consoleEntries.filter((entry) => entry.type === "warning").length,
-        errors: consoleEntries.filter((entry) => entry.type === "error").length,
-        recent: consoleEntries.slice(-20),
-      },
-      serverLogTail: serverLogs.slice(-30),
     };
 
     const reportPath = path.join(ARTIFACT_DIR, "report.json");
@@ -447,19 +453,9 @@ async function main() {
     console.log(`ux:verify passed (${checks.length} checks). Report: ${reportPath}`);
   } catch (error) {
     const failure = {
-      generatedAt: new Date().toISOString(),
-      baseUrl: BASE_URL,
-      syntheticStateDir,
+      ...buildReportBase(),
       failedChecks,
-      checks,
       error: serializeError(error),
-      console: {
-        total: consoleEntries.length,
-        warnings: consoleEntries.filter((entry) => entry.type === "warning").length,
-        errors: consoleEntries.filter((entry) => entry.type === "error").length,
-        recent: consoleEntries.slice(-20),
-      },
-      serverLogTail: serverLogs.slice(-30),
     };
     await writeJson(path.join(ARTIFACT_DIR, "report.json"), failure);
     console.error(error instanceof Error ? error.message : String(error));
