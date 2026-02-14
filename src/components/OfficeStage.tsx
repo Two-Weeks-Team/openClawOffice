@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { AlertSignal } from "../lib/alerts";
 import { buildBubbleLaneLayout, type BubbleLaneCandidate } from "../lib/bubble-lanes";
+import { buildEntityClusters } from "../lib/entity-clustering";
 import { buildPlacements, type PlacementMode } from "../lib/layout";
 import {
   compileRoomBlueprintLayers,
@@ -117,6 +118,8 @@ const STAGE_HEIGHT = 660;
 const CAMERA_MIN_ZOOM = 0.72;
 const CAMERA_MAX_ZOOM = 2.4;
 const CAMERA_ZOOM_STEP = 0.16;
+const CLUSTER_CELL_SIZE = 92;
+const CLUSTER_MIN_MEMBERS = 3;
 
 type CameraState = {
   zoom: number;
@@ -408,6 +411,8 @@ export function OfficeStage({
     panY: 0,
     followSelected: false,
   });
+  const [clusteringEnabled, setClusteringEnabled] = useState(true);
+  const [expandedClusterIds, setExpandedClusterIds] = useState<string[]>([]);
   const [pinnedBubbleEntityIds, setPinnedBubbleEntityIds] = useState<string[]>(() =>
     loadBubbleEntityIds(BUBBLE_PINNED_STORAGE_KEY),
   );
@@ -438,6 +443,10 @@ export function OfficeStage({
   const selectedEntityIdSet = useMemo(() => new Set(selectedEntityIds), [selectedEntityIds]);
   const pinnedEntityIdSet = useMemo(() => new Set(pinnedEntityIds), [pinnedEntityIds]);
   const watchedEntityIdSet = useMemo(() => new Set(watchedEntityIds), [watchedEntityIds]);
+  const expandedClusterIdSet = useMemo(
+    () => new Set(expandedClusterIds),
+    [expandedClusterIds],
+  );
 
   const layoutState = useMemo(
     () =>
@@ -765,6 +774,77 @@ export function OfficeStage({
       return left.y - right.y;
     });
   }, [alertPrioritySets, pinnedEntityIdSet, placements, selectedEntityIdSet, watchedEntityIdSet]);
+  const clusterState = useMemo(() => {
+    if (!clusteringEnabled) {
+      return {
+        clusters: [],
+        collapsedClusters: [],
+        hiddenEntityIdSet: new Set<string>(),
+      };
+    }
+
+    const clusterCandidates = sortedPlacements.filter((placement) => {
+      const entityId = placement.entity.id;
+      return (
+        !selectedEntityIdSet.has(entityId) &&
+        !pinnedEntityIdSet.has(entityId) &&
+        !watchedEntityIdSet.has(entityId)
+      );
+    });
+
+    const built = buildEntityClusters(clusterCandidates, {
+      cellSize: CLUSTER_CELL_SIZE,
+      minMembers: CLUSTER_MIN_MEMBERS,
+    });
+    const autoExpandedClusterIds = new Set<string>();
+    for (const selectedId of selectedEntityIdSet) {
+      const clusterId = built.memberToClusterId.get(selectedId);
+      if (clusterId) {
+        autoExpandedClusterIds.add(clusterId);
+      }
+    }
+
+    const collapsedClusters = built.clusters.filter(
+      (cluster) =>
+        !expandedClusterIdSet.has(cluster.id) &&
+        !autoExpandedClusterIds.has(cluster.id),
+    );
+    const hiddenEntityIdSet = new Set<string>();
+    for (const cluster of collapsedClusters) {
+      for (const memberEntityId of cluster.memberEntityIds) {
+        hiddenEntityIdSet.add(memberEntityId);
+      }
+    }
+
+    return {
+      clusters: built.clusters,
+      collapsedClusters,
+      hiddenEntityIdSet,
+    };
+  }, [
+    clusteringEnabled,
+    expandedClusterIdSet,
+    pinnedEntityIdSet,
+    selectedEntityIdSet,
+    sortedPlacements,
+    watchedEntityIdSet,
+  ]);
+  const visiblePlacements = useMemo(
+    () =>
+      sortedPlacements.filter(
+        (placement) => !clusterState.hiddenEntityIdSet.has(placement.entity.id),
+      ),
+    [clusterState.hiddenEntityIdSet, sortedPlacements],
+  );
+  const availableClusterIdSet = useMemo(
+    () => new Set(clusterState.clusters.map((cluster) => cluster.id)),
+    [clusterState.clusters],
+  );
+  const activeExpandedClusterCount = useMemo(
+    () =>
+      expandedClusterIds.filter((clusterId) => availableClusterIdSet.has(clusterId)).length,
+    [availableClusterIdSet, expandedClusterIds],
+  );
 
   const runLinks = useMemo(() => {
     const hasTimelineHighlight = Boolean(normalizedHighlightRunId || normalizedHighlightAgentId);
@@ -789,6 +869,12 @@ export function OfficeStage({
         const source = placementById.get(edge.from);
         const target = placementById.get(edge.to);
         if (!source || !target) {
+          return null;
+        }
+        if (
+          clusterState.hiddenEntityIdSet.has(source.entity.id) ||
+          clusterState.hiddenEntityIdSet.has(target.entity.id)
+        ) {
           return null;
         }
         const sourceMatchesOps =
@@ -848,6 +934,7 @@ export function OfficeStage({
     hasOpsFilter,
     normalizedRoomFilterId,
     placementById,
+    clusterState.hiddenEntityIdSet,
     snapshot.generatedAt,
     snapshot.runGraph.edges,
     runById,
@@ -855,7 +942,7 @@ export function OfficeStage({
   const bubbleLaneCandidates = useMemo<BubbleLaneCandidate[]>(() => {
     const candidates: BubbleLaneCandidate[] = [];
 
-    for (const placement of sortedPlacements) {
+    for (const placement of visiblePlacements) {
       const entity = placement.entity;
       const matchesEntityFilter = !hasEntityFilter || filteredEntityIdSet.has(entity.id);
       const matchesRoomFilter =
@@ -921,7 +1008,7 @@ export function OfficeStage({
     runById,
     selectedEntityIdSet,
     snapshot.generatedAt,
-    sortedPlacements,
+    visiblePlacements,
     watchedEntityIdSet,
   ]);
   const bubbleLaneLayout = useMemo(
@@ -938,7 +1025,7 @@ export function OfficeStage({
   const entityRenderModels = useMemo(
     () =>
       buildStageEntityRenderModels({
-        placements: sortedPlacements,
+        placements: visiblePlacements,
         occlusionByRoom: layerState.occlusionByRoom,
         generatedAt: snapshot.generatedAt,
         runById,
@@ -982,7 +1069,7 @@ export function OfficeStage({
       runById,
       selectedEntityIdSet,
       snapshot.generatedAt,
-      sortedPlacements,
+      visiblePlacements,
       watchedEntityIdSet,
     ],
   );
@@ -1180,6 +1267,26 @@ export function OfficeStage({
         >
           {shouldFollowSelected ? "Follow on" : "Follow off"}
         </button>
+        <button
+          type="button"
+          onClick={() => {
+            setClusteringEnabled((prev) => !prev);
+          }}
+        >
+          {clusteringEnabled
+            ? `Clusters on (${clusterState.collapsedClusters.length}/${clusterState.clusters.length})`
+            : "Clusters off"}
+        </button>
+        {activeExpandedClusterCount > 0 ? (
+          <button
+            type="button"
+            onClick={() => {
+              setExpandedClusterIds([]);
+            }}
+          >
+            Collapse expanded ({activeExpandedClusterCount})
+          </button>
+        ) : null}
         <span>{Math.round(camera.zoom * 100)}%</span>
       </div>
 
@@ -1250,7 +1357,11 @@ export function OfficeStage({
             return;
           }
           const target = event.target as HTMLElement;
-          if (target.closest(".entity-token, .camera-controls, .camera-minimap, .bubble-lane-card")) {
+          if (
+            target.closest(
+              ".entity-token, .entity-cluster, .camera-controls, .camera-minimap, .bubble-lane-card",
+            )
+          ) {
             return;
           }
           mousePanGestureRef.current = {
@@ -1561,6 +1672,41 @@ export function OfficeStage({
               </div>
             ) : null}
           </section>
+        );
+      })}
+
+      {clusterState.collapsedClusters.map((cluster) => {
+        const expandCluster = () => {
+          setExpandedClusterIds((prev) =>
+            prev.includes(cluster.id) ? prev : [...prev, cluster.id],
+          );
+        };
+        return (
+          <article
+            key={cluster.id}
+            className={`entity-cluster status-${cluster.statusBucket}`}
+            style={{
+              left: cluster.x,
+              top: cluster.y,
+              zIndex: ENTITY_Z_OFFSET + Math.round(cluster.y) + 540,
+            }}
+            role="button"
+            tabIndex={0}
+            aria-label={`Expand cluster with ${cluster.memberCount} entities`}
+            onClick={expandCluster}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                expandCluster();
+              }
+            }}
+          >
+            <div className="cluster-badge">{cluster.memberCount}</div>
+            <div className="cluster-meta">
+              <strong>{cluster.label}</strong>
+              <span>{cluster.summary}</span>
+            </div>
+          </article>
         );
       })}
 
