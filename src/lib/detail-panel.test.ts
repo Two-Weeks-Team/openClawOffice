@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildDetailPanelModel } from "./detail-panel";
+import {
+  buildDetailPanelModel,
+  buildRunDiffForSelection,
+  selectDefaultRunComparison,
+} from "./detail-panel";
 import { buildRunGraph } from "./run-graph";
 import type { OfficeSnapshot } from "../types/office";
 
@@ -40,6 +44,8 @@ function makeSnapshot(): OfficeSnapshot {
       task: "Warm cache for agent dashboard boot.",
       cleanup: "keep",
       createdAt: 905_000,
+      startedAt: 905_000,
+      endedAt: 909_000,
     },
   ];
 
@@ -135,6 +141,7 @@ describe("buildDetailPanelModel", () => {
     }
 
     expect(model.relatedRuns.map((run) => run.runId)).toEqual(["run-2", "run-3", "run-1"]);
+    expect(model.runInsights).toHaveLength(3);
     expect(model.recentRuns.map((item) => item.run.runId)).toEqual(["run-2", "run-3", "run-1"]);
     expect(model.metrics.errorRuns).toBe(1);
     expect(model.metrics.runCount).toBe(3);
@@ -147,6 +154,14 @@ describe("buildDetailPanelModel", () => {
     expect(model.runDiff?.baseline.run.runId).toBe("run-3");
     expect(model.runDiff?.candidate.run.runId).toBe("run-2");
     expect(model.runDiff?.eventCountDelta).toBe(0);
+    expect(model.runDiff?.eventDensityPerMinuteDelta).toBe(45);
+    expect(model.runDiff?.errorPointDeltaMs).toBeNull();
+    expect(model.runDiff?.majorEvents.baselineOnly.map((event) => event.id)).toEqual([
+      "run-3:spawn:1",
+    ]);
+    expect(model.runDiff?.majorEvents.candidateOnly.map((event) => event.id)).toEqual([
+      "run-2:error:1",
+    ]);
   });
 
   it("builds subagent references using linked run", () => {
@@ -165,7 +180,7 @@ describe("buildDetailPanelModel", () => {
     expect(model.paths.parentSessionLogPath).toBe("/tmp/openclaw/agents/main/sessions");
   });
 
-  it("keeps runDiff empty when success vs error pair is not available", () => {
+  it("falls back to latest two runs when success vs error pair is not available", () => {
     const snapshot = makeSnapshot();
     snapshot.runs = snapshot.runs.map((run) =>
       run.status === "ok" ? { ...run, status: "active" as const } : run,
@@ -178,6 +193,50 @@ describe("buildDetailPanelModel", () => {
       return;
     }
     expect(model.recentRuns.length).toBeGreaterThan(0);
-    expect(model.runDiff).toBeNull();
+    expect(model.runDiff?.baseline.run.runId).toBe("run-3");
+    expect(model.runDiff?.candidate.run.runId).toBe("run-2");
+  });
+});
+
+describe("run comparison helpers", () => {
+  it("selects latest success/error pair by default", () => {
+    const model = buildDetailPanelModel(makeSnapshot(), "agent:main");
+    expect(model.status).toBe("ready");
+    if (model.status !== "ready") {
+      return;
+    }
+    const selected = selectDefaultRunComparison(model.runInsights);
+    expect(selected).toEqual({
+      baselineRunId: "run-3",
+      candidateRunId: "run-2",
+    });
+  });
+
+  it("builds run diff for an explicit run pair", () => {
+    const model = buildDetailPanelModel(makeSnapshot(), "agent:main");
+    expect(model.status).toBe("ready");
+    if (model.status !== "ready") {
+      return;
+    }
+    const diff = buildRunDiffForSelection(model.runInsights, {
+      baselineRunId: "run-1",
+      candidateRunId: "run-2",
+    });
+    expect(diff?.baseline.run.runId).toBe("run-1");
+    expect(diff?.candidate.run.runId).toBe("run-2");
+    expect(diff?.taskChanged).toBe(true);
+  });
+
+  it("returns null when baseline and candidate are the same run", () => {
+    const model = buildDetailPanelModel(makeSnapshot(), "agent:main");
+    expect(model.status).toBe("ready");
+    if (model.status !== "ready") {
+      return;
+    }
+    const diff = buildRunDiffForSelection(model.runInsights, {
+      baselineRunId: "run-2",
+      candidateRunId: "run-2",
+    });
+    expect(diff).toBeNull();
   });
 });

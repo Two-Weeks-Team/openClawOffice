@@ -30,6 +30,31 @@ function deltaClass(value: number | null): string {
   return value > 0 ? "detail-diff-worse" : "detail-diff-better";
 }
 
+function formatRate(value: number | null): string {
+  if (value === null) {
+    return "-";
+  }
+  return `${value.toFixed(2)} /min`;
+}
+
+function formatErrorPoint(value: number | null): string {
+  if (value === null) {
+    return "-";
+  }
+  if (value < 1000) {
+    return `${value} ms`;
+  }
+  return `${(value / 1000).toFixed(2)} s`;
+}
+
+function formatEventText(text: string): string {
+  const compact = text.replace(/\s+/g, " ").trim();
+  if (compact.length <= 96) {
+    return compact;
+  }
+  return `${compact.slice(0, 93)}...`;
+}
+
 function RunIdRow({
   label,
   runId,
@@ -75,7 +100,7 @@ export function RunDiffView({ runDiff, copiedKey, onCopy, onJumpToRun }: Props) 
   if (!runDiff) {
     return (
       <p className="detail-muted">
-        Need at least one SUCCESS run and one ERROR run within recent 6 runs to compute a diff.
+        Select different baseline/candidate runs to compute a comparison diff.
       </p>
     );
   }
@@ -92,7 +117,7 @@ export function RunDiffView({ runDiff, copiedKey, onCopy, onJumpToRun }: Props) 
           onJumpToRun={onJumpToRun}
         />
         <RunIdRow
-          label="Error Run"
+          label="Candidate Run"
           runId={runDiff.candidate.run.runId}
           copyKeyPrefix="diff-candidate"
           copiedKey={copiedKey}
@@ -125,6 +150,70 @@ export function RunDiffView({ runDiff, copiedKey, onCopy, onJumpToRun }: Props) 
           <strong className={deltaClass(runDiff.eventCountDelta)}>
             {formatDelta(runDiff.eventCountDelta)}
           </strong>
+        </article>
+        <article>
+          <span>Density Delta</span>
+          <strong className={deltaClass(runDiff.eventDensityPerMinuteDelta)}>
+            {runDiff.eventDensityPerMinuteDelta === null
+              ? "-"
+              : formatDelta(runDiff.eventDensityPerMinuteDelta, " /min")}
+          </strong>
+          <small>
+            {formatRate(runDiff.baseline.eventDensityPerMinute)} {"->"}{" "}
+            {formatRate(runDiff.candidate.eventDensityPerMinute)}
+          </small>
+        </article>
+        <article>
+          <span>Error Point Delta</span>
+          <strong className={deltaClass(runDiff.errorPointDeltaMs)}>
+            {runDiff.errorPointDeltaMs === null ? "-" : formatDelta(runDiff.errorPointDeltaMs, " ms")}
+          </strong>
+          <small>
+            {formatErrorPoint(runDiff.baseline.errorPointMs)} {"->"}{" "}
+            {formatErrorPoint(runDiff.candidate.errorPointMs)}
+          </small>
+        </article>
+      </div>
+      <div className="detail-diff-columns">
+        <article className="detail-diff-column">
+          <h4>Task (Baseline)</h4>
+          <p>{runDiff.baseline.run.task || "-"}</p>
+        </article>
+        <article className="detail-diff-column">
+          <h4>Task (Candidate)</h4>
+          <p>{runDiff.candidate.run.task || "-"}</p>
+        </article>
+      </div>
+      <div className="detail-diff-major-events">
+        <article className="detail-diff-column">
+          <h4>Major Events Only In Baseline</h4>
+          {runDiff.majorEvents.baselineOnly.length === 0 ? (
+            <p className="detail-muted">No baseline-only major events.</p>
+          ) : (
+            <ol>
+              {runDiff.majorEvents.baselineOnly.map((event) => (
+                <li key={event.id}>
+                  <strong>{event.type.toUpperCase()}</strong> {formatErrorPoint(event.offsetMs)} |{" "}
+                  {formatEventText(event.text)}
+                </li>
+              ))}
+            </ol>
+          )}
+        </article>
+        <article className="detail-diff-column">
+          <h4>Major Events Only In Candidate</h4>
+          {runDiff.majorEvents.candidateOnly.length === 0 ? (
+            <p className="detail-muted">No candidate-only major events.</p>
+          ) : (
+            <ol>
+              {runDiff.majorEvents.candidateOnly.map((event) => (
+                <li key={event.id}>
+                  <strong>{event.type.toUpperCase()}</strong> {formatErrorPoint(event.offsetMs)} |{" "}
+                  {formatEventText(event.text)}
+                </li>
+              ))}
+            </ol>
+          )}
         </article>
       </div>
     </>
