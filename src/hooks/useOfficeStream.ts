@@ -1,12 +1,18 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { OfficeEvent, OfficeSnapshot } from "../types/office";
 import { mergeLifecycleEvent } from "../lib/lifecycle-merge";
+import {
+  hasCorruptedSnapshotInput,
+  resolveSnapshotRecovery,
+  SNAPSHOT_RECOVERY_MESSAGES,
+} from "../lib/snapshot-recovery";
 
 type OfficeStreamState = {
   snapshot: OfficeSnapshot | null;
   connected: boolean;
   liveSource: boolean;
   error?: string;
+  recoveryMessage?: string;
 };
 
 type LifecyclePayload = {
@@ -78,6 +84,7 @@ export function useOfficeStream() {
   const lastLifecycleSeq = useRef(0);
   const seenLifecycleEventIds = useRef(new Set<string>());
   const seenLifecycleEventOrder = useRef<string[]>([]);
+  const lastHealthySnapshot = useRef<OfficeSnapshot | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -123,12 +130,20 @@ export function useOfficeStream() {
       if (stopped) {
         return;
       }
-      seedSeenLifecycleEvents(snapshot.events);
+      const recovered = resolveSnapshotRecovery({
+        incoming: snapshot,
+        lastHealthy: lastHealthySnapshot.current,
+      });
+      if (!recovered.recoveryMessage) {
+        lastHealthySnapshot.current = recovered.snapshot;
+      }
+      seedSeenLifecycleEvents(recovered.snapshot.events);
       setState({
-        snapshot,
+        snapshot: recovered.snapshot,
         connected,
-        liveSource: snapshot.source.live,
+        liveSource: recovered.snapshot.source.live,
         error: undefined,
+        recoveryMessage: recovered.recoveryMessage,
       });
     };
 
@@ -138,10 +153,12 @@ export function useOfficeStream() {
         applySnapshot(snapshot, connected);
       } catch (err) {
         if (!stopped) {
+          const message = err instanceof Error ? err.message : String(err);
           setState((prev) => ({
             ...prev,
             connected: false,
-            error: err instanceof Error ? err.message : String(err),
+            error: prev.snapshot ? undefined : message,
+            recoveryMessage: prev.snapshot ? SNAPSHOT_RECOVERY_MESSAGES.fetchFallback : undefined,
           }));
         }
       }
@@ -195,6 +212,11 @@ export function useOfficeStream() {
           } else {
             console.warn("Malformed SSE snapshot frame", rawData);
           }
+          setState((prev) => ({
+            ...prev,
+            error: prev.snapshot ? undefined : SNAPSHOT_RECOVERY_MESSAGES.malformedSnapshotFrame,
+            recoveryMessage: prev.snapshot ? SNAPSHOT_RECOVERY_MESSAGES.malformedSnapshotFrame : undefined,
+          }));
         }
       });
 
@@ -232,12 +254,16 @@ export function useOfficeStream() {
           }
 
           const merged = mergeLifecycleEvent(prev.snapshot, payload.event);
+          if (!hasCorruptedSnapshotInput(merged)) {
+            lastHealthySnapshot.current = merged;
+          }
           return {
             ...prev,
             snapshot: merged,
             connected: true,
             liveSource: merged.source.live,
             error: undefined,
+            recoveryMessage: undefined,
           };
         });
       });
@@ -272,7 +298,8 @@ export function useOfficeStream() {
           setState((prev) => ({
             ...prev,
             connected: false,
-            error: message,
+            error: prev.snapshot ? undefined : message,
+            recoveryMessage: prev.snapshot ? SNAPSHOT_RECOVERY_MESSAGES.streamFallback : undefined,
           }));
           return;
         }
@@ -280,7 +307,12 @@ export function useOfficeStream() {
         source?.close();
         source = null;
 
-        setState((prev) => ({ ...prev, connected: false }));
+        setState((prev) => ({
+          ...prev,
+          connected: false,
+          error: prev.snapshot ? undefined : prev.error,
+          recoveryMessage: prev.snapshot ? SNAPSHOT_RECOVERY_MESSAGES.streamFallback : prev.recoveryMessage,
+        }));
         startPolling();
         scheduleReconnect();
       };
@@ -304,7 +336,8 @@ export function useOfficeStream() {
       connected: state.connected,
       liveSource: state.liveSource,
       error: state.error,
+      recoveryMessage: state.recoveryMessage,
     }),
-    [state.snapshot, state.connected, state.liveSource, state.error],
+    [state.snapshot, state.connected, state.liveSource, state.error, state.recoveryMessage],
   );
 }

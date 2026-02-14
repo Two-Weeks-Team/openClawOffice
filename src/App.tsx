@@ -206,7 +206,7 @@ function workspacePanelPlacementClass(
 }
 
 function App() {
-  const { snapshot, connected, liveSource, error } = useOfficeStream();
+  const { snapshot, connected, liveSource, error, recoveryMessage } = useOfficeStream();
   const [selectedEntityIds, setSelectedEntityIds] = useState<string[]>([]);
   const [activeEventId, setActiveEventId] = useState<string | null>(() => {
     const eventId = parseEventIdDeepLink(window.location.search);
@@ -1372,6 +1372,7 @@ function App() {
           <h1>openClawOffice</h1>
           <p>Loading office state stream...</p>
           {error ? <p className="error-text">{error}</p> : null}
+          {recoveryMessage ? <p className="recovery-text">{recoveryMessage}</p> : null}
         </div>
       </main>
     );
@@ -1427,6 +1428,13 @@ function App() {
           </span>
         </div>
       </section>
+
+      {recoveryMessage ? (
+        <section className="recovery-banner" role="status" aria-live="polite">
+          <strong>Recovery Mode</strong>
+          <p>{recoveryMessage}</p>
+        </section>
+      ) : null}
 
       <section className="stats-bar">
         <StatCard label="Agents" value={agents.length} accent="#81f0ff" />
