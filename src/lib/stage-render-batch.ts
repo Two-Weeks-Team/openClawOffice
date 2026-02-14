@@ -52,14 +52,13 @@ export type BuildStageEntityRenderModelsInput = {
   hasTimelineHighlight: boolean;
   entityZOffset: number;
   spawnPulseWindowMs: number;
-  runRecentWindowMs: number;
-  runStaleWindowMs: number;
   startOrbitWindowMs: number;
   endSettleWindowMs: number;
   cleanupFadeWindowMs: number;
   errorShakeWindowMs: number;
 };
 
+const MAX_SPRITE_STYLE_CACHE_SIZE = 1_024;
 const SPRITE_STYLE_CACHE = new Map<string, { backgroundImage: string; backgroundPosition: string }>();
 
 function hashString(input: string): number {
@@ -93,6 +92,13 @@ export function spriteStyleForEntity(entityId: string): {
     backgroundImage: 'url("/assets/kenney/characters/characters_spritesheet.png")',
     backgroundPosition: `-${col * stride}px -${row * stride}px`,
   };
+
+  if (SPRITE_STYLE_CACHE.size >= MAX_SPRITE_STYLE_CACHE_SIZE) {
+    const oldestKey = SPRITE_STYLE_CACHE.keys().next().value;
+    if (typeof oldestKey === "string") {
+      SPRITE_STYLE_CACHE.delete(oldestKey);
+    }
+  }
 
   SPRITE_STYLE_CACHE.set(entityId, spriteStyle);
   return spriteStyle;
@@ -129,18 +135,23 @@ function isLinkedToTimelineHighlight(params: {
 }): boolean {
   const { entity, highlightedRun, normalizedHighlightAgentId, normalizedHighlightRunId } = params;
 
-  const runHighlightMatch = normalizedHighlightRunId
-    ? entity.kind === "subagent"
-      ? entity.runId === normalizedHighlightRunId
-      : highlightedRun
-        ? highlightedRun.parentAgentId === entity.agentId ||
-          highlightedRun.childAgentId === entity.agentId
-        : false
-    : false;
-  const agentHighlightMatch = normalizedHighlightAgentId
-    ? entity.agentId === normalizedHighlightAgentId ||
-      entity.parentAgentId === normalizedHighlightAgentId
-    : false;
+  let runHighlightMatch = false;
+  if (normalizedHighlightRunId) {
+    if (entity.kind === "subagent") {
+      runHighlightMatch = entity.runId === normalizedHighlightRunId;
+    } else if (highlightedRun) {
+      runHighlightMatch =
+        highlightedRun.parentAgentId === entity.agentId ||
+        highlightedRun.childAgentId === entity.agentId;
+    }
+  }
+
+  let agentHighlightMatch = false;
+  if (normalizedHighlightAgentId) {
+    agentHighlightMatch =
+      entity.agentId === normalizedHighlightAgentId ||
+      entity.parentAgentId === normalizedHighlightAgentId;
+  }
 
   return runHighlightMatch || agentHighlightMatch;
 }

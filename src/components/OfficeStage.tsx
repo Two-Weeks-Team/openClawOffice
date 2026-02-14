@@ -915,8 +915,6 @@ export function OfficeStage({
         hasTimelineHighlight,
         entityZOffset: ENTITY_Z_OFFSET,
         spawnPulseWindowMs: SPAWN_PULSE_WINDOW_MS,
-        runRecentWindowMs: RUN_RECENT_WINDOW_MS,
-        runStaleWindowMs: RUN_STALE_WINDOW_MS,
         startOrbitWindowMs: START_ORBIT_WINDOW_MS,
         endSettleWindowMs: END_SETTLE_WINDOW_MS,
         cleanupFadeWindowMs: CLEANUP_FADE_WINDOW_MS,

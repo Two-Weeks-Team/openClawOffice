@@ -42,8 +42,6 @@ describe("buildStageEntityRenderModels", () => {
       hasTimelineHighlight: Boolean(target?.entity.runId),
       entityZOffset: 320,
       spawnPulseWindowMs: 12_000,
-      runRecentWindowMs: 10_000,
-      runStaleWindowMs: 120_000,
       startOrbitWindowMs: 12_000,
       endSettleWindowMs: 20_000,
       cleanupFadeWindowMs: 30_000,
@@ -80,16 +78,18 @@ describe("buildStageEntityRenderModels", () => {
       hasTimelineHighlight: false,
       entityZOffset: 320,
       spawnPulseWindowMs: 12_000,
-      runRecentWindowMs: 10_000,
-      runStaleWindowMs: 120_000,
       startOrbitWindowMs: 12_000,
       endSettleWindowMs: 20_000,
       cleanupFadeWindowMs: 30_000,
       errorShakeWindowMs: 18_000,
     };
 
+    for (let warmup = 0; warmup < 8; warmup += 1) {
+      buildStageEntityRenderModels(params);
+    }
+
     const samples: number[] = [];
-    for (let iteration = 0; iteration < 30; iteration += 1) {
+    for (let iteration = 0; iteration < 40; iteration += 1) {
       const startedAt = performance.now();
       buildStageEntityRenderModels(params);
       samples.push(performance.now() - startedAt);
