@@ -1326,7 +1326,7 @@ export function OfficeStage({
           </button>
         ) : null}
         <span>{Math.round(camera.zoom * 100)}%</span>
-        <span className={collisionPairCount > 0 ? "camera-overlap has-collision" : "camera-overlap"}>
+        <span className={"camera-overlap" + (collisionPairCount > 0 ? " has-collision" : "")}>
           overlap {collisionPairCount}
         </span>
       </div>

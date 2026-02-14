@@ -940,6 +940,16 @@ function overflowSafeSlotPoint(room: RoomSpec, slotIndex: number): { x: number; 
   return clampPointToRoomWithCollisionBounds(candidate, room);
 }
 
+function groupPlacementsByRoom(placements: Placement[]): Map<string, Placement[]> {
+  const placementsByRoomId = new Map<string, Placement[]>();
+  for (const placement of placements) {
+    const bucket = placementsByRoomId.get(placement.roomId) ?? [];
+    bucket.push(placement);
+    placementsByRoomId.set(placement.roomId, bucket);
+  }
+  return placementsByRoomId;
+}
+
 function resolveCollisionPointForRoom(params: {
   basePoint: { x: number; y: number };
   entity: OfficeEntity;
@@ -1002,12 +1012,7 @@ function resolvePlacementCollisions(params: {
   rooms: RoomSpec[];
   placements: Placement[];
 }): void {
-  const placementsByRoomId = new Map<string, Placement[]>();
-  for (const placement of params.placements) {
-    const bucket = placementsByRoomId.get(placement.roomId) ?? [];
-    bucket.push(placement);
-    placementsByRoomId.set(placement.roomId, bucket);
-  }
+  const placementsByRoomId = groupPlacementsByRoom(params.placements);
 
   for (const room of params.rooms) {
     const bucket = placementsByRoomId.get(room.id) ?? [];
@@ -1036,12 +1041,7 @@ function resolvePlacementCollisions(params: {
 }
 
 export function detectPlacementCollisions(placements: Placement[]): PlacementCollision[] {
-  const placementsByRoomId = new Map<string, Placement[]>();
-  for (const placement of placements) {
-    const bucket = placementsByRoomId.get(placement.roomId) ?? [];
-    bucket.push(placement);
-    placementsByRoomId.set(placement.roomId, bucket);
-  }
+  const placementsByRoomId = groupPlacementsByRoom(placements);
 
   const collisionPairs: PlacementCollision[] = [];
   for (const [roomId, bucket] of placementsByRoomId.entries()) {
