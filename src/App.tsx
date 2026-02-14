@@ -45,6 +45,18 @@ import {
   type RunKnowledgeEntry,
 } from "./lib/run-notes-store";
 import {
+  DEFAULT_WORKSPACE_LAYOUT_STATE,
+  loadWorkspaceLayoutSnapshot,
+  loadWorkspaceLayoutState,
+  persistWorkspaceLayoutSnapshot,
+  persistWorkspaceLayoutState,
+  setWorkspacePanelPlacement,
+  workspaceDockedPanels,
+  type WorkspaceLayoutPreset,
+  type WorkspaceLayoutState,
+  type WorkspacePanelId,
+} from "./lib/workspace-layout";
+import {
   buildTimelineIndex,
   filterTimelineEvents,
   nextPlaybackEventId,
@@ -174,6 +186,20 @@ function StatCard(props: { label: string; value: number | string; accent?: strin
   );
 }
 
+function workspacePanelPlacementClass(
+  layout: WorkspaceLayoutState,
+  panel: WorkspacePanelId,
+): string {
+  const placement = layout[panel];
+  if (placement === "docked") {
+    return "is-docked";
+  }
+  if (placement === "detached") {
+    return "is-detached";
+  }
+  return "is-hidden";
+}
+
 function App() {
   const { snapshot, connected, liveSource, error } = useOfficeStream();
   const [selectedEntityIds, setSelectedEntityIds] = useState<string[]>([]);
@@ -209,8 +235,12 @@ function App() {
   const [runKnowledgeEntries, setRunKnowledgeEntries] = useState<RunKnowledgeEntry[]>(
     loadRunKnowledgeEntries,
   );
+  const [workspaceLayout, setWorkspaceLayout] = useState<WorkspaceLayoutState>(
+    loadWorkspaceLayoutState,
+  );
   const hasBatchStateHydratedRef = useRef(false);
   const hasRunKnowledgeHydratedRef = useRef(false);
+  const hasWorkspaceLayoutHydratedRef = useRef(false);
   const shortcutPlatform = useMemo(() => detectShortcutPlatform(), []);
 
   const showToast = useCallback((kind: NonNullable<ToastState>["kind"], message: string) => {
@@ -269,6 +299,10 @@ function App() {
   const runKnowledgeByRunId = useMemo(
     () => indexRunKnowledgeByRunId(runKnowledgeEntries),
     [runKnowledgeEntries],
+  );
+  const dockedWorkspacePanels = useMemo(
+    () => workspaceDockedPanels(workspaceLayout),
+    [workspaceLayout],
   );
   const activeEvent = useMemo(
     () => snapshot?.events.find((event) => event.id === activeEventId) ?? null,
@@ -416,6 +450,14 @@ function App() {
     persistRunKnowledgeEntries(runKnowledgeEntries);
   }, [runKnowledgeEntries]);
 
+  useEffect(() => {
+    if (!hasWorkspaceLayoutHydratedRef.current) {
+      hasWorkspaceLayoutHydratedRef.current = true;
+      return;
+    }
+    persistWorkspaceLayoutState(workspaceLayout);
+  }, [workspaceLayout]);
+
   const applyEntityBatchAction = useCallback(
     (action: BatchActionKind) => {
       if (selectedEntityIds.length === 0) {
@@ -456,6 +498,51 @@ function App() {
   const removeRunKnowledge = useCallback((runId: string) => {
     setRunKnowledgeEntries((prev) => removeRunKnowledgeEntry(prev, runId));
   }, []);
+
+  const setWorkspacePreset = useCallback((preset: WorkspaceLayoutPreset) => {
+    setWorkspaceLayout((prev) => ({
+      ...prev,
+      preset,
+    }));
+  }, []);
+
+  const toggleWorkspacePanelPinned = useCallback((panel: WorkspacePanelId) => {
+    setWorkspaceLayout((prev) => {
+      const nextPlacement = prev[panel] === "hidden" ? "docked" : "hidden";
+      return setWorkspacePanelPlacement(prev, panel, nextPlacement);
+    });
+  }, []);
+
+  const toggleWorkspacePanelDetached = useCallback((panel: WorkspacePanelId) => {
+    setWorkspaceLayout((prev) => {
+      const current = prev[panel];
+      if (current === "hidden") {
+        return prev;
+      }
+      const nextPlacement = current === "detached" ? "docked" : "detached";
+      return setWorkspacePanelPlacement(prev, panel, nextPlacement);
+    });
+  }, []);
+
+  const saveWorkspaceLayout = useCallback(() => {
+    persistWorkspaceLayoutSnapshot(workspaceLayout);
+    showToast("success", "Workspace layout snapshot saved.");
+  }, [showToast, workspaceLayout]);
+
+  const restoreWorkspaceLayout = useCallback(() => {
+    const saved = loadWorkspaceLayoutSnapshot();
+    if (!saved) {
+      showToast("error", "No saved workspace layout snapshot.");
+      return;
+    }
+    setWorkspaceLayout(saved);
+    showToast("info", "Workspace layout restored.");
+  }, [showToast]);
+
+  const resetWorkspaceLayout = useCallback(() => {
+    setWorkspaceLayout(DEFAULT_WORKSPACE_LAYOUT_STATE);
+    showToast("info", "Workspace layout reset to default.");
+  }, [showToast]);
 
   const handleSelectEntity = useCallback((entityId: string, mode: "single" | "toggle" = "single") => {
     if (mode === "toggle") {
@@ -1285,6 +1372,32 @@ function App() {
   const helpShortcutLabel = formatShortcut("shift+/", shortcutPlatform);
   const alertCenterShortcutLabel = formatShortcut("mod+shift+a", shortcutPlatform);
   const focusModeShortcutLabel = formatShortcut("mod+f", shortcutPlatform);
+  const workspacePresetClass =
+    workspaceLayout.preset === "three-pane" ? "workspace-preset-three" : "workspace-preset-two";
+  const workspaceDockedClass =
+    dockedWorkspacePanels.length === 0
+      ? "has-no-docked"
+      : dockedWorkspacePanels.length === 1
+        ? "has-single-docked"
+        : "has-double-docked";
+  const workspaceGridStyle =
+    workspaceLayout.preset === "three-pane"
+      ? {
+          gridTemplateColumns: [
+            "minmax(0, 1fr)",
+            ...(workspaceLayout.timeline === "docked" ? ["360px"] : []),
+            ...(workspaceLayout.detail === "docked" ? ["360px"] : []),
+          ].join(" "),
+          gridTemplateRows: "minmax(0, 1fr)",
+        }
+      : {
+          gridTemplateColumns:
+            dockedWorkspacePanels.length > 0 ? "minmax(0, 1fr) 360px" : "minmax(0, 1fr)",
+          gridTemplateRows:
+            dockedWorkspacePanels.length > 1
+              ? "minmax(0, 1fr) minmax(0, 1fr)"
+              : "minmax(0, 1fr)",
+        };
 
   return (
     <main className="app-shell">
@@ -1506,27 +1619,100 @@ function App() {
         </div>
       </section>
 
-      <section className="workspace">
-        <OfficeStage
-          snapshot={snapshot}
-          selectedEntityId={effectiveSelectedEntityId}
-          selectedEntityIds={selectedEntityIdsForStage}
-          pinnedEntityIds={batchActionState.pinnedEntityIds}
-          watchedEntityIds={batchActionState.watchedEntityIds}
-          highlightRunId={highlightRunId}
-          highlightAgentId={highlightAgentId}
-          alertSignals={visibleAlertSignals}
-          filterEntityIds={filteredEntityIds}
-          hasEntityFilter={hasEntityFilter}
-          roomFilterId={opsFilters.roomId}
-          focusMode={opsFilters.focusMode}
-          placementMode={opsFilters.placementMode}
-          onRoomOptionsChange={setRoomOptions}
-          onRoomAssignmentsChange={handleRoomAssignmentsChange}
-          onFilterMatchCountChange={setMatchCount}
-          onSelectEntity={handleSelectEntity}
-        />
-        <div className="workspace-side">
+      <section className="workspace-layout-toolbar">
+        <div className="workspace-layout-presets">
+          <strong>Split View</strong>
+          <button
+            type="button"
+            className={workspaceLayout.preset === "two-pane" ? "is-active" : ""}
+            onClick={() => {
+              setWorkspacePreset("two-pane");
+            }}
+          >
+            2-pane
+          </button>
+          <button
+            type="button"
+            className={workspaceLayout.preset === "three-pane" ? "is-active" : ""}
+            onClick={() => {
+              setWorkspacePreset("three-pane");
+            }}
+          >
+            3-pane
+          </button>
+        </div>
+        <div className="workspace-layout-panels">
+          {(["timeline", "detail"] as WorkspacePanelId[]).map((panelId) => {
+            const placement = workspaceLayout[panelId];
+            const label = panelId === "timeline" ? "Timeline" : "Detail Panel";
+            return (
+              <div key={panelId} className="workspace-layout-panel-control">
+                <span>{label}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    toggleWorkspacePanelPinned(panelId);
+                  }}
+                >
+                  {placement === "hidden" ? "Pin" : "Unpin"}
+                </button>
+                <button
+                  type="button"
+                  disabled={placement === "hidden"}
+                  onClick={() => {
+                    toggleWorkspacePanelDetached(panelId);
+                  }}
+                >
+                  {placement === "detached" ? "Attach" : "Detach"}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+        <div className="workspace-layout-actions">
+          <button type="button" onClick={saveWorkspaceLayout}>
+            Save layout
+          </button>
+          <button type="button" onClick={restoreWorkspaceLayout}>
+            Restore layout
+          </button>
+          <button type="button" onClick={resetWorkspaceLayout}>
+            Reset layout
+          </button>
+        </div>
+      </section>
+
+      <section
+        className={`workspace ${workspacePresetClass} ${workspaceDockedClass}`}
+        style={workspaceGridStyle}
+      >
+        <div className="workspace-stage-pane">
+          <OfficeStage
+            snapshot={snapshot}
+            selectedEntityId={effectiveSelectedEntityId}
+            selectedEntityIds={selectedEntityIdsForStage}
+            pinnedEntityIds={batchActionState.pinnedEntityIds}
+            watchedEntityIds={batchActionState.watchedEntityIds}
+            highlightRunId={highlightRunId}
+            highlightAgentId={highlightAgentId}
+            alertSignals={visibleAlertSignals}
+            filterEntityIds={filteredEntityIds}
+            hasEntityFilter={hasEntityFilter}
+            roomFilterId={opsFilters.roomId}
+            focusMode={opsFilters.focusMode}
+            placementMode={opsFilters.placementMode}
+            onRoomOptionsChange={setRoomOptions}
+            onRoomAssignmentsChange={handleRoomAssignmentsChange}
+            onFilterMatchCountChange={setMatchCount}
+            onSelectEntity={handleSelectEntity}
+          />
+        </div>
+        <section
+          className={`workspace-panel timeline ${workspacePanelPlacementClass(
+            workspaceLayout,
+            "timeline",
+          )}`}
+        >
           <EventRail
             roomByAgentId={timelineRoomByAgentId}
             events={snapshot.events}
@@ -1538,6 +1724,13 @@ function App() {
             onActiveEventIdChange={setActiveEventId}
             onLaneContextChange={handleLaneContextChange}
           />
+        </section>
+        <section
+          className={`workspace-panel detail ${workspacePanelPlacementClass(
+            workspaceLayout,
+            "detail",
+          )}`}
+        >
           <EntityDetailPanel
             key={effectiveSelectedEntityId ?? "detail-empty"}
             snapshot={snapshot}
@@ -1555,7 +1748,7 @@ function App() {
               clearSelectedEntities();
             }}
           />
-        </div>
+        </section>
       </section>
 
       {diagnostics.length > 0 ? (
