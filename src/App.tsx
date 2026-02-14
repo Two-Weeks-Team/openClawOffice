@@ -17,6 +17,13 @@ import {
   type AlertSignal,
 } from "./lib/alerts";
 import {
+  applyBatchAction,
+  loadBatchActionState,
+  persistBatchActionState,
+  type BatchActionKind,
+  type BatchActionState,
+} from "./lib/entity-batch-actions";
+import {
   formatShortcut,
   isEditableEventTarget,
   keyboardEventToShortcut,
@@ -159,7 +166,7 @@ function StatCard(props: { label: string; value: number | string; accent?: strin
 
 function App() {
   const { snapshot, connected, liveSource, error } = useOfficeStream();
-  const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
+  const [selectedEntityIds, setSelectedEntityIds] = useState<string[]>([]);
   const [activeEventId, setActiveEventId] = useState<string | null>(() => {
     const eventId = parseEventIdDeepLink(window.location.search);
     return eventId.length > 0 ? eventId : null;
@@ -188,6 +195,7 @@ function App() {
   const [alertRulePreferences, setAlertRulePreferences] = useState<AlertRulePreferences>(
     loadAlertRulePreferences,
   );
+  const [batchActionState, setBatchActionState] = useState<BatchActionState>(loadBatchActionState);
   const shortcutPlatform = useMemo(() => detectShortcutPlatform(), []);
 
   const showToast = useCallback((kind: NonNullable<ToastState>["kind"], message: string) => {
@@ -247,6 +255,8 @@ function App() {
     () => snapshot?.events.find((event) => event.id === activeEventId) ?? null,
     [activeEventId, snapshot],
   );
+  const selectedEntityId =
+    selectedEntityIds.length > 0 ? selectedEntityIds[selectedEntityIds.length - 1] : null;
   const effectiveSelectedEntityId = useMemo(() => {
     if (!snapshot || !activeEvent) {
       return selectedEntityId;
@@ -256,6 +266,16 @@ function App() {
       ? replayEntityId
       : selectedEntityId;
   }, [activeEvent, selectedEntityId, snapshot]);
+  const selectedEntityIdsForStage = useMemo(() => {
+    const ordered = [...new Set(selectedEntityIds)];
+    if (effectiveSelectedEntityId && !ordered.includes(effectiveSelectedEntityId)) {
+      ordered.push(effectiveSelectedEntityId);
+    }
+    return ordered;
+  }, [effectiveSelectedEntityId, selectedEntityIds]);
+  const pinnedEntityIdSet = useMemo(() => new Set(batchActionState.pinnedEntityIds), [batchActionState]);
+  const watchedEntityIdSet = useMemo(() => new Set(batchActionState.watchedEntityIds), [batchActionState]);
+  const mutedEntityIdSet = useMemo(() => new Set(batchActionState.mutedEntityIds), [batchActionState]);
   const selectedEntity = useMemo(
     () => snapshot?.entities.find((entity) => entity.id === effectiveSelectedEntityId) ?? null,
     [effectiveSelectedEntityId, snapshot],
@@ -351,6 +371,64 @@ function App() {
       // Ignore localStorage persistence errors in restricted browser modes.
     }
   }, [alertRulePreferences]);
+
+  useEffect(() => {
+    persistBatchActionState(batchActionState);
+  }, [batchActionState]);
+
+  const applyEntityBatchAction = useCallback(
+    (action: BatchActionKind) => {
+      if (selectedEntityIds.length === 0) {
+        showToast("error", "Select entities first before applying batch actions.");
+        return;
+      }
+      setBatchActionState((prev) => applyBatchAction(prev, selectedEntityIds, action));
+      const selectedCount = selectedEntityIds.length;
+      const actionLabel: Record<BatchActionKind, string> = {
+        pin: "Pinned",
+        unpin: "Unpinned",
+        watch: "Watching",
+        unwatch: "Stopped watching",
+        mute: "Muted",
+        unmute: "Unmuted",
+        clear: "Cleared flags for",
+      };
+      showToast("success", `${actionLabel[action]} ${selectedCount} selected target(s).`);
+    },
+    [selectedEntityIds, showToast],
+  );
+
+  const handleSelectEntity = useCallback((entityId: string, mode: "single" | "toggle" = "single") => {
+    if (mode === "toggle") {
+      setSelectedEntityIds((prev) => {
+        if (prev.includes(entityId)) {
+          return prev.filter((id) => id !== entityId);
+        }
+        return [...prev, entityId];
+      });
+      return;
+    }
+    setSelectedEntityIds((prev) => (prev.length === 1 && prev[0] === entityId ? [] : [entityId]));
+  }, []);
+
+  const clearSelectedEntities = useCallback(() => {
+    setSelectedEntityIds([]);
+  }, []);
+  const selectFilteredEntities = useCallback(() => {
+    if (filteredEntityIds.length === 0) {
+      showToast("error", "No filtered entities available for selection.");
+      return;
+    }
+    setSelectedEntityIds(filteredEntityIds);
+    showToast("info", `Selected ${filteredEntityIds.length} filtered target(s).`);
+  }, [filteredEntityIds, showToast]);
+  const selectedCount = selectedEntityIds.length;
+  const allSelectedPinned =
+    selectedCount > 0 && selectedEntityIds.every((entityId) => pinnedEntityIdSet.has(entityId));
+  const allSelectedWatched =
+    selectedCount > 0 && selectedEntityIds.every((entityId) => watchedEntityIdSet.has(entityId));
+  const allSelectedMuted =
+    selectedCount > 0 && selectedEntityIds.every((entityId) => mutedEntityIdSet.has(entityId));
 
   const handleLaneContextChange = useCallback((next: { highlightAgentId: string | null }) => {
     setTimelineLaneHighlightAgentId(next.highlightAgentId);
@@ -574,7 +652,7 @@ function App() {
         section: "Entities",
         keywords: [entity.id, entity.agentId, entity.runId ?? "", entity.status, entity.kind],
         run: () => {
-          setSelectedEntityId(entity.id);
+          setSelectedEntityIds([entity.id]);
           showToast("info", `Selected ${entity.kind} ${entity.agentId}`);
         },
       }));
@@ -676,6 +754,59 @@ function App() {
         run: togglePlacementMode,
       },
       {
+        id: "selection.clear",
+        label: "Clear Selected Entities",
+        description: "Clear current multi-selection list used for batch actions.",
+        section: "Entities",
+        defaultShortcut: "alt+shift+e",
+        keywords: ["selection", "clear", "entities"],
+        disabled: selectedCount === 0,
+        run: clearSelectedEntities,
+      },
+      {
+        id: "selection.filtered",
+        label: "Select Filtered Entities",
+        description: "Select all entities currently matched by Ops filters.",
+        section: "Entities",
+        defaultShortcut: "alt+shift+f",
+        keywords: ["selection", "filtered", "entities"],
+        disabled: filteredEntityIds.length === 0,
+        run: selectFilteredEntities,
+      },
+      {
+        id: "batch.pin",
+        label: allSelectedPinned ? "Unpin Selected" : "Pin Selected",
+        description: "Apply pin/unpin to selected entities in one action.",
+        section: "Entities",
+        keywords: ["pin", "batch", "entities", "selection"],
+        disabled: selectedCount === 0,
+        run: () => {
+          applyEntityBatchAction(allSelectedPinned ? "unpin" : "pin");
+        },
+      },
+      {
+        id: "batch.watch",
+        label: allSelectedWatched ? "Unwatch Selected" : "Watch Selected",
+        description: "Apply watch/unwatch to selected entities in one action.",
+        section: "Entities",
+        keywords: ["watch", "batch", "entities", "selection"],
+        disabled: selectedCount === 0,
+        run: () => {
+          applyEntityBatchAction(allSelectedWatched ? "unwatch" : "watch");
+        },
+      },
+      {
+        id: "batch.mute",
+        label: allSelectedMuted ? "Unmute Selected" : "Mute Selected",
+        description: "Apply mute/unmute to selected entities in one action.",
+        section: "Entities",
+        keywords: ["mute", "batch", "entities", "selection"],
+        disabled: selectedCount === 0,
+        run: () => {
+          applyEntityBatchAction(allSelectedMuted ? "unmute" : "mute");
+        },
+      },
+      {
         id: "timeline.clear",
         label: "Clear Timeline Filters",
         description: "Reset run/agent/status timeline filters and playback cursor.",
@@ -761,8 +892,14 @@ function App() {
       },
     ],
     [
+      allSelectedMuted,
+      allSelectedPinned,
+      allSelectedWatched,
+      applyEntityBatchAction,
       clearOpsFilters,
+      clearSelectedEntities,
       clearTimelineFilters,
+      filteredEntityIds.length,
       moveTimelineEvent,
       onCopyLogGuide,
       onCopyReplayLink,
@@ -770,10 +907,12 @@ function App() {
       onCopySessionKey,
       onJumpToRun,
       openShortcutHelp,
+      selectFilteredEntities,
       toggleAlertCenter,
       toggleCommandPalette,
       toggleFocusMode,
       togglePlacementMode,
+      selectedCount,
     ],
   );
 
@@ -1025,9 +1164,40 @@ function App() {
     opsFilters.status !== "all" ||
     opsFilters.roomId !== "all" ||
     opsFilters.recentMinutes !== "all";
-  const visibleAlertSignals = alertSignals.filter(
-    (signal) => !isAlertRuleSuppressed(alertRulePreferences, signal.ruleId, snapshot.generatedAt),
-  );
+  const mutedRunIds = new Set<string>();
+  const mutedAgentIds = new Set<string>();
+  for (const entity of snapshot.entities) {
+    if (!mutedEntityIdSet.has(entity.id)) {
+      continue;
+    }
+    if (entity.kind === "agent") {
+      mutedAgentIds.add(entity.agentId);
+    }
+    if (entity.kind === "subagent" && entity.runId) {
+      mutedRunIds.add(entity.runId);
+    }
+  }
+  const visibleAlertSignals = alertSignals.filter((signal) => {
+    if (isAlertRuleSuppressed(alertRulePreferences, signal.ruleId, snapshot.generatedAt)) {
+      return false;
+    }
+    if (signal.runIds.length === 0 && signal.agentIds.length === 0) {
+      return true;
+    }
+
+    const hasVisibleRun = signal.runIds.some((runId) => {
+      if (mutedRunIds.has(runId)) {
+        return false;
+      }
+      const run = runById.get(runId);
+      if (!run) {
+        return true;
+      }
+      return !mutedAgentIds.has(run.childAgentId);
+    });
+    const hasVisibleAgent = signal.agentIds.some((agentId) => !mutedAgentIds.has(agentId));
+    return hasVisibleRun || hasVisibleAgent;
+  });
   const hasActiveAlerts = visibleAlertSignals.length > 0;
   const alertToastSignals = visibleAlertSignals.slice(0, 2);
 
@@ -1177,6 +1347,48 @@ function App() {
           >
             Alert Center ({alertCenterShortcutLabel}) [{visibleAlertSignals.length}]
           </button>
+          <button type="button" disabled={filteredEntityIds.length === 0} onClick={selectFilteredEntities}>
+            Select filtered
+          </button>
+          <button
+            type="button"
+            disabled={selectedCount === 0}
+            onClick={() => {
+              applyEntityBatchAction(allSelectedPinned ? "unpin" : "pin");
+            }}
+          >
+            {allSelectedPinned ? "Unpin selected" : "Pin selected"}
+          </button>
+          <button
+            type="button"
+            disabled={selectedCount === 0}
+            onClick={() => {
+              applyEntityBatchAction(allSelectedWatched ? "unwatch" : "watch");
+            }}
+          >
+            {allSelectedWatched ? "Unwatch selected" : "Watch selected"}
+          </button>
+          <button
+            type="button"
+            disabled={selectedCount === 0}
+            onClick={() => {
+              applyEntityBatchAction(allSelectedMuted ? "unmute" : "mute");
+            }}
+          >
+            {allSelectedMuted ? "Unmute selected" : "Mute selected"}
+          </button>
+          <button
+            type="button"
+            disabled={selectedCount === 0}
+            onClick={() => {
+              applyEntityBatchAction("clear");
+            }}
+          >
+            Clear selected flags
+          </button>
+          <button type="button" disabled={selectedCount === 0} onClick={clearSelectedEntities}>
+            Clear selection
+          </button>
           <button type="button" onClick={() => void onCopyRunId()}>
             Copy runId
           </button>
@@ -1192,6 +1404,10 @@ function App() {
           <button type="button" onClick={onJumpToRun}>
             Jump to run
           </button>
+          <span className="ops-batch-summary">
+            selected {selectedCount} (ctrl/cmd/shift+click) | pin {batchActionState.pinnedEntityIds.length} | watch{" "}
+            {batchActionState.watchedEntityIds.length} | mute {batchActionState.mutedEntityIds.length}
+          </span>
           <span className="ops-match-count">
             match {(matchCount ?? filteredEntityIds.length).toString()}/{snapshot.entities.length}
           </span>
@@ -1202,6 +1418,9 @@ function App() {
         <OfficeStage
           snapshot={snapshot}
           selectedEntityId={effectiveSelectedEntityId}
+          selectedEntityIds={selectedEntityIdsForStage}
+          pinnedEntityIds={batchActionState.pinnedEntityIds}
+          watchedEntityIds={batchActionState.watchedEntityIds}
           highlightRunId={highlightRunId}
           highlightAgentId={highlightAgentId}
           filterEntityIds={filteredEntityIds}
@@ -1212,9 +1431,7 @@ function App() {
           onRoomOptionsChange={setRoomOptions}
           onRoomAssignmentsChange={handleRoomAssignmentsChange}
           onFilterMatchCountChange={setMatchCount}
-          onSelectEntity={(entityId) => {
-            setSelectedEntityId((prev) => (prev === entityId ? null : entityId));
-          }}
+          onSelectEntity={handleSelectEntity}
         />
         <div className="workspace-side">
           <EventRail
@@ -1239,7 +1456,7 @@ function App() {
               jumpToRunId(runId, "panel");
             }}
             onClose={() => {
-              setSelectedEntityId(null);
+              clearSelectedEntities();
             }}
           />
         </div>

@@ -12,6 +12,9 @@ import type { OfficeEntity, OfficeRun, OfficeSnapshot } from "../types/office";
 type Props = {
   snapshot: OfficeSnapshot;
   selectedEntityId?: string | null;
+  selectedEntityIds?: string[];
+  pinnedEntityIds?: string[];
+  watchedEntityIds?: string[];
   highlightRunId?: string | null;
   highlightAgentId?: string | null;
   filterEntityIds?: string[];
@@ -22,7 +25,7 @@ type Props = {
   onRoomOptionsChange?: (roomIds: string[]) => void;
   onRoomAssignmentsChange?: (roomByAgentId: Map<string, string>) => void;
   onFilterMatchCountChange?: (count: number) => void;
-  onSelectEntity?: (entityId: string) => void;
+  onSelectEntity?: (entityId: string, mode?: "single" | "toggle") => void;
 };
 
 type ResolvedTile = TileSprite;
@@ -325,6 +328,9 @@ function statusFocusAccent(status: OfficeEntity["status"]): string {
 export function OfficeStage({
   snapshot,
   selectedEntityId = null,
+  selectedEntityIds = [],
+  pinnedEntityIds = [],
+  watchedEntityIds = [],
   highlightRunId = null,
   highlightAgentId = null,
   filterEntityIds = [],
@@ -363,6 +369,9 @@ export function OfficeStage({
   } | null>(null);
   const touchPanGestureRef = useRef<TouchPanGesture | null>(null);
   const touchPinchGestureRef = useRef<TouchPinchGesture | null>(null);
+  const selectedEntityIdSet = useMemo(() => new Set(selectedEntityIds), [selectedEntityIds]);
+  const pinnedEntityIdSet = useMemo(() => new Set(pinnedEntityIds), [pinnedEntityIds]);
+  const watchedEntityIdSet = useMemo(() => new Set(watchedEntityIds), [watchedEntityIds]);
 
   const layoutState = useMemo(
     () =>
@@ -611,10 +620,22 @@ export function OfficeStage({
       : null;
   const highlightedRun = normalizedHighlightRunId ? runById.get(normalizedHighlightRunId) : undefined;
 
-  const sortedPlacements = useMemo(
-    () => [...placements].sort((a, b) => a.y - b.y),
-    [placements],
-  );
+  const sortedPlacements = useMemo(() => {
+    const watchedBoost = 2;
+    const pinnedBoost = 1;
+    return [...placements].sort((left, right) => {
+      const leftPriority =
+        (watchedEntityIdSet.has(left.entity.id) ? watchedBoost : 0) +
+        (pinnedEntityIdSet.has(left.entity.id) ? pinnedBoost : 0);
+      const rightPriority =
+        (watchedEntityIdSet.has(right.entity.id) ? watchedBoost : 0) +
+        (pinnedEntityIdSet.has(right.entity.id) ? pinnedBoost : 0);
+      if (leftPriority !== rightPriority) {
+        return rightPriority - leftPriority;
+      }
+      return left.y - right.y;
+    });
+  }, [pinnedEntityIdSet, placements, watchedEntityIdSet]);
 
   const runLinks = useMemo(() => {
     const hasTimelineHighlight = Boolean(normalizedHighlightRunId || normalizedHighlightAgentId);
@@ -1196,12 +1217,14 @@ export function OfficeStage({
       {sortedPlacements.map((placement) => {
         const entity = placement.entity;
         const occlusion = layerState.occlusionByRoom.get(placement.roomId);
-        const isSelected = selectedEntityId === entity.id;
+        const isSelected = selectedEntityIdSet.has(entity.id);
+        const isPinned = pinnedEntityIdSet.has(entity.id);
+        const isWatched = watchedEntityIdSet.has(entity.id);
         const matchesEntityFilter = !hasEntityFilter || filteredEntityIdSet.has(entity.id);
         const matchesRoomFilter =
           !normalizedRoomFilterId || placement.roomId === normalizedRoomFilterId;
         const matchesOpsFilter = matchesEntityFilter && matchesRoomFilter;
-        if (hasOpsFilter && !focusMode && !matchesOpsFilter && !isSelected) {
+        if (hasOpsFilter && !focusMode && !matchesOpsFilter && !isSelected && !isWatched) {
           return null;
         }
         const runHighlightMatch = normalizedHighlightRunId
@@ -1264,28 +1287,36 @@ export function OfficeStage({
           .filter(Boolean)
           .join(" ");
         const isMutedByTimeline = hasTimelineHighlight && !isLinked;
-        const isMutedByFocus = hasOpsFilter && focusMode && !matchesOpsFilter;
+        const isMutedByFocus = hasOpsFilter && focusMode && !matchesOpsFilter && !isWatched;
+        const renderPriorityBoost = isWatched ? 220 : isPinned ? 140 : 0;
 
         return (
           <article
             key={entity.id}
             className={`entity-token ${statusClass(entity)} ${entity.kind} ${isOccluded ? "is-occluded" : ""} ${motionClasses} ${
               isSelected ? "is-selected" : ""
-            } ${isLinked ? "is-linked" : ""} ${hasOpsFilter && matchesOpsFilter ? "is-filter-hit" : ""} ${
+            } ${isPinned ? "is-pinned" : ""} ${isWatched ? "is-watched" : ""} ${isLinked ? "is-linked" : ""} ${
+              hasOpsFilter && matchesOpsFilter ? "is-filter-hit" : ""
+            } ${
               isMutedByFocus ? "is-filtered-out" : ""
             } ${isMutedByTimeline || isMutedByFocus ? "is-muted" : ""}`}
-            style={{ left: placement.x, top: placement.y, zIndex: ENTITY_Z_OFFSET + Math.round(placement.y) }}
+            style={{
+              left: placement.x,
+              top: placement.y,
+              zIndex: ENTITY_Z_OFFSET + Math.round(placement.y) + renderPriorityBoost,
+            }}
             role="button"
             tabIndex={0}
             aria-label={`Open detail panel for ${entity.label}`}
             aria-pressed={isSelected}
-            onClick={() => {
-              onSelectEntity?.(entity.id);
+            onClick={(event) => {
+              const multiToggle = event.metaKey || event.ctrlKey || event.shiftKey;
+              onSelectEntity?.(entity.id, multiToggle ? "toggle" : "single");
             }}
             onKeyDown={(event) => {
               if (event.key === "Enter" || event.key === " ") {
                 event.preventDefault();
-                onSelectEntity?.(entity.id);
+                onSelectEntity?.(entity.id, "single");
               }
             }}
           >
