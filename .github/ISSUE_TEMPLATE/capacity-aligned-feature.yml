@@ -8,6 +8,40 @@ body:
     attributes:
       value: |
         Baseline reference: `docs/capacity-baseline.md`
+        Roadmap reference: `docs/roadmap-readiness.md`
+  - type: dropdown
+    id: phase
+    attributes:
+      label: Phase
+      description: Select exactly one roadmap phase.
+      options:
+        - foundation
+        - realtime
+        - visual
+        - ops
+        - scale
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - p0
+        - p1
+        - p2
+    validations:
+      required: true
+  - type: dropdown
+    id: effort
+    attributes:
+      label: Effort
+      options:
+        - s
+        - m
+        - l
+    validations:
+      required: true
   - type: dropdown
     id: target_profile
     attributes:
@@ -18,6 +52,12 @@ body:
         - local50
     validations:
       required: true
+  - type: input
+    id: dependencies
+    attributes:
+      label: Dependencies
+      description: Use issue numbers when blocked.
+      placeholder: "Depends on: #20, #30"
   - type: textarea
     id: objective
     attributes:
@@ -50,6 +90,8 @@ body:
       label: Definition of Done
       options:
         - label: This issue explicitly references docs/capacity-baseline.md
+          required: true
+        - label: This issue includes phase/priority/effort selection aligned with docs/roadmap-readiness.md
           required: true
         - label: Capacity metrics are collected and attached in the PR
           required: true

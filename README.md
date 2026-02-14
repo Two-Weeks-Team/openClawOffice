@@ -200,4 +200,5 @@ A curation manifest is included at:
 - 50-agent 운영 한계를 기준으로 목표/완료조건 정의
 - 보안 이슈는 로컬 단독 사용 전제에서 우선순위 제외
 - capacity 관련 이슈는 `docs/capacity-baseline.md`를 명시적으로 참조
+- 로드맵/릴리즈 운영 기준은 `docs/roadmap-readiness.md`를 기준으로 관리
 - 신규 feature 이슈는 `.github/ISSUE_TEMPLATE/capacity-aligned-feature.yml` 템플릿 우선 사용
