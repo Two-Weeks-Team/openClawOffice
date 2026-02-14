@@ -5,10 +5,10 @@ import { EventRail } from "./components/EventRail";
 import { OfficeStage } from "./components/OfficeStage";
 import { useOfficeStream } from "./hooks/useOfficeStream";
 import { buildEntitySearchIndex, searchEntityIds } from "./lib/entity-search";
+import type { PlacementMode } from "./lib/layout";
 import { parseRunIdDeepLink, type TimelineFilters } from "./lib/timeline";
 
 type EntityStatusFilter = "all" | "active" | "idle" | "error" | "ok" | "offline";
-type PlacementMode = "auto" | "manual";
 type RecentWindowFilter = "all" | 5 | 15 | 30 | 60;
 type OpsFilters = {
   query: string;

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { buildPlacements } from "../lib/layout";
+import { buildPlacements, type PlacementMode } from "../lib/layout";
 import {
   compileRoomBlueprintLayers,
   type TileSprite,
@@ -18,7 +18,7 @@ type Props = {
   hasEntityFilter?: boolean;
   roomFilterId?: string;
   focusMode?: boolean;
-  placementMode?: "auto" | "manual";
+  placementMode?: PlacementMode;
   onRoomOptionsChange?: (roomIds: string[]) => void;
   onRoomAssignmentsChange?: (roomByAgentId: Map<string, string>) => void;
   onFilterMatchCountChange?: (count: number) => void;
