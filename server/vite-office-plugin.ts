@@ -10,6 +10,7 @@ import {
 } from "./api-observability";
 import { buildOfficeSnapshot } from "./office-state";
 import type { OfficeSnapshot } from "./office-types";
+import { OfficeSnapshotStore } from "./snapshot-store";
 import {
   OfficeStreamBridge,
   parseLifecycleCursor,
@@ -19,7 +20,7 @@ import {
 const STREAM_POLL_INTERVAL_MS = 400;
 const STREAM_PING_INTERVAL_MS = 15_000;
 
-type ApiRoute = "snapshot" | "stream" | "metrics";
+type ApiRoute = "snapshot" | "stream" | "metrics" | "replayIndex" | "replaySnapshot";
 
 type ApiRequestContext = {
   requestId: string;
@@ -47,6 +48,15 @@ type StreamMetric = {
   evictedBackfillEvents: number;
 };
 
+type ReplayStoreMetric = {
+  persistedSnapshots: number;
+  skippedByInterval: number;
+  evictedSnapshots: number;
+  lastStoredAt: number;
+  totalEntries: number;
+  totalBytes: number;
+};
+
 type StreamSubscriber = {
   sendSnapshot: (snapshot: OfficeSnapshot) => void;
   sendLifecycle: (frame: LifecycleEnvelope) => void;
@@ -59,11 +69,14 @@ const streamSubscribers = new Set<StreamSubscriber>();
 let streamPoller: NodeJS.Timeout | null = null;
 let pollInFlight = false;
 let initialSnapshotPromise: Promise<OfficeSnapshot> | null = null;
+let snapshotStore: OfficeSnapshotStore | null = null;
 
 const routeMetrics: Record<ApiRoute, RouteMetric> = {
   snapshot: { requests: 0, success: 0, failure: 0, totalDurationMs: 0, maxDurationMs: 0 },
   stream: { requests: 0, success: 0, failure: 0, totalDurationMs: 0, maxDurationMs: 0 },
   metrics: { requests: 0, success: 0, failure: 0, totalDurationMs: 0, maxDurationMs: 0 },
+  replayIndex: { requests: 0, success: 0, failure: 0, totalDurationMs: 0, maxDurationMs: 0 },
+  replaySnapshot: { requests: 0, success: 0, failure: 0, totalDurationMs: 0, maxDurationMs: 0 },
 };
 
 const streamMetrics: StreamMetric = {
@@ -76,6 +89,53 @@ const streamMetrics: StreamMetric = {
   droppedUnseenEvents: 0,
   evictedBackfillEvents: 0,
 };
+
+const replayStoreMetrics: ReplayStoreMetric = {
+  persistedSnapshots: 0,
+  skippedByInterval: 0,
+  evictedSnapshots: 0,
+  lastStoredAt: 0,
+  totalEntries: 0,
+  totalBytes: 0,
+};
+
+function resolveSnapshotStore(stateDir: string): OfficeSnapshotStore {
+  if (!snapshotStore) {
+    snapshotStore = OfficeSnapshotStore.forStateDir(stateDir);
+  }
+  return snapshotStore;
+}
+
+function syncReplayStoreMetrics() {
+  if (!snapshotStore) {
+    return;
+  }
+  const metrics = snapshotStore.getMetrics();
+  replayStoreMetrics.persistedSnapshots = metrics.persistedSnapshots;
+  replayStoreMetrics.skippedByInterval = metrics.skippedByInterval;
+  replayStoreMetrics.evictedSnapshots = metrics.evictedSnapshots;
+  replayStoreMetrics.lastStoredAt = metrics.lastStoredAt;
+  replayStoreMetrics.totalEntries = metrics.totalEntries;
+  replayStoreMetrics.totalBytes = metrics.totalBytes;
+}
+
+async function persistSnapshotForReplay(snapshot: OfficeSnapshot) {
+  const store = resolveSnapshotStore(snapshot.source.stateDir);
+  try {
+    await store.persistSnapshot(snapshot);
+    syncReplayStoreMetrics();
+  } catch (error) {
+    logStructuredEvent({
+      level: "warn",
+      event: "replay.persist.error",
+      details: asErrorDetails(error),
+      extra: {
+        generatedAt: snapshot.generatedAt,
+      },
+    });
+  }
+  return store;
+}
 
 function setJsonHeaders(res: ServerResponse, requestId?: string) {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -166,9 +226,26 @@ function collectCursor(req: IncomingMessage): number {
   }
 }
 
+function parseQueryNumber(value: string | null): number | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return undefined;
+  }
+  return Math.floor(parsed);
+}
+
+async function ensureReplayStore(): Promise<OfficeSnapshotStore> {
+  const snapshot = await ensureInitialSnapshot();
+  return resolveSnapshotStore(snapshot.source.stateDir);
+}
+
 async function handleSnapshot(res: ServerResponse, context: ApiRequestContext) {
   try {
     const snapshot = await buildOfficeSnapshot();
+    await persistSnapshotForReplay(snapshot);
     setJsonHeaders(res, context.requestId);
     res.statusCode = 200;
     res.end(JSON.stringify(snapshot));
@@ -221,8 +298,195 @@ async function handleSnapshot(res: ServerResponse, context: ApiRequestContext) {
   }
 }
 
+async function handleReplayIndex(req: IncomingMessage, res: ServerResponse, context: ApiRequestContext) {
+  try {
+    const store = await ensureReplayStore();
+    const parsedUrl = new URL(req.url ?? "", "http://127.0.0.1");
+    const queryResult = await store.queryIndex({
+      runId: parsedUrl.searchParams.get("runId") ?? undefined,
+      agentId: parsedUrl.searchParams.get("agentId") ?? undefined,
+      from: parseQueryNumber(parsedUrl.searchParams.get("from")),
+      to: parseQueryNumber(parsedUrl.searchParams.get("to")),
+      limit: parseQueryNumber(parsedUrl.searchParams.get("limit")),
+    });
+    syncReplayStoreMetrics();
+
+    setJsonHeaders(res, context.requestId);
+    res.statusCode = 200;
+    res.end(JSON.stringify(queryResult));
+    const durationMs = durationFrom(context.startedAt);
+    recordRouteMetric("replayIndex", true, durationMs);
+    logRouteResult({
+      context,
+      event: "replay.index.ok",
+      level: "info",
+      statusCode: 200,
+      durationMs,
+      extra: {
+        returnedEntries: queryResult.entries.length,
+        totalEntries: queryResult.totalEntries,
+      },
+    });
+  } catch (error) {
+    const details = asErrorDetails(error);
+    const durationMs = durationFrom(context.startedAt);
+    setJsonHeaders(res, context.requestId);
+    res.statusCode = 500;
+    res.end(
+      JSON.stringify(
+        toApiErrorBody({
+          code: API_ERROR_CODES.replayIndexReadFailed,
+          message: "Failed to read replay snapshot index",
+          requestId: context.requestId,
+          details,
+        }),
+      ),
+    );
+    recordRouteMetric("replayIndex", false, durationMs);
+    logRouteResult({
+      context,
+      event: "replay.index.error",
+      level: "error",
+      statusCode: 500,
+      durationMs,
+      details,
+      extra: {
+        code: API_ERROR_CODES.replayIndexReadFailed,
+      },
+    });
+  }
+}
+
+async function handleReplaySnapshot(req: IncomingMessage, res: ServerResponse, context: ApiRequestContext) {
+  try {
+    const parsedUrl = new URL(req.url ?? "", "http://127.0.0.1");
+    const snapshotId = parsedUrl.searchParams.get("snapshotId")?.trim();
+    const at = parseQueryNumber(parsedUrl.searchParams.get("at"));
+
+    if (!snapshotId && at === undefined) {
+      const durationMs = durationFrom(context.startedAt);
+      setJsonHeaders(res, context.requestId);
+      res.statusCode = 400;
+      res.end(
+        JSON.stringify(
+          toApiErrorBody({
+            code: API_ERROR_CODES.replaySnapshotBadRequest,
+            message: "Provide either snapshotId or at query parameter.",
+            requestId: context.requestId,
+          }),
+        ),
+      );
+      recordRouteMetric("replaySnapshot", false, durationMs);
+      logRouteResult({
+        context,
+        event: "replay.snapshot.bad_request",
+        level: "warn",
+        statusCode: 400,
+        durationMs,
+        extra: {
+          code: API_ERROR_CODES.replaySnapshotBadRequest,
+        },
+      });
+      return;
+    }
+
+    const store = await ensureReplayStore();
+    const resolved = snapshotId
+      ? await store.readSnapshotById(snapshotId)
+      : await store.readSnapshotAt(at ?? Date.now());
+    syncReplayStoreMetrics();
+
+    if (!resolved) {
+      const durationMs = durationFrom(context.startedAt);
+      setJsonHeaders(res, context.requestId);
+      res.statusCode = 404;
+      res.end(
+        JSON.stringify(
+          toApiErrorBody({
+            code: API_ERROR_CODES.replaySnapshotNotFound,
+            message: "Replay snapshot not found for requested selector.",
+            requestId: context.requestId,
+          }),
+        ),
+      );
+      recordRouteMetric("replaySnapshot", false, durationMs);
+      logRouteResult({
+        context,
+        event: "replay.snapshot.not_found",
+        level: "warn",
+        statusCode: 404,
+        durationMs,
+        extra: {
+          code: API_ERROR_CODES.replaySnapshotNotFound,
+          snapshotId: snapshotId ?? null,
+          at: at ?? null,
+        },
+      });
+      return;
+    }
+
+    const replaySnapshot: OfficeSnapshot = {
+      ...resolved.snapshot,
+      source: {
+        ...resolved.snapshot.source,
+        live: false,
+      },
+    };
+    setJsonHeaders(res, context.requestId);
+    res.statusCode = 200;
+    res.end(
+      JSON.stringify({
+        resolvedAt: resolved.resolvedAt,
+        entry: resolved.entry,
+        snapshot: replaySnapshot,
+      }),
+    );
+    const durationMs = durationFrom(context.startedAt);
+    recordRouteMetric("replaySnapshot", true, durationMs);
+    logRouteResult({
+      context,
+      event: "replay.snapshot.ok",
+      level: "info",
+      statusCode: 200,
+      durationMs,
+      extra: {
+        snapshotId: resolved.entry.snapshotId,
+        resolvedAt: resolved.resolvedAt,
+      },
+    });
+  } catch (error) {
+    const details = asErrorDetails(error);
+    const durationMs = durationFrom(context.startedAt);
+    setJsonHeaders(res, context.requestId);
+    res.statusCode = 500;
+    res.end(
+      JSON.stringify(
+        toApiErrorBody({
+          code: API_ERROR_CODES.replaySnapshotReadFailed,
+          message: "Failed to read replay snapshot payload",
+          requestId: context.requestId,
+          details,
+        }),
+      ),
+    );
+    recordRouteMetric("replaySnapshot", false, durationMs);
+    logRouteResult({
+      context,
+      event: "replay.snapshot.error",
+      level: "error",
+      statusCode: 500,
+      durationMs,
+      details,
+      extra: {
+        code: API_ERROR_CODES.replaySnapshotReadFailed,
+      },
+    });
+  }
+}
+
 function handleMetrics(res: ServerResponse, context: ApiRequestContext) {
   try {
+    syncReplayStoreMetrics();
     const payload = {
       generatedAt: Date.now(),
       requestId: context.requestId,
@@ -242,6 +506,7 @@ function handleMetrics(res: ServerResponse, context: ApiRequestContext) {
         ]),
       ),
       stream: streamMetrics,
+      replayStore: replayStoreMetrics,
     };
     setJsonHeaders(res, context.requestId);
     res.statusCode = 200;
@@ -297,6 +562,7 @@ async function ensureInitialSnapshot(): Promise<OfficeSnapshot> {
   }
 
   const snapshot = await initialSnapshotPromise;
+  await persistSnapshotForReplay(snapshot);
   if (!streamBridge.getLatestSnapshot()) {
     streamBridge.ingestSnapshot(snapshot);
   }
@@ -317,6 +583,7 @@ async function pollStreamSnapshot() {
     }
 
     const snapshot = await buildOfficeSnapshot();
+    await persistSnapshotForReplay(snapshot);
     const frames = streamBridge.ingestSnapshot(snapshot);
     const pressure = streamBridge.consumePressureStats();
     streamMetrics.backpressureActivations += pressure.backpressureActivations;
@@ -572,6 +839,18 @@ function attachOfficeRoutes(server: ViteDevServer | PreviewServer) {
     if (method === "GET" && pathname === "/api/office/metrics") {
       const context = buildRequestContext(req, pathname);
       handleMetrics(res, context);
+      return;
+    }
+
+    if (method === "GET" && pathname === "/api/office/replay/index") {
+      const context = buildRequestContext(req, pathname);
+      void handleReplayIndex(req, res, context);
+      return;
+    }
+
+    if (method === "GET" && pathname === "/api/office/replay/snapshot") {
+      const context = buildRequestContext(req, pathname);
+      void handleReplaySnapshot(req, res, context);
       return;
     }
 
