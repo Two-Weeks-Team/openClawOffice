@@ -516,6 +516,57 @@ body {
   padding: 0 6px 6px;
 }
 
+.summary-exporter {
+  grid-column: 1 / -1;
+  border: 1px solid rgba(146, 225, 255, 0.24);
+  border-radius: 10px;
+  background: rgba(6, 29, 42, 0.72);
+  padding: 8px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.summary-exporter-field {
+  display: grid;
+  gap: 4px;
+  font-size: 0.62rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #9dcfe0;
+}
+
+.summary-exporter-field input,
+.summary-exporter-field select {
+  border-radius: 7px;
+  border: 1px solid rgba(145, 223, 255, 0.34);
+  background: rgba(8, 33, 47, 0.94);
+  color: #def7ff;
+  font-size: 0.68rem;
+  padding: 5px 7px;
+}
+
+.summary-exporter-shots {
+  grid-column: 1 / -1;
+}
+
+.summary-exporter-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.summary-exporter-actions button {
+  border-radius: 7px;
+  border: 1px solid rgba(149, 227, 255, 0.4);
+  background: rgba(9, 39, 55, 0.92);
+  color: #d6f4ff;
+  font-size: 0.66rem;
+  padding: 5px 8px;
+  cursor: pointer;
+}
+
 .ops-actions {
   grid-column: 1 / -1;
   display: flex;
@@ -3030,6 +3081,10 @@ body {
     grid-column: span 2;
   }
 
+  .summary-exporter {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .workspace {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -3145,6 +3200,10 @@ body {
 
   .ops-search {
     grid-column: span 1;
+  }
+
+  .summary-exporter {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .ops-match-count {
