@@ -476,6 +476,7 @@ export function OfficeStage({
 
   const rooms = layoutState.rooms;
   const placements = layoutState.placements;
+  const collisionPairCount = layoutState.collisionPairs.length;
   const filteredEntityIdSet = useMemo(() => new Set(filterEntityIds), [filterEntityIds]);
   const normalizedRoomFilterId =
     roomFilterId.trim() !== "" && roomFilterId !== "all" ? roomFilterId : null;
@@ -1325,6 +1326,9 @@ export function OfficeStage({
           </button>
         ) : null}
         <span>{Math.round(camera.zoom * 100)}%</span>
+        <span className={"camera-overlap" + (collisionPairCount > 0 ? " has-collision" : "")}>
+          overlap {collisionPairCount}
+        </span>
       </div>
 
       <aside className="camera-minimap">
@@ -1696,13 +1700,19 @@ export function OfficeStage({
             <header>{room.label}</header>
             <div className="shape-tag">{room.shape}</div>
             {debug ? (
-              <div className={`zone-debug ${overflowCount > 0 ? "has-overflow" : ""}`} aria-hidden="true">
+              <div
+                className={`zone-debug ${overflowCount > 0 ? "has-overflow" : ""} ${
+                  debug.collisionPairs > 0 ? "has-collision" : ""
+                }`}
+                aria-hidden="true"
+              >
                 <span>
                   cap {debug.assigned}/{debug.capacity}
                 </span>
                 <span>occ {debug.utilizationPct || occupancyPercent}%</span>
                 <span>target {debug.targeted}</span>
                 <span>{debug.saturation}</span>
+                {debug.collisionPairs > 0 ? <span>coll {debug.collisionPairs}</span> : null}
                 {debug.overflowOut > 0 ? <span>out +{debug.overflowOut}</span> : null}
                 {debug.overflowIn > 0 ? <span>in +{debug.overflowIn}</span> : null}
                 {debug.manualOverrides > 0 ? <span>override {debug.manualOverrides}</span> : null}

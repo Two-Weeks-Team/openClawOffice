@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildPlacements, buildRoomCapacityPlan } from "./layout";
+import { buildPlacements, buildRoomCapacityPlan, detectPlacementCollisions } from "./layout";
 import type { OfficeEntity } from "../types/office";
 import { createLocal50Scenario } from "./local50-scenario";
 
@@ -359,6 +359,106 @@ describe("buildPlacements", () => {
 
     expect(new Set(openAiRooms).size).toBe(1);
     expect(anthropicRoom).toBe("ops");
+  });
+
+  it("reports overlap pairs from explicit collision checks", () => {
+    const first = makeEntity({
+      id: "agent-overlap-a",
+      agentId: "agent-overlap-a",
+      label: "Overlap A",
+      status: "active",
+    });
+    const second = makeEntity({
+      id: "agent-overlap-b",
+      agentId: "agent-overlap-b",
+      label: "Overlap B",
+      status: "active",
+    });
+    const collisions = detectPlacementCollisions([
+      {
+        entity: first,
+        roomId: "ops",
+        targetRoomId: "ops",
+        x: 220,
+        y: 220,
+        overflowed: false,
+      },
+      {
+        entity: second,
+        roomId: "ops",
+        targetRoomId: "ops",
+        x: 230,
+        y: 225,
+        overflowed: false,
+      },
+    ]);
+
+    expect(collisions).toHaveLength(1);
+    expect(collisions[0]?.roomId).toBe("ops");
+    expect(collisions[0]?.intersectionArea).toBeGreaterThan(0);
+  });
+
+  it("resolves placement collisions within a room and reports zero overlap pairs", () => {
+    const entities = Array.from({ length: 10 }, (_, index) =>
+      makeEntity({
+        id: `agent-packed-${index + 1}`,
+        agentId: `agent-packed-${index + 1}`,
+        label: `Packed Agent ${index + 1}`,
+        status: "active",
+      }),
+    );
+
+    const result = buildPlacements({
+      entities,
+      generatedAt: 1_000_000,
+      zoneConfig: {
+        rooms: [
+          {
+            id: "strategy",
+            width: 460,
+            height: 250,
+            capacity: 12,
+            spacing: { x: 64, y: 52 },
+            routing: { statuses: ["active"], kinds: ["agent"], recentWeight: 0 },
+          },
+          {
+            id: "ops",
+            routing: {
+              statuses: ["offline"],
+              kinds: ["agent"],
+              recentWeight: 0,
+            },
+          },
+          {
+            id: "build",
+            routing: {
+              statuses: ["offline"],
+              kinds: ["agent"],
+              recentWeight: 0,
+            },
+          },
+          {
+            id: "spawn",
+            routing: {
+              statuses: ["offline"],
+              kinds: ["agent"],
+              recentWeight: 0,
+            },
+          },
+          {
+            id: "lounge",
+            routing: {
+              statuses: ["offline"],
+              kinds: ["agent"],
+              recentWeight: 0,
+            },
+          },
+        ],
+      },
+    });
+
+    expect(result.collisionPairs).toHaveLength(0);
+    expect(result.roomDebug.get("strategy")?.collisionPairs).toBe(0);
   });
 
   it("honors manual room override hints", () => {

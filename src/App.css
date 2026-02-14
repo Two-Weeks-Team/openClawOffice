@@ -1030,6 +1030,20 @@ body {
   text-align: right;
 }
 
+.camera-controls .camera-overlap {
+  min-width: 88px;
+  text-align: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(160, 231, 255, 0.4);
+  background: rgba(8, 36, 52, 0.84);
+}
+
+.camera-controls .camera-overlap.has-collision {
+  border-color: rgba(255, 162, 162, 0.62);
+  color: rgba(255, 214, 214, 0.96);
+}
+
 .camera-minimap {
   position: absolute;
   right: 12px;
@@ -1313,6 +1327,11 @@ body {
 .zone-debug.has-overflow span {
   border-color: rgba(255, 203, 120, 0.45);
   color: rgba(255, 239, 196, 0.95);
+}
+
+.zone-debug.has-collision span {
+  border-color: rgba(255, 162, 162, 0.46);
+  color: rgba(255, 222, 222, 0.94);
 }
 
 .office-lines {
