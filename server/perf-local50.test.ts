@@ -3,7 +3,7 @@ import { buildEntitySearchIndex, searchEntityIds } from "../src/lib/entity-searc
 import { buildPlacements } from "../src/lib/layout";
 import { mergeLifecycleEvent } from "../src/lib/lifecycle-merge";
 import { createLocal50Scenario } from "../src/lib/local50-scenario";
-import { LOCAL50_PIPELINE_BUDGET, LOCAL50_SCENARIO } from "../src/lib/perf-budgets";
+import { LOCAL50_PIPELINE_BUDGET, LOCAL50_SCENARIO, LOCAL50_UX_BUDGET } from "../src/lib/perf-budgets";
 import { buildTimelineIndex } from "../src/lib/timeline";
 import type { OfficeEvent, OfficeSnapshot } from "../src/types/office";
 import { parseSessionsStore, parseSubagentStore } from "./runtime-parser";
@@ -14,6 +14,10 @@ type Metric = {
   p95Ms: number;
   maxMs: number;
 };
+
+function heapUsedMb(): number {
+  return process.memoryUsage().heapUsed / (1024 * 1024);
+}
 
 function mergeLifecycleEventLegacy(snapshot: OfficeSnapshot, event: OfficeEvent, maxEvents = 220) {
   const events = [event, ...snapshot.events.filter((item) => item.id !== event.id)]
@@ -166,6 +170,9 @@ describe("local50 benchmark smoke", () => {
       streamLegacyMetric,
     ]);
 
+    const memoryFootprintMb = heapUsedMb();
+    console.log("local50 heapUsedMB", memoryFootprintMb.toFixed(2));
+
     expect(parseSessionsMetric.p95Ms).toBeLessThanOrEqual(LOCAL50_PIPELINE_BUDGET.parseSessionsP95Ms);
     expect(parseRunsMetric.p95Ms).toBeLessThanOrEqual(LOCAL50_PIPELINE_BUDGET.parseRunsP95Ms);
     expect(layoutMetric.p95Ms).toBeLessThanOrEqual(LOCAL50_PIPELINE_BUDGET.layoutP95Ms);
@@ -174,5 +181,6 @@ describe("local50 benchmark smoke", () => {
     expect(streamMergeMetric.p95Ms).toBeLessThanOrEqual(
       LOCAL50_PIPELINE_BUDGET.streamMergeBatchP95Ms,
     );
+    expect(memoryFootprintMb).toBeLessThanOrEqual(LOCAL50_UX_BUDGET.memoryFootprintMb);
   });
 });

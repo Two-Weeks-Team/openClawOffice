@@ -4,6 +4,7 @@
 - Operating mode: local-only (`127.0.0.1`)
 - Scenario size: `50 agents / 500 runs / 5,000 events`
 - Security hardening: out of scope for this benchmark pass
+- Baseline profiles (`10/25/50`) are defined in `docs/capacity-baseline.md`
 
 ## Budgets
 | Category | Budget |
@@ -17,12 +18,17 @@
 | Timeline index p95 | `<= 60ms` |
 | Entity search p95 | `<= 12ms` |
 | Stream merge batch p95 | `<= 70ms` |
+| Heap used (Node process) | `<= 220MB` |
 
 ## Commands
 ```bash
 pnpm benchmark:local50
 pnpm ci:local
 ```
+
+`benchmark:local50` automatically collects:
+- parse/layout/timeline/search/stream p95 metrics
+- Node `heapUsed` memory footprint
 
 ## Profiling Template
 Use this template when reporting a new measurement run.

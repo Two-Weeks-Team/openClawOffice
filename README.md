@@ -151,6 +151,7 @@ pnpm benchmark:local50
 - Benchmark scenario: `50 agents / 500 runs / 5000 events`
 - Pipeline budget constants: `src/lib/perf-budgets.ts`
 - Profiling report template: `docs/perf-local50.md`
+- Capacity baseline profiles (10/25/50): `docs/capacity-baseline.md`
 
 ## API endpoints (dev server)
 
@@ -192,3 +193,5 @@ A curation manifest is included at:
 - `127.0.0.1` 로컬 바인딩 전제 유지
 - 50-agent 운영 한계를 기준으로 목표/완료조건 정의
 - 보안 이슈는 로컬 단독 사용 전제에서 우선순위 제외
+- capacity 관련 이슈는 `docs/capacity-baseline.md`를 명시적으로 참조
+- 신규 feature 이슈는 `.github/ISSUE_TEMPLATE/capacity-aligned-feature.yml` 템플릿 우선 사용
