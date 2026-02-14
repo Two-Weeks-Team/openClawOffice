@@ -337,8 +337,8 @@ export function buildTimelineSegments({
   return [...bySegmentStart.entries()]
     .sort((left, right) => right[0] - left[0])
     .map(([startAt, segmentEvents]) => {
-      const latestAt = segmentEvents[0]?.at ?? startAt;
-      const oldestAt = segmentEvents[segmentEvents.length - 1]?.at ?? latestAt;
+      const latestAt = segmentEvents[0].at;
+      const oldestAt = segmentEvents[segmentEvents.length - 1].at;
       const endAt = startAt + windowMs - 1;
       const runCount = new Set(segmentEvents.map((event) => event.runId)).size;
       return {

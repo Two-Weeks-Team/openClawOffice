@@ -295,6 +295,9 @@ export function EventRail({
     : null;
   const isEveryLaneCollapsed =
     lanes.length > 0 && lanes.every((lane) => collapsedLaneKeys.includes(lane.key));
+  const resetLoadedSegments = () => {
+    setLoadedSegmentCount(INITIAL_SEGMENT_LOAD_COUNT);
+  };
   const replayRunOptions = useMemo(
     () => [...index.byRunId.keys()].sort((left, right) => left.localeCompare(right)),
     [index],
@@ -317,7 +320,7 @@ export function EventRail({
             value={filters.runId}
             onChange={(event) => {
               onFiltersChange({ ...filters, runId: event.target.value });
-              setLoadedSegmentCount(INITIAL_SEGMENT_LOAD_COUNT);
+              resetLoadedSegments();
             }}
           />
           <datalist id="timeline-run-options">
@@ -334,7 +337,7 @@ export function EventRail({
             value={filters.agentId}
             onChange={(event) => {
               onFiltersChange({ ...filters, agentId: event.target.value });
-              setLoadedSegmentCount(INITIAL_SEGMENT_LOAD_COUNT);
+              resetLoadedSegments();
             }}
           />
         </label>
@@ -347,7 +350,7 @@ export function EventRail({
                 ...filters,
                 status: event.target.value as TimelineStatusFilter,
               });
-              setLoadedSegmentCount(INITIAL_SEGMENT_LOAD_COUNT);
+              resetLoadedSegments();
             }}
           >
             <option value="all">ALL</option>
@@ -369,7 +372,7 @@ export function EventRail({
             setLoopEnabled(false);
             setLoopRange(null);
             setExpandedSummaryKeys([]);
-            setLoadedSegmentCount(INITIAL_SEGMENT_LOAD_COUNT);
+            resetLoadedSegments();
           }}
         >
           Clear
@@ -523,7 +526,7 @@ export function EventRail({
               setLaneMode(event.target.value as TimelineLaneMode);
               setManualLaneKey(null);
               setCollapsedLaneKeys([]);
-              setLoadedSegmentCount(INITIAL_SEGMENT_LOAD_COUNT);
+              resetLoadedSegments();
             }}
           >
             <option value="room">ROOM</option>
