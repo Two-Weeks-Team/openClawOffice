@@ -1,5 +1,6 @@
 import type { OfficeEntityStatus, OfficeEvent, OfficeRun, OfficeSnapshot } from "../types/office";
 import { buildRunGraph } from "./run-graph";
+import { CAPACITY_BASELINE_PROFILES, type CapacityProfileId } from "./perf-budgets";
 
 export type SyntheticSessionStore = Record<
   string,
@@ -36,35 +37,95 @@ export type Local50Scenario = {
   runStore: { source: string; raw: SyntheticRunStore };
 };
 
+export type SyntheticPatternOptions = {
+  errorRate?: number;
+  activeRate?: number;
+  runSpacingMs?: number;
+  eventIntervalMs?: number;
+  eventBurstEvery?: number;
+  eventBurstSize?: number;
+};
+
 type ScenarioOptions = {
+  profile?: CapacityProfileId;
   agents?: number;
   runs?: number;
   events?: number;
+  seed?: number;
   seedTime?: number;
+  pattern?: SyntheticPatternOptions;
 };
+
+export const SYNTHETIC_SCENARIO_PRESETS = {
+  local10: { ...CAPACITY_BASELINE_PROFILES.local10.scenario },
+  local25: { ...CAPACITY_BASELINE_PROFILES.local25.scenario },
+  local50: { ...CAPACITY_BASELINE_PROFILES.local50.scenario },
+} as const;
+
+type RequiredPatternOptions = Required<SyntheticPatternOptions>;
+
+const DEFAULT_PATTERN: RequiredPatternOptions = {
+  errorRate: 1 / 11,
+  activeRate: 1 / 3,
+  runSpacingMs: 9_000,
+  eventIntervalMs: 700,
+  eventBurstEvery: 18,
+  eventBurstSize: 5,
+};
+
+const DEFAULT_SEED = 938_412;
 
 function agentName(index: number): string {
   return `agent-${String(index + 1).padStart(2, "0")}`;
 }
 
-function runStatus(index: number): "active" | "ok" | "error" {
-  if (index % 11 === 0) {
+function normalizePatternOptions(pattern: SyntheticPatternOptions | undefined): RequiredPatternOptions {
+  const raw = pattern ?? {};
+  return {
+    errorRate: Math.min(1, Math.max(0, raw.errorRate ?? DEFAULT_PATTERN.errorRate)),
+    activeRate: Math.min(1, Math.max(0, raw.activeRate ?? DEFAULT_PATTERN.activeRate)),
+    runSpacingMs: Math.max(1, Math.floor(raw.runSpacingMs ?? DEFAULT_PATTERN.runSpacingMs)),
+    eventIntervalMs: Math.max(1, Math.floor(raw.eventIntervalMs ?? DEFAULT_PATTERN.eventIntervalMs)),
+    eventBurstEvery: Math.max(0, Math.floor(raw.eventBurstEvery ?? DEFAULT_PATTERN.eventBurstEvery)),
+    eventBurstSize: Math.max(1, Math.floor(raw.eventBurstSize ?? DEFAULT_PATTERN.eventBurstSize)),
+  };
+}
+
+function createSeededRandom(seed: number): () => number {
+  let state = (seed >>> 0) || 1;
+  return () => {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 0x1_0000_0000;
+  };
+}
+
+function pickRunStatus(rng: () => number, pattern: RequiredPatternOptions): "active" | "ok" | "error" {
+  const errorRate = pattern.errorRate;
+  const activeRate = Math.min(1 - errorRate, pattern.activeRate);
+  const roll = rng();
+  if (roll < errorRate) {
     return "error";
   }
-  if (index % 3 === 0) {
+  if (roll < errorRate + activeRate) {
     return "active";
   }
   return "ok";
 }
 
-function buildRuns(agentIds: string[], runCount: number, seedTime: number): OfficeRun[] {
+function buildRuns(
+  agentIds: string[],
+  runCount: number,
+  seedTime: number,
+  rng: () => number,
+  pattern: RequiredPatternOptions,
+): OfficeRun[] {
   const runs: OfficeRun[] = [];
   for (let index = 0; index < runCount; index += 1) {
-    const parentAgentId = agentIds[index % agentIds.length] ?? "agent-01";
-    const childAgentId = agentIds[(index * 7 + 3) % agentIds.length] ?? parentAgentId;
-    const createdAt = seedTime - index * 9_000;
+    const parentAgentId = agentIds[Math.floor(rng() * agentIds.length)] ?? "agent-01";
+    const childAgentId = agentIds[Math.floor(rng() * agentIds.length)] ?? parentAgentId;
+    const createdAt = seedTime - index * pattern.runSpacingMs;
     const startedAt = createdAt + 900;
-    const status = runStatus(index);
+    const status = pickRunStatus(rng, pattern);
     const endedAt = status === "active" ? undefined : createdAt + 5_400;
     const cleanupCompletedAt =
       status === "active" || index % 2 === 1 ? undefined : (endedAt ?? createdAt) + 1_600;
@@ -88,7 +149,13 @@ function buildRuns(agentIds: string[], runCount: number, seedTime: number): Offi
   return runs;
 }
 
-function buildEvents(runs: OfficeRun[], eventCount: number, seedTime: number): OfficeEvent[] {
+function buildEvents(
+  runs: OfficeRun[],
+  eventCount: number,
+  seedTime: number,
+  rng: () => number,
+  pattern: RequiredPatternOptions,
+): OfficeEvent[] {
   const events: OfficeEvent[] = [];
   const eventTypes: OfficeEvent["type"][] = ["spawn", "start", "end", "error", "cleanup"];
   for (let index = 0; index < eventCount; index += 1) {
@@ -97,7 +164,11 @@ function buildEvents(runs: OfficeRun[], eventCount: number, seedTime: number): O
       continue;
     }
     const type = eventTypes[index % eventTypes.length] ?? "spawn";
-    const at = seedTime - index * 700;
+    const inBurst =
+      pattern.eventBurstEvery > 0 && index % pattern.eventBurstEvery < pattern.eventBurstSize;
+    const burstStep = inBurst ? Math.max(1, Math.floor(pattern.eventIntervalMs * 0.35)) : pattern.eventIntervalMs;
+    const jitter = Math.floor(rng() * Math.max(1, Math.floor(pattern.eventIntervalMs * 0.2)));
+    const at = seedTime - index * burstStep - jitter;
     events.push({
       id: `evt-${String(index + 1).padStart(5, "0")}`,
       type,
@@ -135,13 +206,18 @@ function buildSessionStores(agentIds: string[], seedTime: number) {
 }
 
 export function createLocal50Scenario(options: ScenarioOptions = {}): Local50Scenario {
-  const agentCount = options.agents ?? 50;
-  const runCount = options.runs ?? 500;
-  const eventCount = options.events ?? 5_000;
+  const profileId = options.profile ?? "local50";
+  const preset = SYNTHETIC_SCENARIO_PRESETS[profileId];
+  const agentCount = options.agents ?? preset.agents;
+  const runCount = options.runs ?? preset.runs;
+  const eventCount = options.events ?? preset.events;
+  const seed = Math.floor(options.seed ?? DEFAULT_SEED);
   const seedTime = options.seedTime ?? 1_765_280_000_000;
+  const pattern = normalizePatternOptions(options.pattern);
+  const rng = createSeededRandom(seed);
   const agentIds = Array.from({ length: agentCount }, (_, index) => agentName(index));
-  const runs = buildRuns(agentIds, runCount, seedTime);
-  const events = buildEvents(runs, eventCount, seedTime);
+  const runs = buildRuns(agentIds, runCount, seedTime, rng, pattern);
+  const events = buildEvents(runs, eventCount, seedTime, rng, pattern);
   const activeCounts = new Map<string, number>();
   const hasError = new Map<string, boolean>();
   for (const run of runs) {

@@ -150,6 +150,7 @@ pnpm benchmark:local50
 
 - Benchmark scenario: `50 agents / 500 runs / 5000 events`
 - Pipeline budget constants: `src/lib/perf-budgets.ts`
+- Synthetic generator options/presets: `docs/synthetic-scenario-generator.md`
 - Profiling report template: `docs/perf-local50.md`
 - Capacity baseline profiles (10/25/50): `docs/capacity-baseline.md`
 
