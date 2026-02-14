@@ -79,6 +79,16 @@ const WINDOW_MS: Record<ThroughputWindow, number> = {
   "1h": 60 * 60_000,
   "24h": 24 * 60 * 60_000,
 };
+const BOTTLENECK_LATENCY_WEIGHT = 0.42;
+const BOTTLENECK_ERROR_WEIGHT = 0.34;
+const BOTTLENECK_QUEUE_WEIGHT = 0.24;
+const HOTSPOT_LATENCY_SCORE_THRESHOLD = 0.75;
+const HOTSPOT_MIN_LATENCY_MS = 30_000;
+const HOTSPOT_ERROR_RATIO_THRESHOLD = 0.35;
+const HOTSPOT_QUEUE_PRESSURE_THRESHOLD = 2;
+const HOTSPOT_QUEUE_PRESSURE_INDEX_THRESHOLD = 0.9;
+const HOTSPOT_COMPLETION_DROP_THRESHOLD = 0.5;
+const HOTSPOT_MIN_STARTED_FOR_COMPLETION_DROP = 3;
 
 type RunStats = {
   run: OfficeRun;
@@ -560,21 +570,32 @@ export function buildThroughputHotspots(
       const errorScore = row.errorRatio ?? 0;
       const queueScore = round(row.queuePressure / maxQueuePressure, 3);
       const bottleneckScore = round(
-        latencyScore * 0.42 + errorScore * 0.34 + queueScore * 0.24,
+        latencyScore * BOTTLENECK_LATENCY_WEIGHT +
+          errorScore * BOTTLENECK_ERROR_WEIGHT +
+          queueScore * BOTTLENECK_QUEUE_WEIGHT,
         3,
       );
 
       const reasonHints: string[] = [];
-      if (latencyScore >= 0.75 && (row.latencyP90Ms ?? 0) >= 30_000) {
+      if (
+        latencyScore >= HOTSPOT_LATENCY_SCORE_THRESHOLD &&
+        (row.latencyP90Ms ?? 0) >= HOTSPOT_MIN_LATENCY_MS
+      ) {
         reasonHints.push("latency hotspot");
       }
-      if (errorScore >= 0.35) {
+      if (errorScore >= HOTSPOT_ERROR_RATIO_THRESHOLD) {
         reasonHints.push("error-heavy");
       }
-      if (row.queuePressure >= 2 || (row.queuePressureIndex ?? 0) >= 0.9) {
+      if (
+        row.queuePressure >= HOTSPOT_QUEUE_PRESSURE_THRESHOLD ||
+        (row.queuePressureIndex ?? 0) >= HOTSPOT_QUEUE_PRESSURE_INDEX_THRESHOLD
+      ) {
         reasonHints.push("queue pressure");
       }
-      if ((row.completionRate ?? 1) < 0.5 && row.startedRuns >= 3) {
+      if (
+        (row.completionRate ?? 1) < HOTSPOT_COMPLETION_DROP_THRESHOLD &&
+        row.startedRuns >= HOTSPOT_MIN_STARTED_FOR_COMPLETION_DROP
+      ) {
         reasonHints.push("completion drop");
       }
       if (reasonHints.length === 0) {
