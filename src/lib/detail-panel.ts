@@ -1,8 +1,15 @@
-import type { OfficeEntity, OfficeEvent, OfficeRun, OfficeSnapshot } from "../types/office";
+import type {
+  OfficeEntity,
+  OfficeEvent,
+  OfficeEventType,
+  OfficeRun,
+  OfficeSnapshot,
+} from "../types/office";
 import { indexRunsById, runIdsForAgent } from "./run-graph";
 
 const MAX_DETAIL_EVENTS = 14;
 const MAX_RECENT_RUNS = 6;
+const MAX_MAJOR_EVENTS = 6;
 
 function trimTrailingSeparators(pathname: string): string {
   return pathname.replace(/[\\/]+$/, "");
@@ -33,6 +40,18 @@ function estimateRunLatencyMs(run: OfficeRun, now: number): number | null {
   return Math.max(0, endedAt - startedAt);
 }
 
+function estimateEventDensityPerMinute(eventCount: number, latencyMs: number | null): number | null {
+  if (latencyMs === null || latencyMs <= 0 || eventCount <= 0) {
+    return null;
+  }
+  return Math.round((eventCount / (latencyMs / 60_000)) * 100) / 100;
+}
+
+function normalizedEventSignature(event: DetailPanelMajorEvent): string {
+  const compactText = event.text.replace(/\s+/g, " ").trim().toLowerCase().slice(0, 96);
+  return `${event.type}:${compactText}`;
+}
+
 export type DetailPanelStatus = "empty" | "missing" | "ready";
 
 export type DetailPanelPaths = {
@@ -58,19 +77,43 @@ export type DetailPanelRunInsight = {
   tokenEstimate: number;
   latencyMs: number | null;
   eventCount: number;
+  eventDensityPerMinute: number | null;
+  errorPointMs: number | null;
+  majorEvents: DetailPanelMajorEvent[];
+};
+
+export type DetailPanelMajorEvent = {
+  id: string;
+  type: OfficeEventType;
+  at: number;
+  offsetMs: number;
+  text: string;
+};
+
+export type DetailPanelRunComparisonSelection = {
+  baselineRunId: string;
+  candidateRunId: string;
 };
 
 export type DetailPanelRunDiff = {
   baseline: DetailPanelRunInsight;
   candidate: DetailPanelRunInsight;
   modelChanged: boolean;
+  taskChanged: boolean;
   tokenEstimateDelta: number;
   latencyDeltaMs: number | null;
   eventCountDelta: number;
+  eventDensityPerMinuteDelta: number | null;
+  errorPointDeltaMs: number | null;
+  majorEvents: {
+    baselineOnly: DetailPanelMajorEvent[];
+    candidateOnly: DetailPanelMajorEvent[];
+  };
 };
 
 type DetailPanelBase = {
   linkedRun: OfficeRun | null;
+  runInsights: DetailPanelRunInsight[];
   relatedRuns: OfficeRun[];
   recentRuns: DetailPanelRunInsight[];
   runDiff: DetailPanelRunDiff | null;
@@ -97,6 +140,85 @@ export type DetailPanelModel =
       entity: OfficeEntity;
     } & DetailPanelBase);
 
+export function selectDefaultRunComparison(
+  runInsights: DetailPanelRunInsight[],
+): DetailPanelRunComparisonSelection | null {
+  if (runInsights.length < 2) {
+    return null;
+  }
+
+  const latestErrorRun = runInsights.find((item) => item.run.status === "error");
+  const latestSuccessRun = runInsights.find((item) => item.run.status === "ok");
+  if (latestErrorRun && latestSuccessRun && latestErrorRun.run.runId !== latestSuccessRun.run.runId) {
+    return {
+      baselineRunId: latestSuccessRun.run.runId,
+      candidateRunId: latestErrorRun.run.runId,
+    };
+  }
+
+  return {
+    baselineRunId: runInsights[1].run.runId,
+    candidateRunId: runInsights[0].run.runId,
+  };
+}
+
+function buildRunDiff(
+  baseline: DetailPanelRunInsight,
+  candidate: DetailPanelRunInsight,
+): DetailPanelRunDiff {
+  const baselineEventSignatures = new Set(baseline.majorEvents.map((event) => normalizedEventSignature(event)));
+  const candidateEventSignatures = new Set(
+    candidate.majorEvents.map((event) => normalizedEventSignature(event)),
+  );
+  return {
+    baseline,
+    candidate,
+    modelChanged: baseline.model !== candidate.model,
+    taskChanged: baseline.run.task !== candidate.run.task,
+    tokenEstimateDelta: candidate.tokenEstimate - baseline.tokenEstimate,
+    latencyDeltaMs:
+      baseline.latencyMs === null || candidate.latencyMs === null
+        ? null
+        : candidate.latencyMs - baseline.latencyMs,
+    eventCountDelta: candidate.eventCount - baseline.eventCount,
+    eventDensityPerMinuteDelta:
+      baseline.eventDensityPerMinute === null || candidate.eventDensityPerMinute === null
+        ? null
+        : Math.round((candidate.eventDensityPerMinute - baseline.eventDensityPerMinute) * 100) / 100,
+    errorPointDeltaMs:
+      baseline.errorPointMs === null || candidate.errorPointMs === null
+        ? null
+        : candidate.errorPointMs - baseline.errorPointMs,
+    majorEvents: {
+      baselineOnly: baseline.majorEvents.filter(
+        (event) => !candidateEventSignatures.has(normalizedEventSignature(event)),
+      ),
+      candidateOnly: candidate.majorEvents.filter(
+        (event) => !baselineEventSignatures.has(normalizedEventSignature(event)),
+      ),
+    },
+  };
+}
+
+export function buildRunDiffForSelection(
+  runInsights: DetailPanelRunInsight[],
+  selection: DetailPanelRunComparisonSelection,
+): DetailPanelRunDiff | null {
+  if (!selection.baselineRunId || !selection.candidateRunId) {
+    return null;
+  }
+  if (selection.baselineRunId === selection.candidateRunId) {
+    return null;
+  }
+  const runInsightsById = new Map(runInsights.map((item) => [item.run.runId, item] as const));
+  const baseline = runInsightsById.get(selection.baselineRunId);
+  const candidate = runInsightsById.get(selection.candidateRunId);
+  if (!baseline || !candidate) {
+    return null;
+  }
+  return buildRunDiff(baseline, candidate);
+}
+
 const EMPTY_METRICS: DetailPanelMetrics = {
   sessions: 0,
   activeSubagents: 0,
@@ -117,6 +239,7 @@ export function buildDetailPanelModel(
       selectedEntityId: null,
       entity: null,
       linkedRun: null,
+      runInsights: [],
       relatedRuns: [],
       recentRuns: [],
       runDiff: null,
@@ -134,6 +257,7 @@ export function buildDetailPanelModel(
       selectedEntityId,
       entity: null,
       linkedRun: null,
+      runInsights: [],
       relatedRuns: [],
       recentRuns: [],
       runDiff: null,
@@ -213,36 +337,43 @@ export function buildDetailPanelModel(
     }
   }
 
-  const recentRuns = relatedRuns.slice(0, MAX_RECENT_RUNS).map((run) => {
+  const runInsights = relatedRuns.map((run) => {
     const runScopedEvents = runEvents.get(run.runId) ?? [];
+    runScopedEvents.sort((a, b) => {
+      if (a.at !== b.at) {
+        return a.at - b.at;
+      }
+      return a.id.localeCompare(b.id);
+    });
     const runTokenEstimate =
       estimateTokens(run.task) +
       runScopedEvents.reduce((sum, event) => sum + estimateTokens(event.text), 0);
+    const latencyMs = estimateRunLatencyMs(run, snapshot.generatedAt);
+    const runStartedAt = run.startedAt ?? run.createdAt;
+    const firstErrorEvent = runScopedEvents.find((event) => event.type === "error");
+    const majorEvents = runScopedEvents.slice(0, MAX_MAJOR_EVENTS).map((event) => ({
+      id: event.id,
+      type: event.type,
+      at: event.at,
+      offsetMs: Math.max(0, event.at - runStartedAt),
+      text: event.text,
+    }));
     return {
       run,
       model: modelByAgent.get(run.childAgentId) ?? "unknown",
       tokenEstimate: runTokenEstimate,
-      latencyMs: estimateRunLatencyMs(run, snapshot.generatedAt),
+      latencyMs,
       eventCount: runScopedEvents.length,
+      eventDensityPerMinute: estimateEventDensityPerMinute(runScopedEvents.length, latencyMs),
+      errorPointMs: firstErrorEvent ? Math.max(0, firstErrorEvent.at - runStartedAt) : null,
+      majorEvents,
     };
   });
+  const recentRuns = runInsights.slice(0, MAX_RECENT_RUNS);
 
-  const latestErrorRun = recentRuns.find((item) => item.run.status === "error");
-  const latestSuccessRun = recentRuns.find((item) => item.run.status === "ok");
-  const runDiff: DetailPanelRunDiff | null =
-    latestErrorRun && latestSuccessRun
-      ? {
-          baseline: latestSuccessRun,
-          candidate: latestErrorRun,
-          modelChanged: latestSuccessRun.model !== latestErrorRun.model,
-          tokenEstimateDelta: latestErrorRun.tokenEstimate - latestSuccessRun.tokenEstimate,
-          latencyDeltaMs:
-            latestSuccessRun.latencyMs === null || latestErrorRun.latencyMs === null
-              ? null
-              : latestErrorRun.latencyMs - latestSuccessRun.latencyMs,
-          eventCountDelta: latestErrorRun.eventCount - latestSuccessRun.eventCount,
-        }
-      : null;
+  const defaultSelection = selectDefaultRunComparison(recentRuns);
+  const runDiff =
+    defaultSelection === null ? null : buildRunDiffForSelection(runInsights, defaultSelection);
 
   const models = entity.model ? [entity.model] : [];
   const estimatedTexts = [
@@ -283,6 +414,7 @@ export function buildDetailPanelModel(
     selectedEntityId,
     entity,
     linkedRun,
+    runInsights,
     relatedRuns,
     recentRuns,
     runDiff,

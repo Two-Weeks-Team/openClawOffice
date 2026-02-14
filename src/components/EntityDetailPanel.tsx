@@ -1,5 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
-import { buildDetailPanelModel } from "../lib/detail-panel";
+import {
+  buildDetailPanelModel,
+  buildRunDiffForSelection,
+  selectDefaultRunComparison,
+  type DetailPanelRunComparisonSelection,
+} from "../lib/detail-panel";
+import {
+  loadSavedRunComparisons,
+  persistSavedRunComparisons,
+  removeSavedRunComparison,
+  upsertSavedRunComparison,
+  type SavedRunComparison,
+} from "../lib/run-comparison-store";
 import { RunDiffView } from "./RunDiffView";
 import type {
   OfficeEvent,
@@ -78,6 +90,11 @@ function eventTypeLabel(event: OfficeEvent): string {
 export function EntityDetailPanel({ snapshot, selectedEntityId, onJumpToRun, onClose }: Props) {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<DetailPanelTab>("overview");
+  const [savedComparisons, setSavedComparisons] = useState<SavedRunComparison[]>(
+    loadSavedRunComparisons,
+  );
+  const [runComparisonSelection, setRunComparisonSelection] =
+    useState<DetailPanelRunComparisonSelection | null>(null);
 
   const model = useMemo(
     () => buildDetailPanelModel(snapshot, selectedEntityId),
@@ -112,6 +129,10 @@ export function EntityDetailPanel({ snapshot, selectedEntityId, onJumpToRun, onC
     };
   }, [copiedKey]);
 
+  useEffect(() => {
+    persistSavedRunComparisons(savedComparisons);
+  }, [savedComparisons]);
+
   const copyText = async (key: string, value: string | undefined) => {
     if (!value) {
       return;
@@ -125,6 +146,38 @@ export function EntityDetailPanel({ snapshot, selectedEntityId, onJumpToRun, onC
   };
 
   const readyModel = model.status === "ready" ? model : null;
+  const defaultRunComparisonSelection = useMemo(() => {
+    if (!readyModel) {
+      return null;
+    }
+    return selectDefaultRunComparison(readyModel.runInsights);
+  }, [readyModel]);
+  const effectiveRunComparisonSelection = useMemo(() => {
+    if (!readyModel) {
+      return null;
+    }
+    const isCurrentSelectionValid =
+      runComparisonSelection !== null &&
+      runComparisonSelection.baselineRunId !== runComparisonSelection.candidateRunId &&
+      readyModel.runInsights.some((item) => item.run.runId === runComparisonSelection.baselineRunId) &&
+      readyModel.runInsights.some((item) => item.run.runId === runComparisonSelection.candidateRunId);
+    if (isCurrentSelectionValid) {
+      return runComparisonSelection;
+    }
+    return defaultRunComparisonSelection;
+  }, [defaultRunComparisonSelection, readyModel, runComparisonSelection]);
+  const activeRunDiff = useMemo(() => {
+    if (!readyModel || !effectiveRunComparisonSelection) {
+      return null;
+    }
+    return buildRunDiffForSelection(readyModel.runInsights, effectiveRunComparisonSelection);
+  }, [effectiveRunComparisonSelection, readyModel]);
+  const savedComparisonsForEntity = useMemo(() => {
+    if (!readyModel) {
+      return [];
+    }
+    return savedComparisons.filter((item) => item.entityId === readyModel.entity.id);
+  }, [readyModel, savedComparisons]);
 
   const renderCopyValue = (label: string, key: string, value: string | undefined) => (
     <div>
@@ -150,12 +203,40 @@ export function EntityDetailPanel({ snapshot, selectedEntityId, onJumpToRun, onC
     </div>
   );
 
+  const handleSaveComparison = () => {
+    if (!readyModel || !activeRunDiff || !effectiveRunComparisonSelection) {
+      return;
+    }
+    const savedRecord: SavedRunComparison = {
+      id: `cmp:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`,
+      entityId: readyModel.entity.id,
+      baselineRunId: effectiveRunComparisonSelection.baselineRunId,
+      candidateRunId: effectiveRunComparisonSelection.candidateRunId,
+      createdAt: Date.now(),
+    };
+    setSavedComparisons((prev) => upsertSavedRunComparison(prev, savedRecord));
+  };
+
+  const handleDeleteSavedComparison = (id: string) => {
+    setSavedComparisons((prev) => removeSavedRunComparison(prev, id));
+  };
+
+  const isSavedComparisonActive = (saved: SavedRunComparison): boolean => {
+    if (!effectiveRunComparisonSelection) {
+      return false;
+    }
+    return (
+      saved.baselineRunId === effectiveRunComparisonSelection.baselineRunId &&
+      saved.candidateRunId === effectiveRunComparisonSelection.candidateRunId
+    );
+  };
+
   return (
     <aside className="detail-panel">
       <header className="detail-panel-header">
         <div>
           <h2>Entity Detail</h2>
-          <p>Inspect sessions, recent runs, and success vs error diffs from one panel.</p>
+          <p>Inspect sessions, recent runs, and run A/B comparisons from one panel.</p>
         </div>
         <button
           type="button"
@@ -410,9 +491,129 @@ export function EntityDetailPanel({ snapshot, selectedEntityId, onJumpToRun, onC
           {activeTab === "diff" ? (
             <div role="tabpanel" id="detail-tabpanel-diff" aria-labelledby="detail-tab-diff">
               <section className="detail-section">
-                <h3>Run Diff (Success vs Error)</h3>
+                <h3>Run Comparison (Run A vs Run B)</h3>
+                {readyModel.runInsights.length < 2 ? (
+                  <p className="detail-muted">
+                    At least two related runs are required to compare run patterns.
+                  </p>
+                ) : (
+                  <div className="detail-diff-controls">
+                    <label className="detail-diff-field">
+                      <span>Baseline (Run A)</span>
+                      <select
+                        value={effectiveRunComparisonSelection?.baselineRunId ?? ""}
+                        onChange={(event) => {
+                          setRunComparisonSelection((prev) => ({
+                            baselineRunId: event.target.value,
+                            candidateRunId:
+                              prev?.candidateRunId ??
+                              defaultRunComparisonSelection?.candidateRunId ??
+                              "",
+                          }));
+                        }}
+                      >
+                        <option value="">Select baseline run</option>
+                        {readyModel.runInsights.map((item) => (
+                          <option key={item.run.runId} value={item.run.runId}>
+                            {item.run.runId} | {runStatusLabel(item.run)} | {item.model}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="detail-diff-field">
+                      <span>Candidate (Run B)</span>
+                      <select
+                        value={effectiveRunComparisonSelection?.candidateRunId ?? ""}
+                        onChange={(event) => {
+                          setRunComparisonSelection((prev) => ({
+                            baselineRunId:
+                              prev?.baselineRunId ??
+                              defaultRunComparisonSelection?.baselineRunId ??
+                              "",
+                            candidateRunId: event.target.value,
+                          }));
+                        }}
+                      >
+                        <option value="">Select candidate run</option>
+                        {readyModel.runInsights.map((item) => (
+                          <option key={item.run.runId} value={item.run.runId}>
+                            {item.run.runId} | {runStatusLabel(item.run)} | {item.model}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="detail-diff-actions">
+                      <button
+                        type="button"
+                        className="detail-copy-button"
+                        disabled={!effectiveRunComparisonSelection}
+                        onClick={() => {
+                          if (!effectiveRunComparisonSelection) {
+                            return;
+                          }
+                          setRunComparisonSelection({
+                            baselineRunId: effectiveRunComparisonSelection.candidateRunId,
+                            candidateRunId: effectiveRunComparisonSelection.baselineRunId,
+                          });
+                        }}
+                      >
+                        Swap
+                      </button>
+                      <button
+                        type="button"
+                        className="detail-copy-button"
+                        disabled={!activeRunDiff}
+                        onClick={handleSaveComparison}
+                      >
+                        Save Comparison
+                      </button>
+                    </div>
+                  </div>
+                )}
+                <div className="detail-diff-saved">
+                  <h4>Saved Comparisons</h4>
+                  {savedComparisonsForEntity.length === 0 ? (
+                    <p className="detail-muted">
+                      No saved comparison yet for this entity. Save your current run A/B pair.
+                    </p>
+                  ) : (
+                    <ol>
+                      {savedComparisonsForEntity.map((saved) => (
+                        <li key={saved.id} className={isSavedComparisonActive(saved) ? "is-active" : ""}>
+                          <span>
+                            {saved.baselineRunId} {"->"} {saved.candidateRunId}
+                          </span>
+                          <small>{formatAt(saved.createdAt)}</small>
+                          <div className="detail-run-actions">
+                            <button
+                              type="button"
+                              className="detail-copy-button"
+                              onClick={() => {
+                                setRunComparisonSelection({
+                                  baselineRunId: saved.baselineRunId,
+                                  candidateRunId: saved.candidateRunId,
+                                });
+                              }}
+                            >
+                              Open
+                            </button>
+                            <button
+                              type="button"
+                              className="detail-copy-button"
+                              onClick={() => {
+                                handleDeleteSavedComparison(saved.id);
+                              }}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                </div>
                 <RunDiffView
-                  runDiff={readyModel.runDiff}
+                  runDiff={activeRunDiff}
                   copiedKey={copiedKey}
                   onCopy={copyText}
                   onJumpToRun={onJumpToRun}
