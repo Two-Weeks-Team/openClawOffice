@@ -168,6 +168,7 @@ pnpm readiness:gate
 - Stage rehearsal: `local25 -> local50`
 - Gate policy and decision template: `docs/readiness-gate.md`
 - Gate output artifacts: `.reports/readiness/readiness-latest.json`, `.reports/readiness/readiness-latest.md`
+- Operator routine: `docs/operator-playbook.md`
 
 ## API endpoints (dev server)
 
