@@ -184,6 +184,11 @@ body {
   cursor: pointer;
 }
 
+.ops-actions button:disabled {
+  opacity: 0.46;
+  cursor: default;
+}
+
 .ops-actions .ops-alert-button.has-alerts {
   border-color: rgba(255, 159, 159, 0.6);
   color: #ffd1d1;
@@ -193,6 +198,11 @@ body {
   margin-left: auto;
   font-size: 0.66rem;
   color: #a6d8e6;
+}
+
+.ops-batch-summary {
+  font-size: 0.66rem;
+  color: #9cd5e8;
 }
 
 .stat-card {
@@ -852,6 +862,22 @@ body {
 
 .entity-token.is-selected .token-meta strong {
   color: #fff7d2;
+}
+
+.entity-token.is-pinned .sprite-shell {
+  box-shadow: 0 0 0 2px rgba(255, 206, 120, 0.74), 0 0 18px rgba(255, 188, 92, 0.5);
+}
+
+.entity-token.is-pinned .token-meta strong {
+  color: #ffecbf;
+}
+
+.entity-token.is-watched .sprite-shell {
+  box-shadow: 0 0 0 2px rgba(146, 236, 255, 0.78), 0 0 20px rgba(122, 214, 255, 0.55);
+}
+
+.entity-token.is-watched .token-meta strong {
+  color: #dff8ff;
 }
 
 .entity-token.is-linked .sprite-shell {
