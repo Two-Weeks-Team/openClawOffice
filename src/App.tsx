@@ -37,6 +37,14 @@ import {
 import { buildEntitySearchIndex, searchEntityIds } from "./lib/entity-search";
 import type { PlacementMode } from "./lib/layout";
 import {
+  indexRunKnowledgeByRunId,
+  loadRunKnowledgeEntries,
+  persistRunKnowledgeEntries,
+  removeRunKnowledgeEntry,
+  upsertRunKnowledgeEntry,
+  type RunKnowledgeEntry,
+} from "./lib/run-notes-store";
+import {
   buildTimelineIndex,
   filterTimelineEvents,
   nextPlaybackEventId,
@@ -198,7 +206,11 @@ function App() {
     loadAlertRulePreferences,
   );
   const [batchActionState, setBatchActionState] = useState<BatchActionState>(loadBatchActionState);
+  const [runKnowledgeEntries, setRunKnowledgeEntries] = useState<RunKnowledgeEntry[]>(
+    loadRunKnowledgeEntries,
+  );
   const hasBatchStateHydratedRef = useRef(false);
+  const hasRunKnowledgeHydratedRef = useRef(false);
   const shortcutPlatform = useMemo(() => detectShortcutPlatform(), []);
 
   const showToast = useCallback((kind: NonNullable<ToastState>["kind"], message: string) => {
@@ -254,6 +266,10 @@ function App() {
     }
     return map;
   }, [snapshot]);
+  const runKnowledgeByRunId = useMemo(
+    () => indexRunKnowledgeByRunId(runKnowledgeEntries),
+    [runKnowledgeEntries],
+  );
   const activeEvent = useMemo(
     () => snapshot?.events.find((event) => event.id === activeEventId) ?? null,
     [activeEventId, snapshot],
@@ -392,6 +408,14 @@ function App() {
     persistBatchActionState(batchActionState);
   }, [batchActionState]);
 
+  useEffect(() => {
+    if (!hasRunKnowledgeHydratedRef.current) {
+      hasRunKnowledgeHydratedRef.current = true;
+      return;
+    }
+    persistRunKnowledgeEntries(runKnowledgeEntries);
+  }, [runKnowledgeEntries]);
+
   const applyEntityBatchAction = useCallback(
     (action: BatchActionKind) => {
       if (selectedEntityIds.length === 0) {
@@ -413,6 +437,25 @@ function App() {
     },
     [selectedEntityIds, showToast],
   );
+
+  const upsertRunKnowledge = useCallback((input: {
+    runId: string;
+    note: string;
+    tags: string[];
+  }) => {
+    setRunKnowledgeEntries((prev) =>
+      upsertRunKnowledgeEntry(prev, {
+        runId: input.runId,
+        note: input.note,
+        tags: input.tags,
+        updatedAt: Date.now(),
+      }),
+    );
+  }, []);
+
+  const removeRunKnowledge = useCallback((runId: string) => {
+    setRunKnowledgeEntries((prev) => removeRunKnowledgeEntry(prev, runId));
+  }, []);
 
   const handleSelectEntity = useCallback((entityId: string, mode: "single" | "toggle" = "single") => {
     if (mode === "toggle") {
@@ -1378,6 +1421,7 @@ function App() {
           defaultRunId={
             selectedRun?.runId ?? selectedEntity?.runId ?? activeEvent?.runId ?? null
           }
+          runKnowledgeEntries={runKnowledgeEntries}
           onNotify={showToast}
         />
 
@@ -1498,6 +1542,9 @@ function App() {
             key={effectiveSelectedEntityId ?? "detail-empty"}
             snapshot={snapshot}
             selectedEntityId={effectiveSelectedEntityId}
+            runKnowledgeByRunId={runKnowledgeByRunId}
+            onUpsertRunKnowledge={upsertRunKnowledge}
+            onRemoveRunKnowledge={removeRunKnowledge}
             onJumpToRun={(runId) => {
               if (!runId.trim()) {
                 return;

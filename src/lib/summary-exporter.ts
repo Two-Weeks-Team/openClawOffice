@@ -1,4 +1,5 @@
 import type { OfficeEvent, OfficeRun, OfficeSnapshot } from "../types/office";
+import { indexRunKnowledgeByRunId, type RunKnowledgeEntry } from "./run-notes-store";
 
 export type SummaryTemplate = "daily" | "incident";
 export type SummaryWindow = "5m" | "1h" | "24h" | "all";
@@ -8,6 +9,7 @@ export type SummaryExportFilters = {
   agentId?: string;
   runId?: string;
   screenshotPaths?: string[];
+  runKnowledgeEntries?: RunKnowledgeEntry[];
 };
 
 export type SummaryKpis = {
@@ -48,6 +50,13 @@ export type SummaryEventRecord = {
   text: string;
 };
 
+export type SummaryRunKnowledgeRecord = {
+  runId: string;
+  note: string;
+  tags: string[];
+  updatedAt: number;
+};
+
 export type SummaryReport = {
   schemaVersion: "1.0";
   template: SummaryTemplate;
@@ -66,6 +75,7 @@ export type SummaryReport = {
   topAgents: SummaryTopAgent[];
   failedRuns: SummaryFailedRun[];
   recentEvents: SummaryEventRecord[];
+  runKnowledge: SummaryRunKnowledgeRecord[];
   screenshots: string[];
 };
 
@@ -108,6 +118,39 @@ function normalizeScreenshotPaths(paths: string[] | undefined): string[] {
     unique.add(normalized);
   }
   return [...unique];
+}
+
+function normalizeRunKnowledgeEntries(
+  entries: RunKnowledgeEntry[] | undefined,
+): Map<string, SummaryRunKnowledgeRecord> {
+  if (!entries || entries.length === 0) {
+    return new Map();
+  }
+  const indexed = indexRunKnowledgeByRunId(entries);
+  const byRunId = new Map<string, SummaryRunKnowledgeRecord>();
+  for (const entry of indexed.values()) {
+    const runId = entry.runId.trim();
+    if (!runId) {
+      continue;
+    }
+    const note = entry.note.trim();
+    const tags = [...new Set(entry.tags.map((tag) => tag.trim()).filter((tag) => Boolean(tag)))];
+    if (!note && tags.length === 0) {
+      continue;
+    }
+    const updatedAt = Number.isFinite(entry.updatedAt) ? entry.updatedAt : 0;
+    if (updatedAt <= 0) {
+      continue;
+    }
+    const normalized: SummaryRunKnowledgeRecord = {
+      runId,
+      note,
+      tags,
+      updatedAt,
+    };
+    byRunId.set(runId, normalized);
+  }
+  return byRunId;
 }
 
 function runStartedAt(run: OfficeRun): number {
@@ -298,6 +341,7 @@ export function buildSummaryReport(
   const normalizedAgentId = normalizeFilterValue(filters.agentId);
   const normalizedRunId = normalizeFilterValue(filters.runId);
   const screenshots = normalizeScreenshotPaths(filters.screenshotPaths);
+  const runKnowledgeByRunId = normalizeRunKnowledgeEntries(filters.runKnowledgeEntries);
 
   const runs = filterRuns(snapshot, bounds, normalizedAgentId, normalizedRunId);
   const events = filterEvents(snapshot, bounds, normalizedAgentId, normalizedRunId).sort(
@@ -401,6 +445,11 @@ export function buildSummaryReport(
     at: event.at,
     text: event.text,
   }));
+  const runKnowledge = runs
+    .map((run) => runKnowledgeByRunId.get(run.runId))
+    .filter((entry): entry is SummaryRunKnowledgeRecord => Boolean(entry))
+    .sort((left, right) => right.updatedAt - left.updatedAt)
+    .slice(0, 20);
 
   return {
     schemaVersion: "1.0",
@@ -420,6 +469,7 @@ export function buildSummaryReport(
     topAgents,
     failedRuns: failedRuns.slice(0, 12),
     recentEvents,
+    runKnowledge,
     screenshots,
   };
 }
@@ -486,6 +536,29 @@ function renderScreenshotSection(screenshots: string[]): string {
   return screenshots.map((path) => `- [${path}](${path})`).join("\n");
 }
 
+function escapeMarkdownText(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/([`*_{}()[\]#+.!|>~-])/g, "\\$1");
+}
+
+function renderRunKnowledge(records: SummaryRunKnowledgeRecord[]): string {
+  if (records.length === 0) {
+    return "No saved run notes for this scope.";
+  }
+  return records
+    .map((record) => {
+      const tagText =
+        record.tags.length > 0
+          ? record.tags.map((tag) => `#${escapeMarkdownText(tag)}`).join(" ")
+          : "(no tags)";
+      const noteLines = escapeMarkdownText(record.note || "(no note)")
+        .split(/\r?\n/)
+        .map((line, index) => (index === 0 ? line : `    ${line}`))
+        .join("\n");
+      return `- ${escapeMarkdownText(record.runId)} | ${tagText} | updated ${escapeMarkdownText(formatDatetime(record.updatedAt))}\n  - ${noteLines}`;
+    })
+    .join("\n");
+}
+
 export function renderSummaryMarkdown(report: SummaryReport): string {
   const header =
     report.template === "incident" ? "Incident Summary" : "Daily Operations Summary";
@@ -529,6 +602,9 @@ export function renderSummaryMarkdown(report: SummaryReport): string {
     "",
     report.template === "incident" ? "## Timeline Evidence" : "## Recent Events",
     renderRecentEvents(report.recentEvents),
+    "",
+    "## Run Notes",
+    renderRunKnowledge(report.runKnowledge),
     "",
     "## Screenshot Links",
     renderScreenshotSection(report.screenshots),
