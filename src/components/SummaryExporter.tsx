@@ -8,12 +8,14 @@ import {
   type SummaryTemplate,
   type SummaryWindow,
 } from "../lib/summary-exporter";
+import type { RunKnowledgeEntry } from "../lib/run-notes-store";
 import type { OfficeSnapshot } from "../types/office";
 
 type Props = {
   snapshot: OfficeSnapshot;
   defaultAgentId?: string | null;
   defaultRunId?: string | null;
+  runKnowledgeEntries?: RunKnowledgeEntry[];
   onNotify?: (kind: "success" | "error" | "info", message: string) => void;
 };
 
@@ -40,6 +42,7 @@ export function SummaryExporter({
   snapshot,
   defaultAgentId = null,
   defaultRunId = null,
+  runKnowledgeEntries = [],
   onNotify,
 }: Props) {
   const [template, setTemplate] = useState<SummaryTemplate>("daily");
@@ -71,6 +74,7 @@ export function SummaryExporter({
         agentId,
         runId,
         screenshotPaths: parseScreenshotPaths(screenshotsInput),
+        runKnowledgeEntries,
       });
 
       if (format === "md" || format === "both") {

@@ -13,6 +13,7 @@ import {
   upsertSavedRunComparison,
   type SavedRunComparison,
 } from "../lib/run-comparison-store";
+import type { RunKnowledgeEntry } from "../lib/run-notes-store";
 import type {
   OfficeEvent,
   OfficeEventType,
@@ -24,11 +25,18 @@ import type {
 type Props = {
   snapshot: OfficeSnapshot;
   selectedEntityId: string | null;
+  runKnowledgeByRunId: Map<string, RunKnowledgeEntry>;
+  onUpsertRunKnowledge?: (input: { runId: string; note: string; tags: string[] }) => void;
+  onRemoveRunKnowledge?: (runId: string) => void;
   onJumpToRun?: (runId: string) => void;
   onClose: () => void;
 };
 
 type DetailPanelTab = "overview" | "sessions" | "runs" | "diff";
+type RunKnowledgeDraft = {
+  note: string;
+  tagsInput: string;
+};
 
 const DETAIL_PANEL_TABS: Array<{ id: DetailPanelTab; label: string }> = [
   { id: "overview", label: "Overview" },
@@ -92,9 +100,42 @@ function eventTypeLabel(event: OfficeEvent): string {
   return EVENT_TYPE_LABELS[event.type] ?? event.type.toUpperCase();
 }
 
-export function EntityDetailPanel({ snapshot, selectedEntityId, onJumpToRun, onClose }: Props) {
+function parseRunTagsInput(value: string): string[] {
+  const seen = new Set<string>();
+  const tags: string[] = [];
+  for (const chunk of value.split(",")) {
+    const normalized = chunk.trim().replace(/^#+/, "").toLowerCase();
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    tags.push(normalized);
+  }
+  return tags;
+}
+
+function runKnowledgeDraftFromEntry(entry: RunKnowledgeEntry | undefined): RunKnowledgeDraft {
+  return {
+    note: entry?.note ?? "",
+    tagsInput: entry?.tags.join(", ") ?? "",
+  };
+}
+
+export function EntityDetailPanel({
+  snapshot,
+  selectedEntityId,
+  runKnowledgeByRunId,
+  onUpsertRunKnowledge,
+  onRemoveRunKnowledge,
+  onJumpToRun,
+  onClose,
+}: Props) {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<DetailPanelTab>("overview");
+  const [runTagFilter, setRunTagFilter] = useState("");
+  const [runKnowledgeDraftByRunId, setRunKnowledgeDraftByRunId] = useState<
+    Record<string, RunKnowledgeDraft>
+  >({});
   const [savedComparisons, setSavedComparisons] = useState<SavedRunComparison[]>(
     loadSavedRunComparisons,
   );
@@ -211,6 +252,29 @@ export function EntityDetailPanel({ snapshot, selectedEntityId, onJumpToRun, onC
     }
     return savedComparisons.filter((item) => item.entityId === readyModel.entity.id);
   }, [isDiffTabReady, readyModel, savedComparisons]);
+  const normalizedRunTagFilter = useMemo(
+    () => runTagFilter.trim().replace(/^#+/, "").toLowerCase(),
+    [runTagFilter],
+  );
+  const filteredRecentRuns = useMemo(() => {
+    if (!readyModel) {
+      return [];
+    }
+    if (!normalizedRunTagFilter) {
+      return readyModel.recentRuns;
+    }
+    return readyModel.recentRuns.filter((item) => {
+      const entry = runKnowledgeByRunId.get(item.run.runId);
+      const tagMatched = entry?.tags.some((tag) => tag.includes(normalizedRunTagFilter)) ?? false;
+      const noteMatched =
+        entry?.note.toLowerCase().includes(normalizedRunTagFilter) ?? false;
+      return (
+        tagMatched ||
+        noteMatched ||
+        item.run.runId.toLowerCase().includes(normalizedRunTagFilter)
+      );
+    });
+  }, [normalizedRunTagFilter, readyModel, runKnowledgeByRunId]);
 
   const renderCopyValue = (label: string, key: string, value: string | undefined) => (
     <div>
@@ -252,6 +316,46 @@ export function EntityDetailPanel({ snapshot, selectedEntityId, onJumpToRun, onC
 
   const handleDeleteSavedComparison = (id: string) => {
     setSavedComparisons((prev) => removeSavedRunComparison(prev, id));
+  };
+
+  const updateRunKnowledgeDraft = (
+    runId: string,
+    patch: Partial<RunKnowledgeDraft>,
+  ) => {
+    setRunKnowledgeDraftByRunId((prev) => {
+      const current = prev[runId] ?? runKnowledgeDraftFromEntry(runKnowledgeByRunId.get(runId));
+      return {
+        ...prev,
+        [runId]: {
+          ...current,
+          ...patch,
+        },
+      };
+    });
+  };
+
+  const saveRunKnowledge = (runId: string) => {
+    if (!onUpsertRunKnowledge) {
+      return;
+    }
+    const draft =
+      runKnowledgeDraftByRunId[runId] ?? runKnowledgeDraftFromEntry(runKnowledgeByRunId.get(runId));
+    onUpsertRunKnowledge({
+      runId,
+      note: draft.note,
+      tags: parseRunTagsInput(draft.tagsInput),
+    });
+  };
+
+  const clearRunKnowledge = (runId: string) => {
+    onRemoveRunKnowledge?.(runId);
+    setRunKnowledgeDraftByRunId((prev) => ({
+      ...prev,
+      [runId]: {
+        note: "",
+        tagsInput: "",
+      },
+    }));
   };
 
   const isSavedComparisonActive = (saved: SavedRunComparison): boolean => {
@@ -475,55 +579,146 @@ export function EntityDetailPanel({ snapshot, selectedEntityId, onJumpToRun, onC
             <div role="tabpanel" id="detail-tabpanel-runs" aria-labelledby="detail-tab-runs">
               <section className="detail-section">
                 <h3>Runs (Recent 6)</h3>
+                <label className="detail-run-filter">
+                  <span>Tag Filter</span>
+                  <input
+                    type="text"
+                    placeholder="incident, retry, runId"
+                    value={runTagFilter}
+                    onChange={(event) => {
+                      setRunTagFilter(event.target.value);
+                    }}
+                  />
+                </label>
                 {readyModel.recentRuns.length === 0 ? (
                   <p className="detail-muted">No related runs were found.</p>
+                ) : filteredRecentRuns.length === 0 ? (
+                  <p className="detail-muted">No runs match the current tag filter.</p>
                 ) : (
                   <ol className="detail-run-list">
-                    {readyModel.recentRuns.map((item) => (
-                      <li key={item.run.runId} className="detail-run-item">
-                        <div className="detail-run-top">
-                          <strong>{item.run.runId}</strong>
-                          <div className="detail-run-actions">
-                            <button
-                              type="button"
-                              className="detail-copy-button"
-                              onClick={() => {
-                                void copyText(`run:${item.run.runId}`, item.run.runId);
-                              }}
-                            >
-                              {copiedKey === `run:${item.run.runId}` ? "Copied" : "Copy"}
-                            </button>
-                            {onJumpToRun ? (
+                    {filteredRecentRuns.map((item) => {
+                      const runId = item.run.runId;
+                      const entry = runKnowledgeByRunId.get(runId);
+                      const draft =
+                        runKnowledgeDraftByRunId[runId] ?? runKnowledgeDraftFromEntry(entry);
+                      const draftTags = parseRunTagsInput(draft.tagsInput);
+                      const savedTags = entry?.tags ?? [];
+                      const savedNote = entry?.note ?? "";
+                      const isKnowledgeDirty =
+                        draft.note.trim() !== savedNote ||
+                        draftTags.join(",") !== savedTags.join(",");
+                      const hasSavedKnowledge = Boolean(savedNote || savedTags.length > 0);
+
+                      return (
+                        <li key={runId} className="detail-run-item">
+                          <div className="detail-run-top">
+                            <strong>{runId}</strong>
+                            <div className="detail-run-actions">
                               <button
                                 type="button"
                                 className="detail-copy-button"
                                 onClick={() => {
-                                  onJumpToRun(item.run.runId);
+                                  void copyText(`run:${runId}`, runId);
                                 }}
                               >
-                                Jump
+                                {copiedKey === `run:${runId}` ? "Copied" : "Copy"}
                               </button>
-                            ) : null}
+                              {onJumpToRun ? (
+                                <button
+                                  type="button"
+                                  className="detail-copy-button"
+                                  onClick={() => {
+                                    onJumpToRun(runId);
+                                  }}
+                                >
+                                  Jump
+                                </button>
+                              ) : null}
+                            </div>
                           </div>
-                        </div>
-                        <div className="detail-run-meta">
-                          <span className={`detail-tag ${item.run.status}`}>{runStatusLabel(item.run)}</span>
-                          <span>
-                            {item.run.parentAgentId} {"->"} {item.run.childAgentId}
-                          </span>
-                          <span>model: {item.model}</span>
-                          <span>tokens: {item.tokenEstimate}</span>
-                          <span>latency: {formatLatency(item.latencyMs)}</span>
-                          <span>events: {item.eventCount}</span>
-                          <span>cleanup: {item.run.cleanup}</span>
-                        </div>
-                        <p className="detail-run-task">{item.run.task}</p>
-                        <p className="detail-run-time">
-                          created {formatAt(item.run.createdAt)} | start {formatAt(item.run.startedAt)} | end{" "}
-                          {formatAt(item.run.endedAt)}
-                        </p>
-                      </li>
-                    ))}
+                          <div className="detail-run-meta">
+                            <span className={`detail-tag ${item.run.status}`}>{runStatusLabel(item.run)}</span>
+                            <span>
+                              {item.run.parentAgentId} {"->"} {item.run.childAgentId}
+                            </span>
+                            <span>model: {item.model}</span>
+                            <span>tokens: {item.tokenEstimate}</span>
+                            <span>latency: {formatLatency(item.latencyMs)}</span>
+                            <span>events: {item.eventCount}</span>
+                            <span>cleanup: {item.run.cleanup}</span>
+                          </div>
+                          {entry?.tags.length ? (
+                            <div className="detail-run-tags">
+                              {entry.tags.map((tag) => (
+                                <span key={`${runId}:${tag}`} className="detail-tag detail-tag-note">
+                                  #{tag}
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
+                          <p className="detail-run-task">{item.run.task}</p>
+                          <p className="detail-run-time">
+                            created {formatAt(item.run.createdAt)} | start {formatAt(item.run.startedAt)} | end{" "}
+                            {formatAt(item.run.endedAt)}
+                          </p>
+                          <div className="detail-run-knowledge">
+                            <label>
+                              Tags (comma)
+                              <input
+                                type="text"
+                                placeholder="incident, retry"
+                                value={draft.tagsInput}
+                                onChange={(event) => {
+                                  updateRunKnowledgeDraft(runId, {
+                                    tagsInput: event.target.value,
+                                  });
+                                }}
+                              />
+                            </label>
+                            <label>
+                              Note
+                              <textarea
+                                rows={2}
+                                placeholder="Run context, failure root cause, follow-up..."
+                                value={draft.note}
+                                onChange={(event) => {
+                                  updateRunKnowledgeDraft(runId, {
+                                    note: event.target.value,
+                                  });
+                                }}
+                              />
+                            </label>
+                            <div className="detail-run-knowledge-actions">
+                              <button
+                                type="button"
+                                className="detail-copy-button"
+                                disabled={!isKnowledgeDirty}
+                                onClick={() => {
+                                  saveRunKnowledge(runId);
+                                }}
+                              >
+                                Save Note
+                              </button>
+                              <button
+                                type="button"
+                                className="detail-copy-button"
+                                disabled={!hasSavedKnowledge && draft.note.trim().length === 0 && draftTags.length === 0}
+                                onClick={() => {
+                                  clearRunKnowledge(runId);
+                                }}
+                              >
+                                Clear Note
+                              </button>
+                              {entry ? (
+                                <small>saved {formatAt(entry.updatedAt)}</small>
+                              ) : (
+                                <small>not saved</small>
+                              )}
+                            </div>
+                          </div>
+                        </li>
+                      );
+                    })}
                   </ol>
                 )}
               </section>

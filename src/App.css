@@ -2478,6 +2478,25 @@ body {
   gap: 8px;
 }
 
+.detail-run-filter {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 8px;
+  font-size: 0.63rem;
+  color: #9fcfdc;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.detail-run-filter input {
+  border-radius: 8px;
+  border: 1px solid rgba(151, 229, 255, 0.3);
+  background: rgba(8, 30, 43, 0.8);
+  color: #d9f6ff;
+  padding: 7px 8px;
+  font-size: 0.7rem;
+}
+
 .detail-run-item,
 .detail-message-item {
   border: 1px solid rgba(136, 219, 255, 0.22);
@@ -2512,6 +2531,13 @@ body {
   color: #addcea;
 }
 
+.detail-run-tags {
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
 .detail-tag {
   border-radius: 999px;
   border: 1px solid rgba(170, 233, 255, 0.4);
@@ -2540,6 +2566,11 @@ body {
   color: #ffe5b5;
 }
 
+.detail-tag.detail-tag-note {
+  border-color: rgba(173, 236, 255, 0.5);
+  color: #c8f2ff;
+}
+
 .detail-run-task {
   margin: 6px 0 0;
   font-size: 0.71rem;
@@ -2551,6 +2582,46 @@ body {
   margin: 6px 0 0;
   font-size: 0.64rem;
   color: #8fc8dc;
+}
+
+.detail-run-knowledge {
+  margin-top: 7px;
+  display: grid;
+  gap: 6px;
+}
+
+.detail-run-knowledge label {
+  display: grid;
+  gap: 4px;
+  font-size: 0.62rem;
+  color: #9ac9d8;
+}
+
+.detail-run-knowledge input,
+.detail-run-knowledge textarea {
+  border-radius: 8px;
+  border: 1px solid rgba(147, 225, 255, 0.3);
+  background: rgba(5, 26, 37, 0.8);
+  color: #d8f5ff;
+  font-size: 0.68rem;
+  padding: 6px 7px;
+}
+
+.detail-run-knowledge textarea {
+  resize: vertical;
+  min-height: 44px;
+}
+
+.detail-run-knowledge-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.detail-run-knowledge-actions small {
+  font-size: 0.6rem;
+  color: #8fbece;
 }
 
 .detail-message-item p {
