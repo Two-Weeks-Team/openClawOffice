@@ -177,6 +177,7 @@ pnpm readiness:gate
 
 - Stage rehearsal: `local25 -> local50`
 - Gate policy and decision template: `docs/readiness-gate.md`
+- v1-local50 decision record: `docs/v1-local50-release-decision.md`
 - Gate output artifacts: `.reports/readiness/readiness-latest.json`, `.reports/readiness/readiness-latest.md`
 - Operator routine: `docs/operator-playbook.md`
 
