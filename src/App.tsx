@@ -39,6 +39,9 @@ function App() {
   const { snapshot, connected, liveSource, error } = useOfficeStream();
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
   const [activeEventId, setActiveEventId] = useState<string | null>(null);
+  const [timelineLaneHighlightAgentId, setTimelineLaneHighlightAgentId] = useState<string | null>(
+    null,
+  );
   const [roomOptions, setRoomOptions] = useState<string[]>([]);
   const [matchCount, setMatchCount] = useState<number | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
@@ -165,7 +168,9 @@ function App() {
   const failed = subagents.filter((entity) => entity.status === "error").length;
   const diagnostics = snapshot.diagnostics.slice(0, 2);
   const highlightRunId = activeEvent?.runId ?? (timelineFilters.runId.trim() || null);
-  const highlightAgentId = activeEvent?.agentId ?? (timelineFilters.agentId.trim() || null);
+  const timelineFilterAgentId = timelineFilters.agentId.trim();
+  const highlightAgentId =
+    activeEvent?.agentId ?? (timelineFilterAgentId || timelineLaneHighlightAgentId || null);
   const hasEntityFilter =
     opsFilters.query.trim().length > 0 ||
     opsFilters.status !== "all" ||
@@ -388,6 +393,7 @@ function App() {
         />
         <div className="workspace-side">
           <EventRail
+            entities={snapshot.entities}
             events={snapshot.events}
             runGraph={snapshot.runGraph}
             now={snapshot.generatedAt}
@@ -395,6 +401,9 @@ function App() {
             onFiltersChange={setTimelineFilters}
             activeEventId={activeEventId}
             onActiveEventIdChange={setActiveEventId}
+            onLaneContextChange={(next) => {
+              setTimelineLaneHighlightAgentId(next.highlightAgentId);
+            }}
           />
           <EntityDetailPanel
             key={selectedEntityId ?? "detail-empty"}

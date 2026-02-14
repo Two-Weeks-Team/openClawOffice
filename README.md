@@ -40,6 +40,7 @@ Web-based visual command center for OpenClaw agents and subagents.
 - Lifecycle motion tokens for spawn/start/end/error/cleanup + reduced-motion fallback
 - Entity detail panel (`Overview / Sessions / Runs / Messages / Metrics`) with copy actions
 - Timeline debugger with `runId/agentId/status` filters + playback + run deep link
+- Multi-lane timeline groups (`room`, `agent`, `subagent`) with lane collapse + density summary
 
 ## Motion Lifecycle Guide
 
