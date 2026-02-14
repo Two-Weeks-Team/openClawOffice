@@ -2,7 +2,9 @@ import { useMemo, useState } from "react";
 import {
   THROUGHPUT_WINDOWS,
   buildAgentThroughputBreakdown,
+  buildThroughputHotspots,
   buildThroughputOutliers,
+  buildThroughputWindowComparison,
   buildThroughputSeries,
   buildThroughputWindowMetrics,
   type ThroughputWindow,
@@ -37,6 +39,66 @@ function formatDuration(value: number | null): string {
     return `${(value / 1000).toFixed(1)}s`;
   }
   return `${(value / 60_000).toFixed(1)}m`;
+}
+
+function formatSignedPercent(value: number | null): string {
+  if (value === null) {
+    return "-";
+  }
+  const rounded = Math.round(value * 100);
+  if (rounded === 0) {
+    return "0%";
+  }
+  const sign = rounded > 0 ? "+" : "";
+  return `${sign}${rounded}%`;
+}
+
+function formatSignedDuration(value: number | null): string {
+  if (value === null) {
+    return "-";
+  }
+  const abs = Math.abs(value);
+  if (abs < 1000) {
+    const rounded = Math.round(value);
+    if (rounded === 0) {
+      return "0ms";
+    }
+    const sign = rounded > 0 ? "+" : "";
+    return `${sign}${rounded}ms`;
+  }
+  if (abs < 60_000) {
+    const seconds = Number((value / 1000).toFixed(1));
+    if (seconds === 0) {
+      return "0.0s";
+    }
+    const sign = seconds > 0 ? "+" : "";
+    return `${sign}${seconds.toFixed(1)}s`;
+  }
+  const minutes = Number((value / 60_000).toFixed(1));
+  if (minutes === 0) {
+    return "0.0m";
+  }
+  const sign = minutes > 0 ? "+" : "";
+  return `${sign}${minutes.toFixed(1)}m`;
+}
+
+function formatSignedNumber(value: number | null): string {
+  if (value === null) {
+    return "-";
+  }
+  const rounded = Number(value.toFixed(2));
+  if (rounded === 0) {
+    return "0.00";
+  }
+  const sign = rounded > 0 ? "+" : "";
+  return `${sign}${rounded.toFixed(2)}`;
+}
+
+function formatNumber(value: number | null): string {
+  if (value === null) {
+    return "-";
+  }
+  return value.toFixed(2);
 }
 
 function ratioToPercentHeight(value: number, max: number): string {
@@ -86,6 +148,22 @@ export function ThroughputDashboard({ snapshot }: Props) {
   const outliers = useMemo(
     () =>
       buildThroughputOutliers(snapshot, selectedWindow, {
+        now: snapshot.generatedAt,
+        agentId: effectiveDrillAgentId ?? undefined,
+      }),
+    [effectiveDrillAgentId, selectedWindow, snapshot],
+  );
+  const hotspots = useMemo(
+    () =>
+      buildThroughputHotspots(snapshot, selectedWindow, {
+        now: snapshot.generatedAt,
+        agentId: effectiveDrillAgentId ?? undefined,
+      }),
+    [effectiveDrillAgentId, selectedWindow, snapshot],
+  );
+  const windowComparison = useMemo(
+    () =>
+      buildThroughputWindowComparison(snapshot, selectedWindow, {
         now: snapshot.generatedAt,
         agentId: effectiveDrillAgentId ?? undefined,
       }),
@@ -144,6 +222,16 @@ export function ThroughputDashboard({ snapshot }: Props) {
         })}
       </div>
 
+      <div className="throughput-compare-strip" role="status" aria-live="polite">
+        <span>
+          vs prev {selectedWindow}:
+          {" "}completion {formatSignedPercent(windowComparison.completionRateDelta)}
+          {" "}avg {formatSignedDuration(windowComparison.avgDurationDeltaMs)}
+          {" "}error {formatSignedPercent(windowComparison.errorRatioDelta)}
+          {" "}queue {formatSignedNumber(windowComparison.queuePressureDelta)}
+        </span>
+      </div>
+
       <div className="throughput-kpi-grid">
         <article className="throughput-kpi-card">
           <span>Run Completion Rate</span>
@@ -161,6 +249,11 @@ export function ThroughputDashboard({ snapshot }: Props) {
           <span>Active Concurrency</span>
           <strong>{selectedMetrics.activeConcurrency}</strong>
           <small>peak concurrent runs in window</small>
+        </article>
+        <article className="throughput-kpi-card">
+          <span>Queue Pressure</span>
+          <strong>{formatNumber(selectedMetrics.queuePressureIndex)}</strong>
+          <small>backlog {selectedMetrics.queueBacklog}</small>
         </article>
         <article className="throughput-kpi-card">
           <span>Error Ratio</span>
@@ -291,7 +384,7 @@ export function ThroughputDashboard({ snapshot }: Props) {
       <section className="throughput-outlier-panel">
         <header>
           <h3>Anomaly Highlights</h3>
-          <p>Outlier candidates based on latency, error ratio, and completion drop.</p>
+          <p>Outlier candidates based on latency, error ratio, queue pressure, and completion drop.</p>
         </header>
 
         {outliers.length === 0 ? (
@@ -308,6 +401,49 @@ export function ThroughputDashboard({ snapshot }: Props) {
               </li>
             ))}
           </ul>
+        )}
+      </section>
+
+      <section className="throughput-hotspot-panel">
+        <header>
+          <h3>Queue/Latency Hotspots</h3>
+          <p>Top bottleneck candidates with pressure score and probable causes.</p>
+        </header>
+
+        {hotspots.length === 0 ? (
+          <p className="throughput-outlier-empty">No hotspot agents detected for this scope.</p>
+        ) : (
+          <ol className="throughput-hotspot-list">
+            {hotspots.slice(0, 8).map((hotspot, index) => (
+              <li key={`hotspot:${hotspot.agentId}`} className="throughput-hotspot-item">
+                <div className="throughput-hotspot-main">
+                  <strong>
+                    #{index + 1} {hotspot.agentId}
+                  </strong>
+                  <span>score {hotspot.bottleneckScore.toFixed(2)}</span>
+                </div>
+                <div className="throughput-hotspot-metrics">
+                  <span>queue {hotspot.queuePressure}</span>
+                  <span>p90 {formatDuration(hotspot.latencyP90Ms)}</span>
+                  <span>error {formatPercent(hotspot.errorRatio)}</span>
+                  <span>runs {hotspot.completedRuns}/{hotspot.startedRuns}</span>
+                </div>
+                <div className="throughput-hotspot-reasons">
+                  {hotspot.reasonHints.map((hint) => (
+                    <span key={`${hotspot.agentId}:${hint}`}>{hint}</span>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDrillAgentId((prev) => (prev === hotspot.agentId ? null : hotspot.agentId));
+                  }}
+                >
+                  {effectiveDrillAgentId === hotspot.agentId ? "Clear focus" : "Focus agent"}
+                </button>
+              </li>
+            ))}
+          </ol>
         )}
       </section>
     </section>

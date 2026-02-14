@@ -10,6 +10,8 @@ export type ThroughputWindowMetrics = {
   avgDurationMs: number | null;
   activeConcurrency: number;
   errorRatio: number | null;
+  queueBacklog: number;
+  queuePressureIndex: number | null;
   eventsInWindow: number;
   eventsPerMinute: number | null;
 };
@@ -46,6 +48,30 @@ export type ThroughputOutlier = {
   runId?: string;
 };
 
+export type ThroughputHotspot = {
+  agentId: string;
+  startedRuns: number;
+  completedRuns: number;
+  activeRuns: number;
+  queueBacklog: number;
+  queuePressure: number;
+  queuePressureIndex: number | null;
+  latencyP90Ms: number | null;
+  errorRatio: number | null;
+  bottleneckScore: number;
+  reasonHints: string[];
+};
+
+export type ThroughputWindowComparison = {
+  window: ThroughputWindow;
+  current: ThroughputWindowMetrics;
+  previous: ThroughputWindowMetrics;
+  completionRateDelta: number | null;
+  avgDurationDeltaMs: number | null;
+  errorRatioDelta: number | null;
+  queuePressureDelta: number | null;
+};
+
 export const THROUGHPUT_WINDOWS: ThroughputWindow[] = ["5m", "1h", "24h"];
 
 const WINDOW_MS: Record<ThroughputWindow, number> = {
@@ -53,6 +79,16 @@ const WINDOW_MS: Record<ThroughputWindow, number> = {
   "1h": 60 * 60_000,
   "24h": 24 * 60 * 60_000,
 };
+const BOTTLENECK_LATENCY_WEIGHT = 0.42;
+const BOTTLENECK_ERROR_WEIGHT = 0.34;
+const BOTTLENECK_QUEUE_WEIGHT = 0.24;
+const HOTSPOT_LATENCY_SCORE_THRESHOLD = 0.75;
+const HOTSPOT_MIN_LATENCY_MS = 30_000;
+const HOTSPOT_ERROR_RATIO_THRESHOLD = 0.35;
+const HOTSPOT_QUEUE_PRESSURE_THRESHOLD = 2;
+const HOTSPOT_QUEUE_PRESSURE_INDEX_THRESHOLD = 0.9;
+const HOTSPOT_COMPLETION_DROP_THRESHOLD = 0.5;
+const HOTSPOT_MIN_STARTED_FOR_COMPLETION_DROP = 3;
 
 type RunStats = {
   run: OfficeRun;
@@ -92,6 +128,15 @@ function resolveBounds(window: ThroughputWindow, now: number): WindowBounds {
   return {
     startAt: now - WINDOW_MS[window],
     endAt: now,
+  };
+}
+
+function resolvePreviousBounds(window: ThroughputWindow, now: number): WindowBounds {
+  const current = resolveBounds(window, now);
+  const span = current.endAt - current.startAt;
+  return {
+    startAt: current.startAt - span,
+    endAt: current.startAt - 1,
   };
 }
 
@@ -228,6 +273,50 @@ function eventsInWindow(snapshot: OfficeSnapshot, bounds: WindowBounds, agentId?
   return total;
 }
 
+function buildWindowMetricsForBounds(
+  snapshot: OfficeSnapshot,
+  runStats: RunStats[],
+  window: ThroughputWindow,
+  bounds: WindowBounds,
+  agentId?: string,
+): ThroughputWindowMetrics {
+  const startedInWindow = runStats.filter((item) => withinRange(item.startedAt, bounds));
+  const completedInWindow = startedInWindow.filter((item) => item.completedAt !== null);
+  const completedDurations = completedInWindow
+    .map((item) => item.durationMs)
+    .filter((value): value is number => typeof value === "number");
+  const errorRuns = completedInWindow.filter((item) => item.run.status === "error").length;
+  const activeConcurrency = peakConcurrency(runStats, bounds);
+  const queueBacklog = Math.max(0, startedInWindow.length - completedInWindow.length);
+
+  const eventCount = eventsInWindow(snapshot, bounds, agentId);
+  const eventRate = ratio(eventCount, WINDOW_MS[window] / 60_000);
+  const queuePressureIndex = ratio(
+    activeConcurrency + queueBacklog,
+    Math.max(1, startedInWindow.length),
+  );
+
+  return {
+    window,
+    startedRuns: startedInWindow.length,
+    completedRuns: completedInWindow.length,
+    completionRate: ratio(completedInWindow.length, startedInWindow.length),
+    avgDurationMs:
+      completedDurations.length === 0
+        ? null
+        : round(
+            completedDurations.reduce((sum, value) => sum + value, 0) / completedDurations.length,
+            0,
+          ),
+    activeConcurrency,
+    errorRatio: ratio(errorRuns, completedInWindow.length),
+    queueBacklog,
+    queuePressureIndex: queuePressureIndex === null ? null : round(queuePressureIndex),
+    eventsInWindow: eventCount,
+    eventsPerMinute: eventRate === null ? null : round(eventRate),
+  };
+}
+
 export function buildThroughputWindowMetrics(
   snapshot: OfficeSnapshot,
   options: DashboardSelectionOptions = {},
@@ -238,37 +327,66 @@ export function buildThroughputWindowMetrics(
   return Object.fromEntries(
     THROUGHPUT_WINDOWS.map((window) => {
       const bounds = resolveBounds(window, now);
-      const startedInWindow = runStats.filter((item) => withinRange(item.startedAt, bounds));
-      const completedInWindow = startedInWindow.filter((item) => item.completedAt !== null);
-      const completedDurations = completedInWindow
-        .map((item) => item.durationMs)
-        .filter((value): value is number => typeof value === "number");
-      const errorRuns = completedInWindow.filter((item) => item.run.status === "error").length;
-
-      const eventCount = eventsInWindow(snapshot, bounds, options.agentId);
-      const eventRate = ratio(eventCount, WINDOW_MS[window] / 60_000);
-
-      const metrics: ThroughputWindowMetrics = {
+      const metrics = buildWindowMetricsForBounds(
+        snapshot,
+        runStats,
         window,
-        startedRuns: startedInWindow.length,
-        completedRuns: completedInWindow.length,
-        completionRate: ratio(completedInWindow.length, startedInWindow.length),
-        avgDurationMs:
-          completedDurations.length === 0
-            ? null
-            : round(
-                completedDurations.reduce((sum, value) => sum + value, 0) / completedDurations.length,
-                0,
-              ),
-        activeConcurrency: peakConcurrency(runStats, bounds),
-        errorRatio: ratio(errorRuns, completedInWindow.length),
-        eventsInWindow: eventCount,
-        eventsPerMinute: eventRate === null ? null : round(eventRate),
-      };
-
+        bounds,
+        options.agentId,
+      );
       return [window, metrics] as const;
     }),
   ) as Record<ThroughputWindow, ThroughputWindowMetrics>;
+}
+
+export function buildThroughputWindowComparison(
+  snapshot: OfficeSnapshot,
+  window: ThroughputWindow,
+  options: DashboardSelectionOptions = {},
+): ThroughputWindowComparison {
+  const now = options.now ?? snapshot.generatedAt;
+  const runStats = selectRunStats(snapshot, options);
+  const current = buildWindowMetricsForBounds(
+    snapshot,
+    runStats,
+    window,
+    resolveBounds(window, now),
+    options.agentId,
+  );
+  const previous = buildWindowMetricsForBounds(
+    snapshot,
+    runStats,
+    window,
+    resolvePreviousBounds(window, now),
+    options.agentId,
+  );
+
+  const completionRateDelta =
+    current.completionRate === null || previous.completionRate === null
+      ? null
+      : round(current.completionRate - previous.completionRate, 3);
+  const avgDurationDeltaMs =
+    current.avgDurationMs === null || previous.avgDurationMs === null
+      ? null
+      : round(current.avgDurationMs - previous.avgDurationMs, 0);
+  const errorRatioDelta =
+    current.errorRatio === null || previous.errorRatio === null
+      ? null
+      : round(current.errorRatio - previous.errorRatio, 3);
+  const queuePressureDelta =
+    current.queuePressureIndex === null || previous.queuePressureIndex === null
+      ? null
+      : round(current.queuePressureIndex - previous.queuePressureIndex, 2);
+
+  return {
+    window,
+    current,
+    previous,
+    completionRateDelta,
+    avgDurationDeltaMs,
+    errorRatioDelta,
+    queuePressureDelta,
+  };
 }
 
 export function buildThroughputSeries(
@@ -385,6 +503,134 @@ export function buildAgentThroughputBreakdown(
     });
 }
 
+export function buildThroughputHotspots(
+  snapshot: OfficeSnapshot,
+  window: ThroughputWindow,
+  options: DashboardSelectionOptions = {},
+): ThroughputHotspot[] {
+  const now = options.now ?? snapshot.generatedAt;
+  const bounds = resolveBounds(window, now);
+  const runStats = selectRunStats(snapshot, options).filter((item) =>
+    withinRange(item.startedAt, bounds),
+  );
+  const statsByAgent = new Map<string, RunStats[]>();
+  for (const item of runStats) {
+    const bucket = statsByAgent.get(item.run.childAgentId);
+    if (bucket) {
+      bucket.push(item);
+    } else {
+      statsByAgent.set(item.run.childAgentId, [item]);
+    }
+  }
+
+  if (statsByAgent.size === 0) {
+    return [];
+  }
+
+  const candidateRows = [...statsByAgent.entries()].map(([agentId, items]) => {
+    const completed = items.filter((item) => item.completedAt !== null);
+    const durations = completed
+      .map((item) => item.durationMs)
+      .filter((value): value is number => typeof value === "number");
+    const activeRuns = items.filter((item) => item.run.status === "active").length;
+    const queueBacklog = Math.max(0, items.length - completed.length);
+    const queuePressure = queueBacklog + activeRuns;
+    const queuePressureIndex = ratio(queuePressure, Math.max(1, items.length));
+    const completionRate = ratio(completed.length, items.length);
+    const errorRatio = ratio(
+      completed.filter((item) => item.run.status === "error").length,
+      completed.length,
+    );
+    const latencyP90Ms = percentile(durations, 0.9);
+
+    return {
+      agentId,
+      startedRuns: items.length,
+      completedRuns: completed.length,
+      activeRuns,
+      queueBacklog,
+      queuePressure,
+      queuePressureIndex,
+      completionRate,
+      errorRatio,
+      latencyP90Ms,
+    };
+  });
+
+  const maxLatencyP90 = Math.max(
+    1,
+    ...candidateRows.map((row) => (row.latencyP90Ms === null ? 0 : row.latencyP90Ms)),
+  );
+  const maxQueuePressure = Math.max(1, ...candidateRows.map((row) => row.queuePressure));
+
+  return candidateRows
+    .map((row) => {
+      const latencyScore =
+        row.latencyP90Ms === null ? 0 : round(row.latencyP90Ms / maxLatencyP90, 3);
+      const errorScore = row.errorRatio ?? 0;
+      const queueScore = round(row.queuePressure / maxQueuePressure, 3);
+      const bottleneckScore = round(
+        latencyScore * BOTTLENECK_LATENCY_WEIGHT +
+          errorScore * BOTTLENECK_ERROR_WEIGHT +
+          queueScore * BOTTLENECK_QUEUE_WEIGHT,
+        3,
+      );
+
+      const reasonHints: string[] = [];
+      if (
+        latencyScore >= HOTSPOT_LATENCY_SCORE_THRESHOLD &&
+        (row.latencyP90Ms ?? 0) >= HOTSPOT_MIN_LATENCY_MS
+      ) {
+        reasonHints.push("latency hotspot");
+      }
+      if (errorScore >= HOTSPOT_ERROR_RATIO_THRESHOLD) {
+        reasonHints.push("error-heavy");
+      }
+      if (
+        row.queuePressure >= HOTSPOT_QUEUE_PRESSURE_THRESHOLD ||
+        (row.queuePressureIndex ?? 0) >= HOTSPOT_QUEUE_PRESSURE_INDEX_THRESHOLD
+      ) {
+        reasonHints.push("queue pressure");
+      }
+      if (
+        (row.completionRate ?? 1) < HOTSPOT_COMPLETION_DROP_THRESHOLD &&
+        row.startedRuns >= HOTSPOT_MIN_STARTED_FOR_COMPLETION_DROP
+      ) {
+        reasonHints.push("completion drop");
+      }
+      if (reasonHints.length === 0) {
+        reasonHints.push("observe trend");
+      }
+
+      return {
+        agentId: row.agentId,
+        startedRuns: row.startedRuns,
+        completedRuns: row.completedRuns,
+        activeRuns: row.activeRuns,
+        queueBacklog: row.queueBacklog,
+        queuePressure: row.queuePressure,
+        queuePressureIndex:
+          row.queuePressureIndex === null ? null : round(row.queuePressureIndex, 2),
+        latencyP90Ms: row.latencyP90Ms === null ? null : round(row.latencyP90Ms, 0),
+        errorRatio: row.errorRatio === null ? null : round(row.errorRatio, 2),
+        bottleneckScore,
+        reasonHints,
+      } satisfies ThroughputHotspot;
+    })
+    .sort((left, right) => {
+      if (left.bottleneckScore !== right.bottleneckScore) {
+        return right.bottleneckScore - left.bottleneckScore;
+      }
+      if (left.queuePressure !== right.queuePressure) {
+        return right.queuePressure - left.queuePressure;
+      }
+      if (left.startedRuns !== right.startedRuns) {
+        return right.startedRuns - left.startedRuns;
+      }
+      return left.agentId.localeCompare(right.agentId);
+    });
+}
+
 export function buildThroughputOutliers(
   snapshot: OfficeSnapshot,
   window: ThroughputWindow,
@@ -422,12 +668,22 @@ export function buildThroughputOutliers(
 
   const agentBreakdown = buildAgentThroughputBreakdown(snapshot, window, options);
   for (const agent of agentBreakdown) {
+    const queueBacklog = Math.max(0, agent.startedRuns - agent.completedRuns);
     if (agent.completedRuns >= 2 && (agent.errorRatio ?? 0) >= 0.5) {
       outliers.push({
         id: `error:${agent.agentId}`,
         severity: "high",
         title: `Error hotspot ${agent.agentId}`,
         detail: `${Math.round((agent.errorRatio ?? 0) * 100)}% of completed runs failed`,
+        agentId: agent.agentId,
+      });
+    }
+    if ((queueBacklog >= 2 || agent.activeRuns >= 2) && (agent.completionRate ?? 1) < 0.8) {
+      outliers.push({
+        id: `queue:${agent.agentId}`,
+        severity: queueBacklog >= 3 ? "high" : "medium",
+        title: `Queue pressure ${agent.agentId}`,
+        detail: `backlog ${queueBacklog}, active ${agent.activeRuns}, completion ${agent.completedRuns}/${agent.startedRuns}`,
         agentId: agent.agentId,
       });
     }

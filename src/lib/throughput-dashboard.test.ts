@@ -3,7 +3,9 @@ import type { OfficeRun, OfficeSnapshot } from "../types/office";
 import { buildRunGraph } from "./run-graph";
 import {
   buildAgentThroughputBreakdown,
+  buildThroughputHotspots,
   buildThroughputOutliers,
+  buildThroughputWindowComparison,
   buildThroughputSeries,
   buildThroughputWindowMetrics,
 } from "./throughput-dashboard";
@@ -138,6 +140,8 @@ describe("throughput dashboard metrics", () => {
     expect(metrics["5m"].completionRate).toBe(0.5);
     expect(metrics["5m"].avgDurationMs).toBe(60_000);
     expect(metrics["5m"].activeConcurrency).toBe(2);
+    expect(metrics["5m"].queueBacklog).toBe(1);
+    expect(metrics["5m"].queuePressureIndex).toBe(1.5);
 
     expect(metrics["1h"].startedRuns).toBe(4);
     expect(metrics["1h"].completedRuns).toBe(3);
@@ -175,6 +179,8 @@ describe("throughput dashboard metrics", () => {
       makeRun({ runId: "run-fail-1", agentId: "agent-b", status: "error", startedOffsetMs: -2_700_000, endedOffsetMs: -2_640_000 }),
       makeRun({ runId: "run-fail-2", agentId: "agent-b", status: "error", startedOffsetMs: -2_500_000, endedOffsetMs: -2_430_000 }),
       makeRun({ runId: "run-slow", agentId: "agent-c", status: "ok", startedOffsetMs: -3_500_000, endedOffsetMs: -600_000 }),
+      makeRun({ runId: "run-queue-1", agentId: "agent-c", status: "active", startedOffsetMs: -1_900_000 }),
+      makeRun({ runId: "run-queue-2", agentId: "agent-c", status: "active", startedOffsetMs: -1_700_000 }),
     ]);
 
     const breakdown = buildAgentThroughputBreakdown(snapshot, "1h", { now: NOW });
@@ -192,5 +198,34 @@ describe("throughput dashboard metrics", () => {
     const outliers = buildThroughputOutliers(snapshot, "1h", { now: NOW });
     expect(outliers.some((item) => item.id === "slow:run-slow")).toBe(true);
     expect(outliers.some((item) => item.id === "error:agent-b")).toBe(true);
+    expect(outliers.some((item) => item.id === "queue:agent-c")).toBe(true);
+  });
+
+  it("builds hotspot ranking and current-vs-previous window deltas", () => {
+    const snapshot = makeSnapshot([
+      makeRun({ runId: "prev-fast-1", agentId: "agent-a", status: "ok", startedOffsetMs: -7_000_000, endedOffsetMs: -6_940_000 }),
+      makeRun({ runId: "prev-fast-2", agentId: "agent-a", status: "ok", startedOffsetMs: -6_800_000, endedOffsetMs: -6_740_000 }),
+      makeRun({ runId: "prev-ok-1", agentId: "agent-b", status: "ok", startedOffsetMs: -7_100_000, endedOffsetMs: -6_980_000 }),
+      makeRun({ runId: "prev-ok-2", agentId: "agent-b", status: "ok", startedOffsetMs: -6_900_000, endedOffsetMs: -6_820_000 }),
+      makeRun({ runId: "cur-a-1", agentId: "agent-a", status: "ok", startedOffsetMs: -3_000_000, endedOffsetMs: -2_930_000 }),
+      makeRun({ runId: "cur-a-2", agentId: "agent-a", status: "ok", startedOffsetMs: -2_800_000, endedOffsetMs: -2_720_000 }),
+      makeRun({ runId: "cur-a-3", agentId: "agent-a", status: "active", startedOffsetMs: -2_600_000 }),
+      makeRun({ runId: "cur-b-1", agentId: "agent-b", status: "error", startedOffsetMs: -2_500_000, endedOffsetMs: -2_360_000 }),
+      makeRun({ runId: "cur-b-2", agentId: "agent-b", status: "error", startedOffsetMs: -2_400_000, endedOffsetMs: -2_280_000 }),
+      makeRun({ runId: "cur-b-3", agentId: "agent-b", status: "active", startedOffsetMs: -2_200_000 }),
+    ]);
+
+    const hotspots = buildThroughputHotspots(snapshot, "1h", { now: NOW });
+    expect(hotspots[0]?.agentId).toBe("agent-b");
+    expect(hotspots[0]?.reasonHints).toContain("error-heavy");
+    expect(hotspots[0]?.reasonHints).toContain("queue pressure");
+
+    const comparison = buildThroughputWindowComparison(snapshot, "1h", { now: NOW });
+    expect(comparison.current.startedRuns).toBeGreaterThan(0);
+    expect(comparison.previous.startedRuns).toBeGreaterThan(0);
+    expect(comparison.errorRatioDelta).not.toBeNull();
+    expect((comparison.errorRatioDelta ?? 0)).toBeGreaterThan(0);
+    expect(comparison.queuePressureDelta).not.toBeNull();
+    expect((comparison.queuePressureDelta ?? 0)).toBeGreaterThan(0);
   });
 });
