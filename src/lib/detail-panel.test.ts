@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   buildDetailPanelModel,
+  buildDetailPanelModelCached,
   buildRunDiffForSelection,
+  prefetchDetailPanelModels,
   selectDefaultRunComparison,
 } from "./detail-panel";
 import { buildRunGraph } from "./run-graph";
@@ -195,6 +197,22 @@ describe("buildDetailPanelModel", () => {
     expect(model.recentRuns.length).toBeGreaterThan(0);
     expect(model.runDiff?.baseline.run.runId).toBe("run-3");
     expect(model.runDiff?.candidate.run.runId).toBe("run-2");
+  });
+
+  it("reuses cached detail models for repeated selections", () => {
+    const snapshot = makeSnapshot();
+    const first = buildDetailPanelModelCached(snapshot, "agent:main");
+    const second = buildDetailPanelModelCached(snapshot, "agent:main");
+    expect(first).toBe(second);
+  });
+
+  it("prefetches and warms model cache for related entities", () => {
+    const snapshot = makeSnapshot();
+    prefetchDetailPanelModels(snapshot, ["agent:main", "subagent:run-1"]);
+    const prefetched = buildDetailPanelModelCached(snapshot, "subagent:run-1");
+    const rebuilt = buildDetailPanelModelCached(snapshot, "subagent:run-1");
+    expect(prefetched).toBe(rebuilt);
+    expect(prefetched.status).toBe("ready");
   });
 });
 

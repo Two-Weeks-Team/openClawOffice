@@ -2091,6 +2091,13 @@ body {
   background: rgba(8, 31, 44, 0.78);
 }
 
+.detail-panel-lazy {
+  min-height: 120px;
+  display: grid;
+  align-content: center;
+  gap: 8px;
+}
+
 .detail-section h3 {
   margin: 0 0 8px;
   font-size: 0.76rem;

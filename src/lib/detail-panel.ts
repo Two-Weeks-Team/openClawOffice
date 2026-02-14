@@ -11,6 +11,76 @@ const MAX_DETAIL_EVENTS = 14;
 const MAX_RECENT_RUNS = 6;
 const MAX_MAJOR_EVENTS = 6;
 
+type DetailSnapshotIndex = {
+  runById: Map<string, OfficeRun>;
+  eventsByRunId: Map<string, OfficeEvent[]>;
+  eventsByAgentId: Map<string, OfficeEvent[]>;
+  eventsByParentAgentId: Map<string, OfficeEvent[]>;
+  modelByAgent: Map<string, string>;
+};
+
+const DETAIL_SNAPSHOT_INDEX_CACHE = new WeakMap<OfficeSnapshot, DetailSnapshotIndex>();
+const DETAIL_PANEL_MODEL_CACHE = new WeakMap<OfficeSnapshot, Map<string, DetailPanelModel>>();
+
+function cachedKeyForEntityId(selectedEntityId: string | null): string {
+  return selectedEntityId ?? "__empty__";
+}
+
+function pushEvent(map: Map<string, OfficeEvent[]>, key: string, event: OfficeEvent) {
+  const bucket = map.get(key);
+  if (bucket) {
+    bucket.push(event);
+    return;
+  }
+  map.set(key, [event]);
+}
+
+function getDetailSnapshotIndex(snapshot: OfficeSnapshot): DetailSnapshotIndex {
+  const cached = DETAIL_SNAPSHOT_INDEX_CACHE.get(snapshot);
+  if (cached) {
+    return cached;
+  }
+
+  const runById = indexRunsById(snapshot.runs);
+  const eventsByRunId = new Map<string, OfficeEvent[]>();
+  const eventsByAgentId = new Map<string, OfficeEvent[]>();
+  const eventsByParentAgentId = new Map<string, OfficeEvent[]>();
+  const modelByAgent = new Map<string, string>();
+
+  for (const event of snapshot.events) {
+    pushEvent(eventsByRunId, event.runId, event);
+    pushEvent(eventsByAgentId, event.agentId, event);
+    pushEvent(eventsByParentAgentId, event.parentAgentId, event);
+  }
+
+  for (const entity of snapshot.entities) {
+    if (!entity.model || modelByAgent.has(entity.agentId)) {
+      continue;
+    }
+    modelByAgent.set(entity.agentId, entity.model);
+  }
+
+  const index = {
+    runById,
+    eventsByRunId,
+    eventsByAgentId,
+    eventsByParentAgentId,
+    modelByAgent,
+  };
+  DETAIL_SNAPSHOT_INDEX_CACHE.set(snapshot, index);
+  return index;
+}
+
+function getDetailPanelModelCache(snapshot: OfficeSnapshot): Map<string, DetailPanelModel> {
+  const existing = DETAIL_PANEL_MODEL_CACHE.get(snapshot);
+  if (existing) {
+    return existing;
+  }
+  const cache = new Map<string, DetailPanelModel>();
+  DETAIL_PANEL_MODEL_CACHE.set(snapshot, cache);
+  return cache;
+}
+
 function trimTrailingSeparators(pathname: string): string {
   return pathname.replace(/[\\/]+$/, "");
 }
@@ -232,6 +302,7 @@ export function buildDetailPanelModel(
   snapshot: OfficeSnapshot,
   selectedEntityId: string | null,
 ): DetailPanelModel {
+  const detailIndex = getDetailSnapshotIndex(snapshot);
   const runStorePath = joinStatePath(snapshot.source.stateDir, "subagents", "runs.json");
   if (!selectedEntityId) {
     return {
@@ -268,7 +339,7 @@ export function buildDetailPanelModel(
     };
   }
 
-  const runById = indexRunsById(snapshot.runs);
+  const runById = detailIndex.runById;
 
   const linkedRun =
     entity.kind === "subagent" && entity.runId ? (runById.get(entity.runId) ?? null) : null;
@@ -300,28 +371,38 @@ export function buildDetailPanelModel(
 
   const relatedRunIds = new Set(relatedRuns.map((run) => run.runId));
   const runEvents = new Map<string, OfficeEvent[]>();
-  for (const event of snapshot.events) {
-    if (!relatedRunIds.has(event.runId)) {
+  for (const runId of relatedRunIds) {
+    const events = detailIndex.eventsByRunId.get(runId);
+    if (!events || events.length === 0) {
       continue;
     }
-    const bucket = runEvents.get(event.runId);
-    if (bucket) {
-      bucket.push(event);
-    } else {
-      runEvents.set(event.runId, [event]);
+    runEvents.set(runId, [...events]);
+  }
+
+  const relatedEventById = new Map<string, OfficeEvent>();
+  for (const runId of relatedRunIds) {
+    const events = detailIndex.eventsByRunId.get(runId) ?? [];
+    for (const event of events) {
+      relatedEventById.set(event.id, event);
+    }
+  }
+  if (entity.kind === "agent") {
+    const directEvents = detailIndex.eventsByAgentId.get(entity.agentId) ?? [];
+    for (const event of directEvents) {
+      relatedEventById.set(event.id, event);
+    }
+    const parentEvents = detailIndex.eventsByParentAgentId.get(entity.agentId) ?? [];
+    for (const event of parentEvents) {
+      relatedEventById.set(event.id, event);
+    }
+  } else if (entity.runId && !relatedRunIds.has(entity.runId)) {
+    const linkedEvents = detailIndex.eventsByRunId.get(entity.runId) ?? [];
+    for (const event of linkedEvents) {
+      relatedEventById.set(event.id, event);
     }
   }
 
-  const relatedEvents = snapshot.events
-    .filter((event) => {
-      if (relatedRunIds.has(event.runId)) {
-        return true;
-      }
-      if (entity.kind === "agent") {
-        return event.agentId === entity.agentId || event.parentAgentId === entity.agentId;
-      }
-      return event.runId === entity.runId;
-    })
+  const relatedEvents = [...relatedEventById.values()]
     .sort((a, b) => {
       if (a.at !== b.at) {
         return b.at - a.at;
@@ -330,12 +411,7 @@ export function buildDetailPanelModel(
     })
     .slice(0, MAX_DETAIL_EVENTS);
 
-  const modelByAgent = new Map<string, string>();
-  for (const snapshotEntity of snapshot.entities) {
-    if (snapshotEntity.model && !modelByAgent.has(snapshotEntity.agentId)) {
-      modelByAgent.set(snapshotEntity.agentId, snapshotEntity.model);
-    }
-  }
+  const modelByAgent = detailIndex.modelByAgent;
 
   const runInsights = relatedRuns.map((run) => {
     const runScopedEvents = runEvents.get(run.runId) ?? [];
@@ -430,4 +506,37 @@ export function buildDetailPanelModel(
     },
     paths,
   };
+}
+
+export function buildDetailPanelModelCached(
+  snapshot: OfficeSnapshot,
+  selectedEntityId: string | null,
+): DetailPanelModel {
+  const cache = getDetailPanelModelCache(snapshot);
+  const cacheKey = cachedKeyForEntityId(selectedEntityId);
+  const cached = cache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+  const model = buildDetailPanelModel(snapshot, selectedEntityId);
+  cache.set(cacheKey, model);
+  return model;
+}
+
+export function prefetchDetailPanelModels(snapshot: OfficeSnapshot, selectedEntityIds: string[]) {
+  if (selectedEntityIds.length === 0) {
+    return;
+  }
+  const cache = getDetailPanelModelCache(snapshot);
+  for (const entityId of selectedEntityIds) {
+    const normalized = entityId.trim();
+    if (!normalized) {
+      continue;
+    }
+    const key = cachedKeyForEntityId(normalized);
+    if (cache.has(key)) {
+      continue;
+    }
+    cache.set(key, buildDetailPanelModel(snapshot, normalized));
+  }
 }
