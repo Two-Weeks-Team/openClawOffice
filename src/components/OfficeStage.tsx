@@ -1,4 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import type { AlertSignal } from "../lib/alerts";
 import { buildBubbleLaneLayout, type BubbleLaneCandidate } from "../lib/bubble-lanes";
 import { buildPlacements, type PlacementMode } from "../lib/layout";
 import {
@@ -10,6 +11,7 @@ import { indexRunsById } from "../lib/run-graph";
 import { applySemanticRoomMappings, buildSemanticAssetRegistry } from "../lib/semantic-room-mapping";
 import {
   buildStageEntityRenderModels,
+  evaluateStageEntityPriority,
   type StageEntityRenderModel,
 } from "../lib/stage-render-batch";
 import type { OfficeEntity, OfficeRun, OfficeSnapshot } from "../types/office";
@@ -22,6 +24,7 @@ type Props = {
   watchedEntityIds?: string[];
   highlightRunId?: string | null;
   highlightAgentId?: string | null;
+  alertSignals?: AlertSignal[];
   filterEntityIds?: string[];
   hasEntityFilter?: boolean;
   roomFilterId?: string;
@@ -381,6 +384,7 @@ export function OfficeStage({
   watchedEntityIds = [],
   highlightRunId = null,
   highlightAgentId = null,
+  alertSignals = [],
   filterEntityIds = [],
   hasEntityFilter = false,
   roomFilterId = "all",
@@ -707,23 +711,64 @@ export function OfficeStage({
       ? highlightAgentId.trim()
       : null;
   const highlightedRun = normalizedHighlightRunId ? runById.get(normalizedHighlightRunId) : undefined;
+  const alertPrioritySets = useMemo(() => {
+    const criticalAlertRunIdSet = new Set<string>();
+    const criticalAlertAgentIdSet = new Set<string>();
+    const warningAlertRunIdSet = new Set<string>();
+    const warningAlertAgentIdSet = new Set<string>();
+
+    for (const signal of alertSignals) {
+      const runTargetSet = signal.severity === "critical" ? criticalAlertRunIdSet : warningAlertRunIdSet;
+      const agentTargetSet =
+        signal.severity === "critical" ? criticalAlertAgentIdSet : warningAlertAgentIdSet;
+      for (const runId of signal.runIds) {
+        runTargetSet.add(runId);
+      }
+      for (const agentId of signal.agentIds) {
+        agentTargetSet.add(agentId);
+      }
+    }
+
+    return {
+      hasCriticalAlertTargets:
+        criticalAlertRunIdSet.size > 0 || criticalAlertAgentIdSet.size > 0,
+      criticalAlertRunIdSet,
+      criticalAlertAgentIdSet,
+      warningAlertRunIdSet,
+      warningAlertAgentIdSet,
+    };
+  }, [alertSignals]);
 
   const sortedPlacements = useMemo(() => {
-    const watchedBoost = 2;
-    const pinnedBoost = 1;
     return [...placements].sort((left, right) => {
-      const leftPriority =
-        (watchedEntityIdSet.has(left.entity.id) ? watchedBoost : 0) +
-        (pinnedEntityIdSet.has(left.entity.id) ? pinnedBoost : 0);
-      const rightPriority =
-        (watchedEntityIdSet.has(right.entity.id) ? watchedBoost : 0) +
-        (pinnedEntityIdSet.has(right.entity.id) ? pinnedBoost : 0);
-      if (leftPriority !== rightPriority) {
-        return rightPriority - leftPriority;
+      const leftPriority = evaluateStageEntityPriority({
+        entity: left.entity,
+        isSelected: selectedEntityIdSet.has(left.entity.id),
+        isPinned: pinnedEntityIdSet.has(left.entity.id),
+        isWatched: watchedEntityIdSet.has(left.entity.id),
+        hasCriticalAlertTargets: alertPrioritySets.hasCriticalAlertTargets,
+        criticalAlertRunIdSet: alertPrioritySets.criticalAlertRunIdSet,
+        criticalAlertAgentIdSet: alertPrioritySets.criticalAlertAgentIdSet,
+        warningAlertRunIdSet: alertPrioritySets.warningAlertRunIdSet,
+        warningAlertAgentIdSet: alertPrioritySets.warningAlertAgentIdSet,
+      });
+      const rightPriority = evaluateStageEntityPriority({
+        entity: right.entity,
+        isSelected: selectedEntityIdSet.has(right.entity.id),
+        isPinned: pinnedEntityIdSet.has(right.entity.id),
+        isWatched: watchedEntityIdSet.has(right.entity.id),
+        hasCriticalAlertTargets: alertPrioritySets.hasCriticalAlertTargets,
+        criticalAlertRunIdSet: alertPrioritySets.criticalAlertRunIdSet,
+        criticalAlertAgentIdSet: alertPrioritySets.criticalAlertAgentIdSet,
+        warningAlertRunIdSet: alertPrioritySets.warningAlertRunIdSet,
+        warningAlertAgentIdSet: alertPrioritySets.warningAlertAgentIdSet,
+      });
+      if (leftPriority.score !== rightPriority.score) {
+        return rightPriority.score - leftPriority.score;
       }
       return left.y - right.y;
     });
-  }, [pinnedEntityIdSet, placements, watchedEntityIdSet]);
+  }, [alertPrioritySets, pinnedEntityIdSet, placements, selectedEntityIdSet, watchedEntityIdSet]);
 
   const runLinks = useMemo(() => {
     const hasTimelineHighlight = Boolean(normalizedHighlightRunId || normalizedHighlightAgentId);
@@ -913,6 +958,11 @@ export function OfficeStage({
         normalizedHighlightAgentId,
         highlightedRun,
         hasTimelineHighlight,
+        hasCriticalAlertTargets: alertPrioritySets.hasCriticalAlertTargets,
+        criticalAlertRunIdSet: alertPrioritySets.criticalAlertRunIdSet,
+        criticalAlertAgentIdSet: alertPrioritySets.criticalAlertAgentIdSet,
+        warningAlertRunIdSet: alertPrioritySets.warningAlertRunIdSet,
+        warningAlertAgentIdSet: alertPrioritySets.warningAlertAgentIdSet,
         entityZOffset: ENTITY_Z_OFFSET,
         spawnPulseWindowMs: SPAWN_PULSE_WINDOW_MS,
         startOrbitWindowMs: START_ORBIT_WINDOW_MS,
@@ -921,6 +971,7 @@ export function OfficeStage({
         errorShakeWindowMs: ERROR_SHAKE_WINDOW_MS,
       }),
     [
+      alertPrioritySets,
       filteredEntityIdSet,
       focusMode,
       hasEntityFilter,

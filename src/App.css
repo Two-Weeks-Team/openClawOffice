@@ -1372,6 +1372,26 @@ body {
   box-shadow: 0 0 0 2px rgba(130, 255, 190, 0.3), 0 7px 14px rgba(0, 0, 0, 0.3);
 }
 
+.entity-token.priority-critical .sprite-shell {
+  box-shadow: 0 0 0 2px rgba(255, 166, 166, 0.6), 0 0 20px rgba(255, 124, 124, 0.45);
+}
+
+.entity-token.priority-critical .token-meta strong {
+  color: #ffe3e3;
+}
+
+.entity-token.priority-high .sprite-shell {
+  box-shadow: 0 0 0 2px rgba(255, 221, 156, 0.52), 0 0 15px rgba(255, 210, 126, 0.3);
+}
+
+.entity-token.priority-high .token-meta strong {
+  color: #fff2cc;
+}
+
+.entity-token.alert-critical .token-meta span {
+  color: #ffd2d2;
+}
+
 .entity-token.is-occluded {
   opacity: 0.63;
 }
@@ -1414,6 +1434,11 @@ body {
 
 .entity-token.is-filtered-out {
   opacity: 0.22;
+}
+
+.entity-token.is-secondary {
+  opacity: 0.52;
+  filter: saturate(0.76) brightness(0.9);
 }
 
 .entity-token.is-muted {

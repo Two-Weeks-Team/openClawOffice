@@ -15,6 +15,29 @@ export type StageOcclusion = {
   bottom: number;
 };
 
+export type StagePriorityBand = "critical" | "high" | "normal";
+
+type StageAlertSeverity = "critical" | "warning" | null;
+
+export type StageEntityPriority = {
+  score: number;
+  band: StagePriorityBand;
+  alertSeverity: StageAlertSeverity;
+  isSecondary: boolean;
+};
+
+export type EvaluateStageEntityPriorityInput = {
+  entity: OfficeEntity;
+  isSelected: boolean;
+  isPinned: boolean;
+  isWatched: boolean;
+  hasCriticalAlertTargets: boolean;
+  criticalAlertRunIdSet: Set<string>;
+  criticalAlertAgentIdSet: Set<string>;
+  warningAlertRunIdSet: Set<string>;
+  warningAlertAgentIdSet: Set<string>;
+};
+
 export type StageEntityRenderModel = {
   id: string;
   kind: OfficeEntity["kind"];
@@ -31,6 +54,8 @@ export type StageEntityRenderModel = {
     backgroundPosition: string;
   };
   isSelected: boolean;
+  priorityBand: StagePriorityBand;
+  priorityScore: number;
 };
 
 export type BuildStageEntityRenderModelsInput = {
@@ -50,6 +75,11 @@ export type BuildStageEntityRenderModelsInput = {
   normalizedHighlightAgentId: string | null;
   highlightedRun?: OfficeRun;
   hasTimelineHighlight: boolean;
+  hasCriticalAlertTargets: boolean;
+  criticalAlertRunIdSet: Set<string>;
+  criticalAlertAgentIdSet: Set<string>;
+  warningAlertRunIdSet: Set<string>;
+  warningAlertAgentIdSet: Set<string>;
   entityZOffset: number;
   spawnPulseWindowMs: number;
   startOrbitWindowMs: number;
@@ -60,6 +90,13 @@ export type BuildStageEntityRenderModelsInput = {
 
 const MAX_SPRITE_STYLE_CACHE_SIZE = 1_024;
 const SPRITE_STYLE_CACHE = new Map<string, { backgroundImage: string; backgroundPosition: string }>();
+const STATUS_PRIORITY_WEIGHT: Record<OfficeEntity["status"], number> = {
+  active: 130,
+  idle: 36,
+  offline: 14,
+  ok: 65,
+  error: 260,
+};
 
 function hashString(input: string): number {
   let hash = 0;
@@ -156,6 +193,91 @@ function isLinkedToTimelineHighlight(params: {
   return runHighlightMatch || agentHighlightMatch;
 }
 
+function entityMatchesRunAlert(entity: OfficeEntity, runIdSet: Set<string>): boolean {
+  return entity.kind === "subagent" && typeof entity.runId === "string" && runIdSet.has(entity.runId);
+}
+
+function entityMatchesAgentAlert(entity: OfficeEntity, agentIdSet: Set<string>): boolean {
+  if (agentIdSet.has(entity.agentId)) {
+    return true;
+  }
+  return entity.kind === "subagent" && typeof entity.parentAgentId === "string"
+    ? agentIdSet.has(entity.parentAgentId)
+    : false;
+}
+
+function resolveEntityAlertSeverity(
+  input: Pick<
+    EvaluateStageEntityPriorityInput,
+    | "entity"
+    | "criticalAlertRunIdSet"
+    | "criticalAlertAgentIdSet"
+    | "warningAlertRunIdSet"
+    | "warningAlertAgentIdSet"
+  >,
+): StageAlertSeverity {
+  const hasCriticalAlert =
+    entityMatchesRunAlert(input.entity, input.criticalAlertRunIdSet) ||
+    entityMatchesAgentAlert(input.entity, input.criticalAlertAgentIdSet);
+  if (hasCriticalAlert) {
+    return "critical";
+  }
+
+  const hasWarningAlert =
+    entityMatchesRunAlert(input.entity, input.warningAlertRunIdSet) ||
+    entityMatchesAgentAlert(input.entity, input.warningAlertAgentIdSet);
+  return hasWarningAlert ? "warning" : null;
+}
+
+export function evaluateStageEntityPriority(
+  input: EvaluateStageEntityPriorityInput,
+): StageEntityPriority {
+  const alertSeverity = resolveEntityAlertSeverity(input);
+  let score = STATUS_PRIORITY_WEIGHT[input.entity.status];
+
+  if (input.isSelected) {
+    score += 320;
+  }
+  if (input.isWatched) {
+    score += 270;
+  }
+  if (input.isPinned) {
+    score += 170;
+  }
+  if (alertSeverity === "critical") {
+    score += 340;
+  } else if (alertSeverity === "warning") {
+    score += 190;
+  }
+
+  let band: StagePriorityBand = "normal";
+  if (alertSeverity === "critical" || input.entity.status === "error" || score >= 320) {
+    band = "critical";
+  } else if (
+    alertSeverity === "warning" ||
+    input.entity.status === "active" ||
+    input.isWatched ||
+    input.isPinned ||
+    score >= 190
+  ) {
+    band = "high";
+  }
+
+  const isSecondary =
+    input.hasCriticalAlertTargets &&
+    band === "normal" &&
+    !input.isSelected &&
+    !input.isWatched &&
+    !input.isPinned;
+
+  return {
+    score,
+    band,
+    alertSeverity,
+    isSecondary,
+  };
+}
+
 export function buildStageEntityRenderModels(
   input: BuildStageEntityRenderModelsInput,
 ): StageEntityRenderModel[] {
@@ -229,12 +351,25 @@ export function buildStageEntityRenderModels(
 
     const isMutedByTimeline = input.hasTimelineHighlight && !isLinked;
     const isMutedByFocus = input.hasOpsFilter && input.focusMode && !matchesOpsFilter && !isWatched;
-    const renderPriorityBoost = isWatched ? 220 : isPinned ? 140 : 0;
+    const priority = evaluateStageEntityPriority({
+      entity,
+      isSelected,
+      isPinned,
+      isWatched,
+      hasCriticalAlertTargets: input.hasCriticalAlertTargets,
+      criticalAlertRunIdSet: input.criticalAlertRunIdSet,
+      criticalAlertAgentIdSet: input.criticalAlertAgentIdSet,
+      warningAlertRunIdSet: input.warningAlertRunIdSet,
+      warningAlertAgentIdSet: input.warningAlertAgentIdSet,
+    });
+    const renderPriorityBoost = Math.min(460, Math.max(0, Math.round(priority.score)));
 
     const className = [
       "entity-token",
       statusClass(entity),
       entity.kind,
+      `priority-${priority.band}`,
+      priority.alertSeverity ? `alert-${priority.alertSeverity}` : "",
       isOccluded ? "is-occluded" : "",
       motionClasses,
       isSelected ? "is-selected" : "",
@@ -242,6 +377,7 @@ export function buildStageEntityRenderModels(
       isWatched ? "is-watched" : "",
       isLinked ? "is-linked" : "",
       input.hasOpsFilter && matchesOpsFilter ? "is-filter-hit" : "",
+      priority.isSecondary ? "is-secondary" : "",
       isMutedByFocus ? "is-filtered-out" : "",
       isMutedByTimeline || isMutedByFocus ? "is-muted" : "",
     ]
@@ -264,6 +400,8 @@ export function buildStageEntityRenderModels(
       },
       spriteStyle: spriteStyleForEntity(entity.id),
       isSelected,
+      priorityBand: priority.band,
+      priorityScore: priority.score,
     });
   }
 

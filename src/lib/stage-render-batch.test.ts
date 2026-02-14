@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { OfficeEntity } from "../types/office";
 import { buildPlacements } from "./layout";
 import { createLocal50Scenario } from "./local50-scenario";
 import { buildStageEntityRenderModels } from "./stage-render-batch";
@@ -40,6 +41,11 @@ describe("buildStageEntityRenderModels", () => {
       normalizedHighlightAgentId: null,
       highlightedRun: undefined,
       hasTimelineHighlight: Boolean(target?.entity.runId),
+      hasCriticalAlertTargets: false,
+      criticalAlertRunIdSet: new Set<string>(),
+      criticalAlertAgentIdSet: new Set<string>(),
+      warningAlertRunIdSet: new Set<string>(),
+      warningAlertAgentIdSet: new Set<string>(),
       entityZOffset: 320,
       spawnPulseWindowMs: 12_000,
       startOrbitWindowMs: 12_000,
@@ -51,6 +57,164 @@ describe("buildStageEntityRenderModels", () => {
     expect(models.length).toBe(1);
     expect(models[0]?.id).toBe(target?.entity.id);
     expect(models[0]?.className).toContain("entity-token");
+  });
+
+  it("applies critical-first layering and secondary dimming when critical targets exist", () => {
+    const now = 1_710_000_000_000;
+    const entities: OfficeEntity[] = [
+      {
+        id: "agent:critical",
+        kind: "agent",
+        label: "Critical Agent",
+        agentId: "agent-critical",
+        status: "idle",
+        sessions: 1,
+        activeSubagents: 0,
+        lastUpdatedAt: now - 3_000,
+      },
+      {
+        id: "agent:watched",
+        kind: "agent",
+        label: "Watched Agent",
+        agentId: "agent-watched",
+        status: "idle",
+        sessions: 1,
+        activeSubagents: 0,
+        lastUpdatedAt: now - 3_000,
+      },
+      {
+        id: "subagent:normal",
+        kind: "subagent",
+        label: "Normal Subagent",
+        agentId: "agent-normal",
+        parentAgentId: "agent-parent",
+        runId: "run-normal",
+        status: "idle",
+        sessions: 0,
+        activeSubagents: 0,
+        lastUpdatedAt: now - 3_000,
+      },
+    ];
+
+    const placements = entities.map((entity, index) => ({
+      entity,
+      roomId: "room:lobby",
+      x: 100 + index * 40,
+      y: 120 + index * 20,
+      overflowed: false,
+    }));
+
+    const models = buildStageEntityRenderModels({
+      placements,
+      occlusionByRoom: new Map(),
+      generatedAt: now,
+      runById: new Map(),
+      selectedEntityIdSet: new Set<string>(),
+      pinnedEntityIdSet: new Set<string>(),
+      watchedEntityIdSet: new Set<string>(["agent:watched"]),
+      filteredEntityIdSet: new Set<string>(),
+      hasEntityFilter: false,
+      normalizedRoomFilterId: null,
+      hasOpsFilter: false,
+      focusMode: false,
+      normalizedHighlightRunId: null,
+      normalizedHighlightAgentId: null,
+      highlightedRun: undefined,
+      hasTimelineHighlight: false,
+      hasCriticalAlertTargets: true,
+      criticalAlertRunIdSet: new Set<string>(),
+      criticalAlertAgentIdSet: new Set<string>(["agent-critical"]),
+      warningAlertRunIdSet: new Set<string>(),
+      warningAlertAgentIdSet: new Set<string>(),
+      entityZOffset: 320,
+      spawnPulseWindowMs: 12_000,
+      startOrbitWindowMs: 12_000,
+      endSettleWindowMs: 20_000,
+      cleanupFadeWindowMs: 30_000,
+      errorShakeWindowMs: 18_000,
+    });
+
+    const critical = models.find((model) => model.id === "agent:critical");
+    const watched = models.find((model) => model.id === "agent:watched");
+    const normal = models.find((model) => model.id === "subagent:normal");
+
+    expect(critical?.priorityBand).toBe("critical");
+    expect(critical?.className).toContain("priority-critical");
+    expect(watched?.priorityBand).toBe("high");
+    expect(normal?.className).toContain("is-secondary");
+    expect((critical?.style.zIndex ?? 0)).toBeGreaterThan(watched?.style.zIndex ?? 0);
+    expect((watched?.style.zIndex ?? 0)).toBeGreaterThan(normal?.style.zIndex ?? 0);
+  });
+
+  it("marks warning alert targets as high priority without secondary dim when no critical target exists", () => {
+    const now = 1_710_000_010_000;
+    const entities: OfficeEntity[] = [
+      {
+        id: "subagent:warning-target",
+        kind: "subagent",
+        label: "Warning Subagent",
+        agentId: "agent-warning",
+        parentAgentId: "agent-parent",
+        runId: "run-warning",
+        status: "ok",
+        sessions: 0,
+        activeSubagents: 0,
+        lastUpdatedAt: now - 2_000,
+      },
+      {
+        id: "agent:baseline",
+        kind: "agent",
+        label: "Baseline Agent",
+        agentId: "agent-baseline",
+        status: "idle",
+        sessions: 1,
+        activeSubagents: 0,
+        lastUpdatedAt: now - 2_000,
+      },
+    ];
+    const placements = entities.map((entity, index) => ({
+      entity,
+      roomId: "room:lobby",
+      x: 120 + index * 50,
+      y: 130 + index * 25,
+      overflowed: false,
+    }));
+
+    const models = buildStageEntityRenderModels({
+      placements,
+      occlusionByRoom: new Map(),
+      generatedAt: now,
+      runById: new Map(),
+      selectedEntityIdSet: new Set<string>(),
+      pinnedEntityIdSet: new Set<string>(),
+      watchedEntityIdSet: new Set<string>(),
+      filteredEntityIdSet: new Set<string>(),
+      hasEntityFilter: false,
+      normalizedRoomFilterId: null,
+      hasOpsFilter: false,
+      focusMode: false,
+      normalizedHighlightRunId: null,
+      normalizedHighlightAgentId: null,
+      highlightedRun: undefined,
+      hasTimelineHighlight: false,
+      hasCriticalAlertTargets: false,
+      criticalAlertRunIdSet: new Set<string>(),
+      criticalAlertAgentIdSet: new Set<string>(),
+      warningAlertRunIdSet: new Set<string>(["run-warning"]),
+      warningAlertAgentIdSet: new Set<string>(),
+      entityZOffset: 320,
+      spawnPulseWindowMs: 12_000,
+      startOrbitWindowMs: 12_000,
+      endSettleWindowMs: 20_000,
+      cleanupFadeWindowMs: 30_000,
+      errorShakeWindowMs: 18_000,
+    });
+
+    const warningTarget = models.find((model) => model.id === "subagent:warning-target");
+    expect(warningTarget?.priorityBand).toBe("high");
+    expect(warningTarget?.className).toContain("priority-high");
+    expect(warningTarget?.className).toContain("alert-warning");
+    expect(warningTarget?.className).not.toContain("is-secondary");
   });
 
   it("stays within a local50 render batching budget", () => {
@@ -76,6 +240,11 @@ describe("buildStageEntityRenderModels", () => {
       normalizedHighlightAgentId: null,
       highlightedRun: undefined,
       hasTimelineHighlight: false,
+      hasCriticalAlertTargets: false,
+      criticalAlertRunIdSet: new Set<string>(),
+      criticalAlertAgentIdSet: new Set<string>(),
+      warningAlertRunIdSet: new Set<string>(),
+      warningAlertAgentIdSet: new Set<string>(),
       entityZOffset: 320,
       spawnPulseWindowMs: 12_000,
       startOrbitWindowMs: 12_000,

@@ -1471,6 +1471,7 @@ function App() {
           watchedEntityIds={batchActionState.watchedEntityIds}
           highlightRunId={highlightRunId}
           highlightAgentId={highlightAgentId}
+          alertSignals={visibleAlertSignals}
           filterEntityIds={filteredEntityIds}
           hasEntityFilter={hasEntityFilter}
           roomFilterId={opsFilters.roomId}
