@@ -70,6 +70,9 @@ Overall readiness gate result: **PASS**
 | streamMergeBatch p95 | 0.89ms | 0.57ms | <= 70ms |
 | heapUsed footprint | 13.96MB | 27.36MB | <= 220MB |
 
+Interpretation note:
+- `parseRuns p95` and `streamMergeBatch p95` are lower in `local50` than `local25` for this run. This benchmark is a short local micro-batch and can show non-monotonic variance from runtime warm-up, scheduler timing, and sample distribution differences. Release judgement uses budget pass/fail and repeated trend monitoring, not a single-run monotonic expectation.
+
 ## Remaining Risks And Follow-up Plan
 - No blocking risk identified for current local50 gate.
 - Soak stability beyond benchmark/e2e scope should continue under the weekly review routine.
