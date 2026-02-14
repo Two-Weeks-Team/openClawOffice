@@ -6,6 +6,7 @@
 
 - Keep room tile/wall/furniture layout declarative.
 - Compile blueprint data into render layers without changing component code.
+- Keep tile layers explicit (`floor -> wall -> object`), while `entity -> overlay` stays in separate render passes.
 - Validate bad blueprint input with explicit diagnostics.
 
 ## Schema (v1)

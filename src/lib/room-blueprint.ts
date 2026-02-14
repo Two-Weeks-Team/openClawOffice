@@ -1,6 +1,7 @@
 import type { RoomSpec } from "./layout";
 
-export type StageLayer = "floor" | "wall" | "object";
+// Tile render layers only. Entity tokens and link overlays are rendered in separate passes.
+export type TileStageLayer = "floor" | "wall" | "object";
 
 export type TileSprite = {
   atlas: string;
@@ -13,7 +14,7 @@ export type TileSprite = {
 export type BlueprintLayerTile<TSprite extends TileSprite> = {
   id: string;
   roomId: string;
-  layer: StageLayer;
+  layer: TileStageLayer;
   x: number;
   y: number;
   z: number;
@@ -648,7 +649,7 @@ export function compileRoomBlueprintLayers<TSprite extends TileSprite>(params: {
       let x = 0;
       let y = 0;
       let z = 0;
-      let layer: StageLayer = "object";
+      let layer: TileStageLayer = "object";
       let sprite: TSprite | undefined;
 
       if (anchor.kind === "tile" || anchor.kind === "furniture") {

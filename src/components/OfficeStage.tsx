@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { buildPlacements } from "../lib/layout";
-import { compileRoomBlueprintLayers } from "../lib/room-blueprint";
+import {
+  compileRoomBlueprintLayers,
+  type TileSprite,
+  type TileStageLayer,
+} from "../lib/room-blueprint";
 import { indexRunsById } from "../lib/run-graph";
 import { applySemanticRoomMappings, buildSemanticAssetRegistry } from "../lib/semantic-room-mapping";
 import type { OfficeEntity, OfficeRun, OfficeSnapshot } from "../types/office";
@@ -19,8 +23,7 @@ type Props = {
   onSelectEntity?: (entityId: string) => void;
 };
 
-// Entity and overlay are rendered separately for independent depth control.
-type StageLayer = "floor" | "wall" | "object";
+type ResolvedTile = TileSprite;
 
 type TileSourceSpec = {
   atlas: string;
@@ -35,14 +38,6 @@ type TileRef = {
   row: number;
 };
 
-type TileCatalog = {
-  atlas: string;
-  tileSize: number;
-  spacing: number;
-  col: number;
-  row: number;
-};
-
 type ManifestShape = {
   sources?: Record<string, { tileSize?: unknown; spacing?: unknown }>;
   tileset?: { tiles?: Array<{ id?: string; source?: string; col?: number; row?: number }> };
@@ -51,11 +46,11 @@ type ManifestShape = {
 type LayerTile = {
   id: string;
   roomId: string;
-  layer: StageLayer;
+  layer: TileStageLayer;
   x: number;
   y: number;
   z: number;
-  sprite: TileCatalog;
+  sprite: ResolvedTile;
 };
 
 const DEFAULT_SOURCES: Record<string, TileSourceSpec> = {
@@ -205,7 +200,7 @@ function buildTileCatalog(manifest: ManifestShape | null) {
     }
   }
 
-  const catalog = new Map<string, TileCatalog>();
+  const catalog = new Map<string, ResolvedTile>();
   for (const ref of refs) {
     const source = sourceSpecs.get(ref.source) ?? DEFAULT_SOURCES.city;
     catalog.set(ref.id, {
@@ -436,7 +431,8 @@ export function OfficeStage({
   }, [layerState.diagnostics]);
 
   const tilesByLayer = useMemo(() => {
-    const grouped: Record<StageLayer, LayerTile[]> = {
+    // TileStageLayer covers only tile passes; entities and overlays are rendered later.
+    const grouped: Record<TileStageLayer, LayerTile[]> = {
       floor: [],
       wall: [],
       object: [],
