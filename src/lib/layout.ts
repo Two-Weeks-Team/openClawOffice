@@ -246,53 +246,66 @@ function isEntityRole(value: unknown): value is EntityRole {
   );
 }
 
-function normalizeStatuses(value: unknown, fallback: OfficeEntityStatus[]): OfficeEntityStatus[] {
+function filterArrayByGuard<T>(value: unknown, guard: (entry: unknown) => entry is T): T[] {
   if (!Array.isArray(value)) {
-    return fallback;
+    return [];
   }
-  const normalized = value.filter(
-    (entry): entry is OfficeEntityStatus =>
-      typeof entry === "string" && (VALID_STATUSES as readonly string[]).includes(entry),
-  );
+  return value.filter(guard);
+}
+
+function normalizeArrayWithFallback<T>(
+  value: unknown,
+  fallback: T[],
+  guard: (entry: unknown) => entry is T,
+): T[] {
+  const normalized = filterArrayByGuard(value, guard);
   return normalized.length > 0 ? normalized : fallback;
+}
+
+function dedupeAndAppendDefaults<T>(value: T[], defaults: readonly T[]): T[] {
+  const deduped: T[] = [];
+  for (const item of value) {
+    if (!deduped.includes(item)) {
+      deduped.push(item);
+    }
+  }
+  for (const fallback of defaults) {
+    if (!deduped.includes(fallback)) {
+      deduped.push(fallback);
+    }
+  }
+  return deduped;
+}
+
+function isValidStatus(value: unknown): value is OfficeEntityStatus {
+  return typeof value === "string" && (VALID_STATUSES as readonly string[]).includes(value);
+}
+
+function isValidEntityKind(value: unknown): value is OfficeEntity["kind"] {
+  return value === "agent" || value === "subagent";
+}
+
+function isValidPriorityKey(value: unknown): value is ZonePriorityKey {
+  return typeof value === "string" && (VALID_PRIORITIES as readonly string[]).includes(value);
+}
+
+function normalizeStatuses(value: unknown, fallback: OfficeEntityStatus[]): OfficeEntityStatus[] {
+  return normalizeArrayWithFallback(value, fallback, isValidStatus);
 }
 
 function normalizeKinds(
   value: unknown,
   fallback: Array<OfficeEntity["kind"]>,
 ): Array<OfficeEntity["kind"]> {
-  if (!Array.isArray(value)) {
-    return fallback;
-  }
-  const normalized = value.filter(
-    (entry): entry is OfficeEntity["kind"] => entry === "agent" || entry === "subagent",
-  );
-  return normalized.length > 0 ? normalized : fallback;
+  return normalizeArrayWithFallback(value, fallback, isValidEntityKind);
 }
 
 function normalizePriorityOrder(value: unknown): ZonePriorityKey[] {
-  if (!Array.isArray(value)) {
-    return DEFAULT_PRIORITY_ORDER;
-  }
-  const normalized = value.filter(
-    (entry): entry is ZonePriorityKey =>
-      typeof entry === "string" && (VALID_PRIORITIES as readonly string[]).includes(entry),
-  );
+  const normalized = filterArrayByGuard(value, isValidPriorityKey);
   if (normalized.length === 0) {
     return DEFAULT_PRIORITY_ORDER;
   }
-  const deduped: ZonePriorityKey[] = [];
-  for (const key of normalized) {
-    if (!deduped.includes(key)) {
-      deduped.push(key);
-    }
-  }
-  for (const key of DEFAULT_PRIORITY_ORDER) {
-    if (!deduped.includes(key)) {
-      deduped.push(key);
-    }
-  }
-  return deduped;
+  return dedupeAndAppendDefaults(normalized, DEFAULT_PRIORITY_ORDER);
 }
 
 function normalizeRoom(rawValue: unknown, fallback: RoomSpec): RoomSpec {
@@ -452,6 +465,21 @@ function compareScoreVectors(
   return 0;
 }
 
+function shouldPromoteRoomCandidate(params: {
+  candidateRoom: RoomSpec;
+  candidateScore: ScoreVector;
+  currentRoom: RoomSpec;
+  currentScore: ScoreVector;
+  priorityOrder: ZonePriorityKey[];
+}): boolean {
+  const { candidateRoom, candidateScore, currentRoom, currentScore, priorityOrder } = params;
+  const scoreOrder = compareScoreVectors(candidateScore, currentScore, priorityOrder);
+  if (scoreOrder !== 0) {
+    return scoreOrder > 0;
+  }
+  return candidateRoom.id.localeCompare(currentRoom.id) < 0;
+}
+
 function pickTargetRoom(params: {
   entity: OfficeEntity;
   rooms: RoomSpec[];
@@ -486,8 +514,15 @@ function pickTargetRoom(params: {
       generatedAt,
       recentWindowMs,
     });
-    const comparison = compareScoreVectors(candidateScore, bestScore, priorityOrder);
-    if (comparison > 0 || (comparison === 0 && candidate.id.localeCompare(bestRoom.id) < 0)) {
+    if (
+      shouldPromoteRoomCandidate({
+        candidateRoom: candidate,
+        candidateScore,
+        currentRoom: bestRoom,
+        currentScore: bestScore,
+        priorityOrder,
+      })
+    ) {
       bestRoom = candidate;
       bestScore = candidateScore;
     }
