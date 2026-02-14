@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
+import { AlertCenterPanel } from "./components/AlertCenterPanel";
 import { CommandPalette, type CommandPaletteEntry } from "./components/CommandPalette";
 import { EntityDetailPanel } from "./components/EntityDetailPanel";
 import { EventRail } from "./components/EventRail";
@@ -9,9 +10,7 @@ import { SummaryExporter } from "./components/SummaryExporter";
 import { ThroughputDashboard } from "./components/ThroughputDashboard";
 import { useOfficeStream } from "./hooks/useOfficeStream";
 import {
-  ALERT_RULE_LABELS,
   DEFAULT_ALERT_RULE_PREFERENCES,
-  RULE_IDS,
   evaluateAlertSignals,
   isAlertRuleSuppressed,
   normalizeAlertRulePreferences,
@@ -78,6 +77,8 @@ type OpsFilters = {
   focusMode: boolean;
 };
 
+type WorkspaceTabId = "status" | "operations" | "timeline" | "analysis" | "alerts";
+
 type ToastState = {
   kind: "success" | "error" | "info";
   message: string;
@@ -94,6 +95,12 @@ type CommandSpec = {
   allowWhenOverlayOpen?: boolean;
   disabled?: boolean;
   run: () => void | Promise<void>;
+};
+
+type WorkspaceTabSpec = {
+  id: WorkspaceTabId;
+  label: string;
+  description: string;
 };
 
 type CommandEntry = CommandSpec & {
@@ -114,6 +121,34 @@ const DEFAULT_OPS_FILTERS: OpsFilters = {
   recentMinutes: "all",
   focusMode: false,
 };
+
+const WORKSPACE_TABS: WorkspaceTabSpec[] = [
+  {
+    id: "status",
+    label: "Status",
+    description: "Live status and stage view",
+  },
+  {
+    id: "operations",
+    label: "Operations",
+    description: "Search, filters, and batch actions",
+  },
+  {
+    id: "timeline",
+    label: "Timeline",
+    description: "Replay and event navigation",
+  },
+  {
+    id: "analysis",
+    label: "Analysis",
+    description: "Throughput, detail, and export tools",
+  },
+  {
+    id: "alerts",
+    label: "Alerts",
+    description: "Signal list and rule controls",
+  },
+];
 
 function quoteShellToken(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
@@ -197,6 +232,23 @@ function workspacePanelPlacementClass(
   return WORKSPACE_PANEL_PLACEMENT_CLASS[layout[panel]];
 }
 
+function workspaceTabForCommand(command: CommandEntry): WorkspaceTabId | null {
+  if (command.id.startsWith("timeline.") || command.section === "Timeline") {
+    return "timeline";
+  }
+  if (command.id.startsWith("alerts.")) {
+    return "alerts";
+  }
+  if (
+    command.section === "Filters" ||
+    command.section === "Run Tools" ||
+    command.section === "Entities"
+  ) {
+    return "operations";
+  }
+  return null;
+}
+
 function App() {
   const { snapshot, connected, liveSource, error, recoveryMessage } = useOfficeStream();
   const [selectedEntityIds, setSelectedEntityIds] = useState<string[]>([]);
@@ -235,9 +287,17 @@ function App() {
   const [workspaceLayout, setWorkspaceLayout] = useState<WorkspaceLayoutState>(
     loadWorkspaceLayoutState,
   );
+  const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<WorkspaceTabId>("status");
   const hasBatchStateHydratedRef = useRef(false);
   const hasRunKnowledgeHydratedRef = useRef(false);
   const hasWorkspaceLayoutHydratedRef = useRef(false);
+  const workspaceTabButtonRefs = useRef<Record<WorkspaceTabId, HTMLButtonElement | null>>({
+    status: null,
+    operations: null,
+    timeline: null,
+    analysis: null,
+    alerts: null,
+  });
   const shortcutPlatform = useMemo(() => detectShortcutPlatform(), []);
 
   const showToast = useCallback((kind: NonNullable<ToastState>["kind"], message: string) => {
@@ -745,7 +805,13 @@ function App() {
     setRebindingCommandId(null);
     setIsCommandPaletteOpen(false);
     setIsShortcutHelpOpen(false);
-    setIsAlertCenterOpen((prev) => !prev);
+    setIsAlertCenterOpen((prev) => {
+      const next = !prev;
+      if (next) {
+        setActiveWorkspaceTab("alerts");
+      }
+      return next;
+    });
   }, []);
 
   const closeAlertCenter = useCallback(() => {
@@ -1146,6 +1212,12 @@ function App() {
       if (!command || command.disabled) {
         return;
       }
+
+      const linkedTab = workspaceTabForCommand(command);
+      if (linkedTab) {
+        setActiveWorkspaceTab(linkedTab);
+      }
+
       const result = command.run();
       if (result instanceof Promise) {
         void result;
@@ -1416,13 +1488,6 @@ function App() {
         onOpenAlerts={toggleAlertCenter}
       />
 
-      <section className="hero-bar">
-        <div>
-          <h1>openClawOffice</h1>
-          <p>Zone-based visual HQ for OpenClaw agents and subagents.</p>
-        </div>
-      </section>
-
       {recoveryMessage ? (
         <section className="recovery-banner" role="status" aria-live="polite">
           <strong>Recovery Mode</strong>
@@ -1430,263 +1495,396 @@ function App() {
         </section>
       ) : null}
 
-      <ThroughputDashboard snapshot={snapshot} />
-
-      <section className="ops-toolbar">
-        <label className="ops-field ops-search">
-          Search
-          <input
-            type="text"
-            placeholder="agentId / runId / task"
-            value={opsFilters.query}
-            onChange={(event) => {
-              setOpsFilters((prev) => ({ ...prev, query: event.target.value }));
-            }}
-          />
-        </label>
-
-        <label className="ops-field">
-          Status
-          <select
-            value={opsFilters.status}
-            onChange={(event) => {
-              setOpsFilters((prev) => ({
-                ...prev,
-                status: event.target.value as EntityStatusFilter,
-              }));
-            }}
-          >
-            <option value="all">ALL</option>
-            <option value="active">ACTIVE</option>
-            <option value="idle">IDLE</option>
-            <option value="error">ERROR</option>
-            <option value="ok">OK</option>
-            <option value="offline">OFFLINE</option>
-          </select>
-        </label>
-
-        <label className="ops-field">
-          Room
-          <select
-            value={opsFilters.roomId}
-            onChange={(event) => {
-              setOpsFilters((prev) => ({ ...prev, roomId: event.target.value }));
-            }}
-          >
-            <option value="all">ALL</option>
-            {roomOptions.map((roomId) => (
-              <option key={roomId} value={roomId}>
-                {roomId}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="ops-field">
-          Placement
-          <select
-            value={opsFilters.placementMode}
-            onChange={(event) => {
-              setOpsFilters((prev) => ({
-                ...prev,
-                placementMode: event.target.value as PlacementMode,
-              }));
-            }}
-          >
-            <option value="auto">AUTO</option>
-            <option value="manual">MANUAL</option>
-          </select>
-        </label>
-
-        <label className="ops-field">
-          Recent
-          <select
-            value={opsFilters.recentMinutes}
-            onChange={(event) => {
-              const nextValue = event.target.value;
-              setOpsFilters((prev) => ({
-                ...prev,
-                recentMinutes:
-                  nextValue === "all" ? "all" : (Number(nextValue) as RecentWindowFilter),
-              }));
-            }}
-          >
-            <option value="all">ALL</option>
-            <option value={5}>5m</option>
-            <option value={15}>15m</option>
-            <option value={30}>30m</option>
-            <option value={60}>60m</option>
-          </select>
-        </label>
-
-        <label className="ops-focus-toggle" title={`Shortcut: ${focusModeShortcutLabel}`}>
-          <input
-            type="checkbox"
-            checked={opsFilters.focusMode}
-            onChange={(event) => {
-              setOpsFilters((prev) => ({ ...prev, focusMode: event.target.checked }));
-            }}
-          />
-          Focus mode ({focusModeShortcutLabel})
-        </label>
-
-        <SummaryExporter
-          snapshot={snapshot}
-          defaultAgentId={selectedEntity?.agentId ?? activeEvent?.agentId ?? null}
-          defaultRunId={
-            selectedRun?.runId ?? selectedEntity?.runId ?? activeEvent?.runId ?? null
-          }
-          runKnowledgeEntries={runKnowledgeEntries}
-          onNotify={showToast}
-        />
-
-        <div className="ops-actions">
-          <button type="button" onClick={toggleCommandPalette}>
-            Command Palette ({paletteShortcutLabel})
-          </button>
-          <button type="button" onClick={openShortcutHelp}>
-            Shortcut Help ({helpShortcutLabel})
-          </button>
-          <button
-            type="button"
-            className={hasActiveAlerts ? "ops-alert-button has-alerts" : "ops-alert-button"}
-            onClick={toggleAlertCenter}
-          >
-            Alert Center ({alertCenterShortcutLabel}) [{visibleAlertSignals.length}]
-          </button>
-          <button type="button" disabled={filteredEntityIds.length === 0} onClick={selectFilteredEntities}>
-            Select filtered
-          </button>
-          <button
-            type="button"
-            disabled={selectedCount === 0}
-            onClick={() => {
-              applyEntityBatchAction(allSelectedPinned ? "unpin" : "pin");
-            }}
-          >
-            {allSelectedPinned ? "Unpin selected" : "Pin selected"}
-          </button>
-          <button
-            type="button"
-            disabled={selectedCount === 0}
-            onClick={() => {
-              applyEntityBatchAction(allSelectedWatched ? "unwatch" : "watch");
-            }}
-          >
-            {allSelectedWatched ? "Unwatch selected" : "Watch selected"}
-          </button>
-          <button
-            type="button"
-            disabled={selectedCount === 0}
-            onClick={() => {
-              applyEntityBatchAction(allSelectedMuted ? "unmute" : "mute");
-            }}
-          >
-            {allSelectedMuted ? "Unmute selected" : "Mute selected"}
-          </button>
-          <button
-            type="button"
-            disabled={selectedCount === 0}
-            onClick={() => {
-              applyEntityBatchAction("clear");
-            }}
-          >
-            Clear selected flags
-          </button>
-          <button type="button" disabled={selectedCount === 0} onClick={clearSelectedEntities}>
-            Clear selection
-          </button>
-          <button type="button" onClick={() => void onCopyRunId()}>
-            Copy runId
-          </button>
-          <button type="button" onClick={() => void onCopyReplayLink()}>
-            Copy replay link
-          </button>
-          <button type="button" onClick={() => void onCopySessionKey()}>
-            Copy sessionKey
-          </button>
-          <button type="button" onClick={() => void onCopyLogGuide()}>
-            Log path guide
-          </button>
-          <button type="button" onClick={onJumpToRun}>
-            Jump to run
-          </button>
-          <span className="ops-batch-summary">
-            selected {selectedCount} (ctrl/cmd+click) | pin {batchActionState.pinnedEntityIds.length} | watch{" "}
-            {batchActionState.watchedEntityIds.length} | mute {batchActionState.mutedEntityIds.length}
-          </span>
-          <span className="ops-match-count">
-            match {(matchCount ?? filteredEntityIds.length).toString()}/{snapshot.entities.length}
-          </span>
-        </div>
-      </section>
-
-      <section className="workspace-layout-toolbar">
-        <div className="workspace-layout-presets">
-          <strong>Split View</strong>
-          <button
-            type="button"
-            className={workspaceLayout.preset === "two-pane" ? "is-active" : ""}
-            onClick={() => {
-              setWorkspacePreset("two-pane");
-            }}
-          >
-            2-pane
-          </button>
-          <button
-            type="button"
-            className={workspaceLayout.preset === "three-pane" ? "is-active" : ""}
-            onClick={() => {
-              setWorkspacePreset("three-pane");
-            }}
-          >
-            3-pane
-          </button>
-        </div>
-        <div className="workspace-layout-panels">
-          {(["timeline", "detail"] as WorkspacePanelId[]).map((panelId) => {
-            const placement = workspaceLayout[panelId];
-            const label = WORKSPACE_PANEL_LABELS[panelId];
-            return (
-              <div key={panelId} className="workspace-layout-panel-control">
-                <span>{label}</span>
+      <section className="workspace-tabs" aria-label="Workspace views">
+        {/* Keep tab panel state mounted; switch visibility with `hidden` to preserve workflow context. */}
+        <header className="workspace-tabs-header">
+          <div className="workspace-tablist" role="tablist" aria-label="Workspace purpose tabs">
+            {WORKSPACE_TABS.map((tab, index) => {
+              const isActive = activeWorkspaceTab === tab.id;
+              return (
                 <button
+                  key={tab.id}
+                  ref={(node) => {
+                    workspaceTabButtonRefs.current[tab.id] = node;
+                  }}
+                  id={`workspace-tab-${tab.id}`}
                   type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  aria-controls={`workspace-tabpanel-${tab.id}`}
+                  title={tab.description}
+                  tabIndex={isActive ? 0 : -1}
+                  className={`workspace-tab-button${isActive ? " is-active" : ""}`}
                   onClick={() => {
-                    toggleWorkspacePanelPinned(panelId);
+                    setActiveWorkspaceTab(tab.id);
+                  }}
+                  onKeyDown={(event) => {
+                    let nextIndex = index;
+                    if (event.key === "ArrowRight") {
+                      nextIndex = (index + 1) % WORKSPACE_TABS.length;
+                    } else if (event.key === "ArrowLeft") {
+                      nextIndex = (index - 1 + WORKSPACE_TABS.length) % WORKSPACE_TABS.length;
+                    } else if (event.key === "Home") {
+                      nextIndex = 0;
+                    } else if (event.key === "End") {
+                      nextIndex = WORKSPACE_TABS.length - 1;
+                    } else {
+                      return;
+                    }
+                    event.preventDefault();
+                    const nextTab = WORKSPACE_TABS[nextIndex];
+                    setActiveWorkspaceTab(nextTab.id);
+                    workspaceTabButtonRefs.current[nextTab.id]?.focus();
                   }}
                 >
-                  {placement === "hidden" ? "Pin" : "Unpin"}
+                  <span>{tab.label}</span>
                 </button>
-                <button
-                  type="button"
-                  disabled={placement === "hidden"}
-                  onClick={() => {
-                    toggleWorkspacePanelDetached(panelId);
-                  }}
-                >
-                  {placement === "detached" ? "Attach" : "Detach"}
-                </button>
+              );
+            })}
+          </div>
+
+          <div className="workspace-quick-actions" aria-label="Quick actions">
+            <button type="button" onClick={toggleCommandPalette}>
+              Command Palette ({paletteShortcutLabel})
+            </button>
+            <button type="button" onClick={onJumpToRun}>
+              Jump to run
+            </button>
+            <button type="button" onClick={() => void onCopyRunId()}>
+              Copy runId
+            </button>
+            <button
+              type="button"
+              className={hasActiveAlerts ? "ops-alert-button has-alerts" : "ops-alert-button"}
+              onClick={() => {
+                setActiveWorkspaceTab("alerts");
+              }}
+            >
+              Alerts [{visibleAlertSignals.length}]
+            </button>
+          </div>
+        </header>
+
+        <section
+          id="workspace-tabpanel-status"
+          role="tabpanel"
+          aria-labelledby="workspace-tab-status"
+          className="workspace-tabpanel"
+          hidden={activeWorkspaceTab !== "status"}
+        >
+          <section className="hero-bar">
+            <div>
+              <h1>openClawOffice</h1>
+              <p>Zone-based visual HQ for OpenClaw agents and subagents.</p>
+            </div>
+          </section>
+        </section>
+
+        <section
+          id="workspace-tabpanel-operations"
+          role="tabpanel"
+          aria-labelledby="workspace-tab-operations"
+          className="workspace-tabpanel"
+          hidden={activeWorkspaceTab !== "operations"}
+        >
+          <section className="ops-toolbar">
+            <label className="ops-field ops-search">
+              Search
+              <input
+                type="text"
+                placeholder="agentId / runId / task"
+                value={opsFilters.query}
+                onChange={(event) => {
+                  setOpsFilters((prev) => ({ ...prev, query: event.target.value }));
+                }}
+              />
+            </label>
+
+            <label className="ops-field">
+              Status
+              <select
+                value={opsFilters.status}
+                onChange={(event) => {
+                  setOpsFilters((prev) => ({
+                    ...prev,
+                    status: event.target.value as EntityStatusFilter,
+                  }));
+                }}
+              >
+                <option value="all">ALL</option>
+                <option value="active">ACTIVE</option>
+                <option value="idle">IDLE</option>
+                <option value="error">ERROR</option>
+                <option value="ok">OK</option>
+                <option value="offline">OFFLINE</option>
+              </select>
+            </label>
+
+            <label className="ops-field">
+              Room
+              <select
+                value={opsFilters.roomId}
+                onChange={(event) => {
+                  setOpsFilters((prev) => ({ ...prev, roomId: event.target.value }));
+                }}
+              >
+                <option value="all">ALL</option>
+                {roomOptions.map((roomId) => (
+                  <option key={roomId} value={roomId}>
+                    {roomId}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="ops-field">
+              Placement
+              <select
+                value={opsFilters.placementMode}
+                onChange={(event) => {
+                  setOpsFilters((prev) => ({
+                    ...prev,
+                    placementMode: event.target.value as PlacementMode,
+                  }));
+                }}
+              >
+                <option value="auto">AUTO</option>
+                <option value="manual">MANUAL</option>
+              </select>
+            </label>
+
+            <label className="ops-field">
+              Recent
+              <select
+                value={opsFilters.recentMinutes}
+                onChange={(event) => {
+                  const nextValue = event.target.value;
+                  setOpsFilters((prev) => ({
+                    ...prev,
+                    recentMinutes:
+                      nextValue === "all" ? "all" : (Number(nextValue) as RecentWindowFilter),
+                  }));
+                }}
+              >
+                <option value="all">ALL</option>
+                <option value={5}>5m</option>
+                <option value={15}>15m</option>
+                <option value={30}>30m</option>
+                <option value={60}>60m</option>
+              </select>
+            </label>
+
+            <label className="ops-focus-toggle" title={`Shortcut: ${focusModeShortcutLabel}`}>
+              <input
+                type="checkbox"
+                checked={opsFilters.focusMode}
+                onChange={(event) => {
+                  setOpsFilters((prev) => ({ ...prev, focusMode: event.target.checked }));
+                }}
+              />
+              Focus mode ({focusModeShortcutLabel})
+            </label>
+
+            <div className="ops-actions">
+              <button type="button" onClick={openShortcutHelp}>
+                Shortcut Help ({helpShortcutLabel})
+              </button>
+              <button
+                type="button"
+                className={hasActiveAlerts ? "ops-alert-button has-alerts" : "ops-alert-button"}
+                onClick={toggleAlertCenter}
+              >
+                Alert Center ({alertCenterShortcutLabel}) [{visibleAlertSignals.length}]
+              </button>
+              <button type="button" disabled={filteredEntityIds.length === 0} onClick={selectFilteredEntities}>
+                Select filtered
+              </button>
+              <button
+                type="button"
+                disabled={selectedCount === 0}
+                onClick={() => {
+                  applyEntityBatchAction(allSelectedPinned ? "unpin" : "pin");
+                }}
+              >
+                {allSelectedPinned ? "Unpin selected" : "Pin selected"}
+              </button>
+              <button
+                type="button"
+                disabled={selectedCount === 0}
+                onClick={() => {
+                  applyEntityBatchAction(allSelectedWatched ? "unwatch" : "watch");
+                }}
+              >
+                {allSelectedWatched ? "Unwatch selected" : "Watch selected"}
+              </button>
+              <button
+                type="button"
+                disabled={selectedCount === 0}
+                onClick={() => {
+                  applyEntityBatchAction(allSelectedMuted ? "unmute" : "mute");
+                }}
+              >
+                {allSelectedMuted ? "Unmute selected" : "Mute selected"}
+              </button>
+              <button
+                type="button"
+                disabled={selectedCount === 0}
+                onClick={() => {
+                  applyEntityBatchAction("clear");
+                }}
+              >
+                Clear selected flags
+              </button>
+              <button type="button" disabled={selectedCount === 0} onClick={clearSelectedEntities}>
+                Clear selection
+              </button>
+              <button type="button" onClick={() => void onCopyReplayLink()}>
+                Copy replay link
+              </button>
+              <button type="button" onClick={() => void onCopySessionKey()}>
+                Copy sessionKey
+              </button>
+              <button type="button" onClick={() => void onCopyLogGuide()}>
+                Log path guide
+              </button>
+              <span className="ops-batch-summary">
+                selected {selectedCount} (ctrl/cmd+click) | pin {batchActionState.pinnedEntityIds.length} | watch{" "}
+                {batchActionState.watchedEntityIds.length} | mute {batchActionState.mutedEntityIds.length}
+              </span>
+              <span className="ops-match-count">
+                match {(matchCount ?? filteredEntityIds.length).toString()}/{snapshot.entities.length}
+              </span>
+            </div>
+          </section>
+
+          <section className="workspace-layout-toolbar">
+            <div className="workspace-layout-presets">
+              <strong>Split View</strong>
+              <button
+                type="button"
+                className={workspaceLayout.preset === "two-pane" ? "is-active" : ""}
+                onClick={() => {
+                  setWorkspacePreset("two-pane");
+                }}
+              >
+                2-pane
+              </button>
+              <button
+                type="button"
+                className={workspaceLayout.preset === "three-pane" ? "is-active" : ""}
+                onClick={() => {
+                  setWorkspacePreset("three-pane");
+                }}
+              >
+                3-pane
+              </button>
+            </div>
+            <div className="workspace-layout-panels">
+              {(["timeline", "detail"] as WorkspacePanelId[]).map((panelId) => {
+                const placement = workspaceLayout[panelId];
+                const label = WORKSPACE_PANEL_LABELS[panelId];
+                return (
+                  <div key={panelId} className="workspace-layout-panel-control">
+                    <span>{label}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        toggleWorkspacePanelPinned(panelId);
+                      }}
+                    >
+                      {placement === "hidden" ? "Pin" : "Unpin"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={placement === "hidden"}
+                      onClick={() => {
+                        toggleWorkspacePanelDetached(panelId);
+                      }}
+                    >
+                      {placement === "detached" ? "Attach" : "Detach"}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="workspace-layout-actions">
+              <button type="button" onClick={saveWorkspaceLayout}>
+                Save layout
+              </button>
+              <button type="button" onClick={restoreWorkspaceLayout}>
+                Restore layout
+              </button>
+              <button type="button" onClick={resetWorkspaceLayout}>
+                Reset layout
+              </button>
+            </div>
+          </section>
+        </section>
+
+        <section
+          id="workspace-tabpanel-timeline"
+          role="tabpanel"
+          aria-labelledby="workspace-tab-timeline"
+          className="workspace-tabpanel"
+          hidden={activeWorkspaceTab !== "timeline"}
+        >
+          <p className="workspace-tab-note">Timeline playback and filtering controls are isolated in this tab.</p>
+        </section>
+
+        <section
+          id="workspace-tabpanel-analysis"
+          role="tabpanel"
+          aria-labelledby="workspace-tab-analysis"
+          className="workspace-tabpanel"
+          hidden={activeWorkspaceTab !== "analysis"}
+        >
+          <ThroughputDashboard snapshot={snapshot} />
+          <SummaryExporter
+            snapshot={snapshot}
+            defaultAgentId={selectedEntity?.agentId ?? activeEvent?.agentId ?? null}
+            defaultRunId={
+              selectedRun?.runId ?? selectedEntity?.runId ?? activeEvent?.runId ?? null
+            }
+            runKnowledgeEntries={runKnowledgeEntries}
+            onNotify={showToast}
+          />
+        </section>
+
+        <section
+          id="workspace-tabpanel-alerts"
+          role="tabpanel"
+          aria-labelledby="workspace-tab-alerts"
+          className="workspace-tabpanel"
+          hidden={activeWorkspaceTab !== "alerts"}
+        >
+          <section className="alert-center alerts-tab-surface" aria-label="Alert Center panel">
+            <header className="alert-center-header">
+              <div>
+                <h2>Alert Center</h2>
+                <p>Event-driven local alerts with duplicate suppression and rule-level mute/snooze.</p>
               </div>
-            );
-          })}
-        </div>
-        <div className="workspace-layout-actions">
-          <button type="button" onClick={saveWorkspaceLayout}>
-            Save layout
-          </button>
-          <button type="button" onClick={restoreWorkspaceLayout}>
-            Restore layout
-          </button>
-          <button type="button" onClick={resetWorkspaceLayout}>
-            Reset layout
-          </button>
-        </div>
+              <button type="button" onClick={toggleAlertCenter}>
+                Open modal
+              </button>
+            </header>
+            <AlertCenterPanel
+              alertSignals={alertSignals}
+              preferences={alertRulePreferences}
+              now={snapshot.generatedAt}
+              onToggleRuleMute={toggleAlertRuleMute}
+              onSnoozeRule={snoozeAlertRule}
+              onClearRuleSuppression={clearAlertRuleSuppression}
+            />
+          </section>
+        </section>
       </section>
 
       <section
-        className={`workspace ${workspacePresetClass} ${workspaceDockedClass}`}
+        className={`workspace ${workspacePresetClass} ${workspaceDockedClass} ${
+          activeWorkspaceTab === "alerts" ? "is-hidden-by-tab" : ""
+        }`}
         style={workspaceGridStyle}
+        hidden={activeWorkspaceTab === "alerts"}
       >
         <div className="workspace-stage-pane">
           <OfficeStage
@@ -1713,7 +1911,8 @@ function App() {
           className={`workspace-panel timeline ${workspacePanelPlacementClass(
             workspaceLayout,
             "timeline",
-          )}`}
+          )} ${activeWorkspaceTab === "timeline" ? "" : "is-hidden-by-tab"}`}
+          hidden={activeWorkspaceTab !== "timeline"}
         >
           <EventRail
             roomByAgentId={timelineRoomByAgentId}
@@ -1731,7 +1930,8 @@ function App() {
           className={`workspace-panel detail ${workspacePanelPlacementClass(
             workspaceLayout,
             "detail",
-          )}`}
+          )} ${activeWorkspaceTab === "analysis" ? "" : "is-hidden-by-tab"}`}
+          hidden={activeWorkspaceTab !== "analysis"}
         >
           <EntityDetailPanel
             key={effectiveSelectedEntityId ?? "detail-empty"}
@@ -1798,103 +1998,14 @@ function App() {
                 Close
               </button>
             </header>
-
-            <section className="alert-center-section">
-              <h3>Active Alerts ({alertSignals.length})</h3>
-              {alertSignals.length === 0 ? (
-                <p className="alert-center-empty">No active alerts from current rule evaluation.</p>
-              ) : (
-                <ol className="alert-center-list">
-                  {alertSignals.map((signal) => {
-                    const suppressed = isAlertRuleSuppressed(
-                      alertRulePreferences,
-                      signal.ruleId,
-                      snapshot.generatedAt,
-                    );
-                    return (
-                      <li
-                        key={signal.dedupeKey}
-                        className={`alert-center-item ${signal.severity} ${
-                          suppressed ? "is-suppressed" : ""
-                        }`}
-                      >
-                        <div className="alert-center-item-main">
-                          <strong>{signal.title}</strong>
-                          <p>{signal.message}</p>
-                          <p className="alert-center-meta">
-                            Rule {ALERT_RULE_LABELS[signal.ruleId]} | runs {signal.runIds.length} | agents{" "}
-                            {signal.agentIds.length}
-                          </p>
-                        </div>
-                        <div className="alert-center-item-tags">
-                          <span className="alert-severity-tag">{signal.severity.toUpperCase()}</span>
-                          {suppressed ? <span className="alert-suppressed-tag">Suppressed</span> : null}
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ol>
-              )}
-            </section>
-
-            <section className="alert-center-section">
-              <h3>Rule Controls</h3>
-              <ol className="alert-rule-list">
-                {RULE_IDS.map((ruleId) => {
-                  const preference = alertRulePreferences[ruleId];
-                  const isSnoozed = preference.snoozeUntil > snapshot.generatedAt;
-                  return (
-                    <li key={ruleId} className="alert-rule-item">
-                      <div className="alert-rule-main">
-                        <strong>{ALERT_RULE_LABELS[ruleId]}</strong>
-                        <p>
-                          {preference.muted
-                            ? "Muted"
-                            : isSnoozed
-                              ? `Snoozed until ${new Date(preference.snoozeUntil).toLocaleTimeString()}`
-                              : "Active"}
-                        </p>
-                      </div>
-                      <div className="alert-rule-actions">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            toggleAlertRuleMute(ruleId);
-                          }}
-                        >
-                          {preference.muted ? "Unmute" : "Mute"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            snoozeAlertRule(ruleId, 15 * 60_000);
-                          }}
-                        >
-                          Snooze 15m
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            snoozeAlertRule(ruleId, 60 * 60_000);
-                          }}
-                        >
-                          Snooze 1h
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            clearAlertRuleSuppression(ruleId);
-                          }}
-                          disabled={!preference.muted && !isSnoozed}
-                        >
-                          Clear
-                        </button>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ol>
-            </section>
+            <AlertCenterPanel
+              alertSignals={alertSignals}
+              preferences={alertRulePreferences}
+              now={snapshot.generatedAt}
+              onToggleRuleMute={toggleAlertRuleMute}
+              onSnoozeRule={snoozeAlertRule}
+              onClearRuleSuppression={clearAlertRuleSuppression}
+            />
           </section>
         </div>
       ) : null}

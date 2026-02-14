@@ -147,6 +147,96 @@ body {
   color: #ffd2d2;
 }
 
+.workspace-tabs {
+  display: grid;
+  gap: 10px;
+}
+
+.workspace-tabs-header {
+  border: 1px solid rgba(149, 227, 255, 0.24);
+  border-radius: 14px;
+  background: rgba(7, 27, 39, 0.75);
+  padding: 8px 10px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.workspace-tablist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.workspace-tab-button {
+  border-radius: 999px;
+  border: 1px solid rgba(148, 226, 255, 0.34);
+  background: rgba(8, 35, 51, 0.88);
+  color: #bde6f7;
+  font-size: 0.67rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.workspace-tab-button.is-active {
+  border-color: rgba(132, 255, 198, 0.72);
+  color: #acffdd;
+  box-shadow: inset 0 0 0 1px rgba(131, 255, 198, 0.24);
+}
+
+.workspace-tabpanel {
+  display: grid;
+  gap: 10px;
+}
+
+.workspace-tabpanel[hidden] {
+  display: none;
+}
+
+.workspace-quick-actions {
+  margin-left: auto;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.workspace-quick-actions button {
+  border-radius: 999px;
+  border: 1px solid rgba(149, 227, 255, 0.38);
+  background: rgba(9, 39, 55, 0.9);
+  color: #d9f5ff;
+  font-size: 0.65rem;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.workspace-tab-note {
+  margin: 0;
+  border: 1px solid rgba(145, 223, 255, 0.24);
+  border-radius: 12px;
+  background: rgba(8, 30, 43, 0.76);
+  color: #a8d8e8;
+  font-size: 0.68rem;
+  letter-spacing: 0.02em;
+  padding: 10px 12px;
+}
+
+.alerts-tab-surface {
+  position: static;
+  width: auto;
+  max-width: none;
+  max-height: none;
+}
+
+.workspace-panel.is-hidden-by-tab {
+  display: none !important;
+}
+
 .hero-bar {
   display: flex;
   justify-content: space-between;
@@ -3742,6 +3832,16 @@ body {
     justify-content: flex-start;
   }
 
+  .workspace-tabs-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .workspace-quick-actions {
+    margin-left: 0;
+    justify-content: flex-start;
+  }
+
   .office-stage-wrap {
     --tile-scale: 1.35;
   }
@@ -3858,6 +3958,19 @@ body {
   .global-status-alert-button {
     border-radius: 10px;
     justify-content: space-between;
+  }
+
+  .workspace-tablist {
+    width: 100%;
+  }
+
+  .workspace-tab-button {
+    flex: 1 1 calc(50% - 6px);
+    text-align: center;
+  }
+
+  .workspace-quick-actions {
+    width: 100%;
   }
 
   .office-stage-wrap {
