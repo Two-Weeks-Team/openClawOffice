@@ -42,6 +42,7 @@ Web-based visual command center for OpenClaw agents and subagents.
 - Entity detail panel (`Overview / Sessions / Runs / Messages / Metrics`) with copy actions
 - Timeline debugger with `runId/agentId/status` filters + playback + run deep link
 - Multi-lane timeline groups (`room`, `agent`, `subagent`) with lane collapse + density summary
+- Command palette + global shortcuts with keymap override and recent command history
 
 ## Motion Lifecycle Guide
 
@@ -86,6 +87,7 @@ Web-based visual command center for OpenClaw agents and subagents.
 3. Focus mode 켜짐 상태에서 대상 식별(강조)과 비대상 dim이 명확
 4. 운영자 액션(`runId/sessionKey/log guide`) 성공/실패 토스트가 즉시 표시
 5. 선택/필터가 없는 실패 케이스에서도 안내 문구가 누락되지 않음
+6. Command Palette(`mod+k`)에서 핵심 액션 10개 이상 실행 가능하며 Shortcut Help에서 키맵 재설정 가능
 
 ## Data source
 
