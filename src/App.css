@@ -182,6 +182,15 @@ body {
   gap: 8px;
 }
 
+.throughput-compare-strip {
+  border: 1px solid rgba(142, 222, 255, 0.22);
+  border-radius: 10px;
+  background: rgba(8, 34, 49, 0.72);
+  color: #b4e4f6;
+  padding: 7px 10px;
+  font-size: 0.67rem;
+}
+
 .throughput-window-card {
   border: 1px solid rgba(146, 225, 255, 0.28);
   border-radius: 10px;
@@ -207,7 +216,7 @@ body {
 
 .throughput-kpi-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -244,7 +253,8 @@ body {
 
 .throughput-chart-panel,
 .throughput-agent-panel,
-.throughput-outlier-panel {
+.throughput-outlier-panel,
+.throughput-hotspot-panel {
   border: 1px solid rgba(145, 224, 255, 0.26);
   border-radius: 12px;
   background: rgba(6, 31, 45, 0.72);
@@ -253,20 +263,23 @@ body {
 
 .throughput-chart-panel header,
 .throughput-agent-panel header,
-.throughput-outlier-panel header {
+.throughput-outlier-panel header,
+.throughput-hotspot-panel header {
   margin-bottom: 6px;
 }
 
 .throughput-chart-panel h3,
 .throughput-agent-panel h3,
-.throughput-outlier-panel h3 {
+.throughput-outlier-panel h3,
+.throughput-hotspot-panel h3 {
   margin: 0;
   font-size: 0.86rem;
 }
 
 .throughput-chart-panel p,
 .throughput-agent-panel p,
-.throughput-outlier-panel p {
+.throughput-outlier-panel p,
+.throughput-hotspot-panel p {
   margin: 3px 0 0;
   color: #98cede;
   font-size: 0.67rem;
@@ -439,6 +452,11 @@ body {
   gap: 8px;
 }
 
+.throughput-hotspot-panel {
+  display: grid;
+  gap: 8px;
+}
+
 .throughput-outlier-empty {
   margin: 0;
   font-size: 0.68rem;
@@ -475,6 +493,74 @@ body {
 .throughput-outlier-item.medium {
   border-color: rgba(255, 215, 136, 0.46);
   background: rgba(64, 47, 22, 0.34);
+}
+
+.throughput-hotspot-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 7px;
+}
+
+.throughput-hotspot-item {
+  border: 1px solid rgba(146, 225, 255, 0.26);
+  border-radius: 9px;
+  background: rgba(7, 34, 49, 0.68);
+  padding: 8px;
+  display: grid;
+  gap: 5px;
+}
+
+.throughput-hotspot-main {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.7rem;
+}
+
+.throughput-hotspot-main strong {
+  color: #def8ff;
+}
+
+.throughput-hotspot-main span {
+  color: #9cdbf1;
+  font-size: 0.64rem;
+}
+
+.throughput-hotspot-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 0.63rem;
+  color: #b2deef;
+}
+
+.throughput-hotspot-reasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.throughput-hotspot-reasons span {
+  border: 1px solid rgba(150, 226, 255, 0.3);
+  border-radius: 999px;
+  padding: 2px 7px;
+  font-size: 0.58rem;
+  color: #bde6f5;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.throughput-hotspot-item button {
+  justify-self: start;
+  border: 1px solid rgba(148, 226, 255, 0.36);
+  border-radius: 7px;
+  background: rgba(9, 39, 55, 0.88);
+  color: #d3f2ff;
+  font-size: 0.62rem;
+  padding: 4px 7px;
+  cursor: pointer;
 }
 
 .ops-toolbar {
