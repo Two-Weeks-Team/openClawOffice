@@ -249,6 +249,133 @@ body {
   box-shadow: 0 24px 40px rgba(0, 0, 0, 0.3);
 }
 
+.office-stage-camera-viewport {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  touch-action: none;
+  cursor: grab;
+}
+
+.office-stage-camera-viewport:active {
+  cursor: grabbing;
+}
+
+.office-stage-camera {
+  position: absolute;
+  left: 0;
+  top: 0;
+  will-change: transform;
+}
+
+.camera-controls {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  z-index: 620;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  max-width: calc(100% - 240px);
+  border: 1px solid rgba(152, 230, 255, 0.34);
+  border-radius: 12px;
+  padding: 8px 10px;
+  background: rgba(5, 27, 39, 0.82);
+  backdrop-filter: blur(6px);
+}
+
+.camera-controls button {
+  border: 1px solid rgba(151, 228, 255, 0.42);
+  border-radius: 8px;
+  background: rgba(9, 39, 55, 0.92);
+  color: #d9f5ff;
+  font-size: 0.66rem;
+  line-height: 1;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+.camera-controls button:disabled {
+  opacity: 0.48;
+  cursor: default;
+}
+
+.camera-controls span {
+  font-size: 0.68rem;
+  color: #b8e7f5;
+  letter-spacing: 0.04em;
+  min-width: 42px;
+  text-align: right;
+}
+
+.camera-minimap {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  z-index: 630;
+  width: min(210px, 38vw);
+  border: 1px solid rgba(149, 227, 255, 0.34);
+  border-radius: 12px;
+  background: rgba(5, 27, 39, 0.82);
+  backdrop-filter: blur(6px);
+  padding: 8px;
+  display: grid;
+  gap: 6px;
+}
+
+.camera-minimap header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.64rem;
+  color: #b5e3f2;
+}
+
+.camera-minimap header strong {
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #dff7ff;
+}
+
+.camera-minimap-surface {
+  border: 1px solid rgba(150, 226, 255, 0.28);
+  border-radius: 10px;
+  padding: 0;
+  margin: 0;
+  background: rgba(8, 34, 48, 0.92);
+  cursor: pointer;
+  overflow: hidden;
+  aspect-ratio: 49 / 33;
+}
+
+.camera-minimap-surface svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.camera-minimap-room {
+  fill: rgba(116, 223, 255, 0.22);
+  stroke: rgba(146, 231, 255, 0.48);
+  stroke-width: 2;
+}
+
+.camera-minimap-selected {
+  fill: rgba(255, 228, 154, 0.9);
+  stroke: rgba(255, 247, 219, 0.95);
+  stroke-width: 2;
+}
+
+.camera-minimap-viewport {
+  fill: rgba(138, 232, 255, 0.12);
+  stroke: rgba(178, 241, 255, 0.92);
+  stroke-width: 3;
+  stroke-dasharray: 10 8;
+}
+
 .office-stage-grid {
   position: absolute;
   inset: 0;
@@ -2137,6 +2264,14 @@ body {
     --tile-scale: 1.35;
   }
 
+  .camera-controls {
+    max-width: calc(100% - 204px);
+  }
+
+  .camera-minimap {
+    width: 174px;
+  }
+
   .iso-layer.layer-object .iso-tile {
     display: none;
   }
@@ -2186,6 +2321,36 @@ body {
     --tile-scale: 1.16;
     --tile-opacity: 0.82;
     min-height: 560px;
+  }
+
+  .camera-controls {
+    left: 8px;
+    right: 8px;
+    top: 8px;
+    max-width: none;
+    padding: 6px;
+    gap: 4px;
+  }
+
+  .camera-controls button {
+    font-size: 0.62rem;
+    padding: 5px 6px;
+  }
+
+  .camera-controls span {
+    font-size: 0.62rem;
+  }
+
+  .camera-minimap {
+    top: auto;
+    right: 8px;
+    bottom: 8px;
+    width: 134px;
+    padding: 6px;
+  }
+
+  .camera-minimap header {
+    font-size: 0.58rem;
   }
 
   .iso-layer.layer-wall .iso-tile {

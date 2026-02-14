@@ -98,6 +98,39 @@ const START_ORBIT_WINDOW_MS = 12_000;
 const END_SETTLE_WINDOW_MS = 20_000;
 const CLEANUP_FADE_WINDOW_MS = 30_000;
 const ERROR_SHAKE_WINDOW_MS = 18_000;
+const STAGE_WIDTH = 980;
+const STAGE_HEIGHT = 660;
+const CAMERA_MIN_ZOOM = 0.72;
+const CAMERA_MAX_ZOOM = 2.4;
+const CAMERA_ZOOM_STEP = 0.16;
+
+type CameraState = {
+  zoom: number;
+  panX: number;
+  panY: number;
+  followSelected: boolean;
+};
+
+type TouchPanGesture = {
+  startX: number;
+  startY: number;
+  panX: number;
+  panY: number;
+};
+
+type TouchPinchGesture = {
+  startZoom: number;
+  startDistance: number;
+  startCenterX: number;
+  startCenterY: number;
+  startPanX: number;
+  startPanY: number;
+};
+
+type TouchPoint = {
+  clientX: number;
+  clientY: number;
+};
 
 function hashString(input: string): number {
   let hash = 0;
@@ -228,6 +261,51 @@ function tileStyle(tile: LayerTile): CSSProperties {
   };
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function clampCameraPan(
+  panX: number,
+  panY: number,
+  zoom: number,
+  viewportWidth: number,
+  viewportHeight: number,
+) {
+  const contentWidth = STAGE_WIDTH * zoom;
+  const contentHeight = STAGE_HEIGHT * zoom;
+
+  let nextPanX = panX;
+  if (contentWidth <= viewportWidth) {
+    nextPanX = (viewportWidth - contentWidth) / 2;
+  } else {
+    nextPanX = clamp(panX, viewportWidth - contentWidth, 0);
+  }
+
+  let nextPanY = panY;
+  if (contentHeight <= viewportHeight) {
+    nextPanY = (viewportHeight - contentHeight) / 2;
+  } else {
+    nextPanY = clamp(panY, viewportHeight - contentHeight, 0);
+  }
+
+  return {
+    panX: nextPanX,
+    panY: nextPanY,
+  };
+}
+
+function touchDistance(a: TouchPoint, b: TouchPoint) {
+  return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+}
+
+function touchCenter(a: TouchPoint, b: TouchPoint) {
+  return {
+    x: (a.clientX + b.clientX) / 2,
+    y: (a.clientY + b.clientY) / 2,
+  };
+}
+
 export function OfficeStage({
   snapshot,
   selectedEntityId = null,
@@ -246,9 +324,29 @@ export function OfficeStage({
   const [manifest, setManifest] = useState<ManifestShape | null>(null);
   const [zoneConfig, setZoneConfig] = useState<unknown>(null);
   const [roomBlueprint, setRoomBlueprint] = useState<unknown>(null);
+  const [viewportSize, setViewportSize] = useState({
+    width: STAGE_WIDTH,
+    height: STAGE_HEIGHT,
+  });
+  const [camera, setCamera] = useState<CameraState>({
+    zoom: 1,
+    panX: 0,
+    panY: 0,
+    followSelected: false,
+  });
   const previousRoomOptionsKeyRef = useRef("");
   const previousRoomAssignmentsKeyRef = useRef("");
   const previousBlueprintDiagnosticKeyRef = useRef("");
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+  const mousePanGestureRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    panX: number;
+    panY: number;
+  } | null>(null);
+  const touchPanGestureRef = useRef<TouchPanGesture | null>(null);
+  const touchPinchGestureRef = useRef<TouchPinchGesture | null>(null);
 
   const layoutState = useMemo(
     () =>
@@ -589,10 +687,393 @@ export function OfficeStage({
     runById,
   ]);
   const hasTimelineHighlight = Boolean(normalizedHighlightRunId || normalizedHighlightAgentId);
+  const selectedPlacement = selectedEntityId ? placementById.get(selectedEntityId) : undefined;
+  const shouldFollowSelected = camera.followSelected && Boolean(selectedPlacement);
+
+  useEffect(() => {
+    const node = viewportRef.current;
+    if (!node) {
+      return;
+    }
+
+    const syncViewportSize = (nextWidth: number, nextHeight: number) => {
+      setViewportSize((prev) => {
+        if (prev.width === nextWidth && prev.height === nextHeight) {
+          return prev;
+        }
+        return {
+          width: nextWidth,
+          height: nextHeight,
+        };
+      });
+    };
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) {
+        return;
+      }
+      syncViewportSize(entry.contentRect.width, entry.contentRect.height);
+    });
+    resizeObserver.observe(node);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, []);
+
+  const getViewportSize = () => {
+    const node = viewportRef.current;
+    return {
+      width: node?.clientWidth ?? viewportSize.width,
+      height: node?.clientHeight ?? viewportSize.height,
+    };
+  };
+
+  const resolveCameraPan = (state: CameraState, viewportWidth: number, viewportHeight: number) => {
+    if (state.followSelected && selectedPlacement) {
+      const centeredPan = {
+        panX: viewportWidth / 2 - selectedPlacement.x * state.zoom,
+        panY: viewportHeight / 2 - selectedPlacement.y * state.zoom,
+      };
+      return clampCameraPan(
+        centeredPan.panX,
+        centeredPan.panY,
+        state.zoom,
+        viewportWidth,
+        viewportHeight,
+      );
+    }
+
+    return clampCameraPan(state.panX, state.panY, state.zoom, viewportWidth, viewportHeight);
+  };
+
+  const resolvedCameraPan = resolveCameraPan(camera, viewportSize.width, viewportSize.height);
+  const cameraStyle: CSSProperties = {
+    width: STAGE_WIDTH,
+    height: STAGE_HEIGHT,
+    transformOrigin: "0 0",
+    transform: `translate(${resolvedCameraPan.panX}px, ${resolvedCameraPan.panY}px) scale(${camera.zoom})`,
+  };
+
+  const viewportBox = {
+    x: clamp(-resolvedCameraPan.panX / camera.zoom, 0, STAGE_WIDTH),
+    y: clamp(-resolvedCameraPan.panY / camera.zoom, 0, STAGE_HEIGHT),
+    width: clamp(viewportSize.width / camera.zoom, 0, STAGE_WIDTH),
+    height: clamp(viewportSize.height / camera.zoom, 0, STAGE_HEIGHT),
+  };
+
+  const applyZoomAtPoint = (nextZoom: number, anchorX: number, anchorY: number) => {
+    const { width, height } = getViewportSize();
+    setCamera((prev) => {
+      const targetZoom = clamp(nextZoom, CAMERA_MIN_ZOOM, CAMERA_MAX_ZOOM);
+      const currentPan = resolveCameraPan(prev, width, height);
+      const stageX = (anchorX - currentPan.panX) / prev.zoom;
+      const stageY = (anchorY - currentPan.panY) / prev.zoom;
+      const nextPanX = anchorX - stageX * targetZoom;
+      const nextPanY = anchorY - stageY * targetZoom;
+      const clampedPan = clampCameraPan(nextPanX, nextPanY, targetZoom, width, height);
+      return {
+        zoom: targetZoom,
+        panX: clampedPan.panX,
+        panY: clampedPan.panY,
+        followSelected: false,
+      };
+    });
+  };
+
+  const centerCameraOnPoint = (x: number, y: number) => {
+    const { width, height } = getViewportSize();
+    setCamera((prev) => {
+      const nextPan = clampCameraPan(
+        width / 2 - x * prev.zoom,
+        height / 2 - y * prev.zoom,
+        prev.zoom,
+        width,
+        height,
+      );
+      return {
+        ...prev,
+        panX: nextPan.panX,
+        panY: nextPan.panY,
+        followSelected: false,
+      };
+    });
+  };
 
   return (
     <div className="office-stage-wrap">
-      <div className="office-stage-grid" />
+      <div className="camera-controls">
+        <button
+          type="button"
+          onClick={() => {
+            const { width, height } = getViewportSize();
+            applyZoomAtPoint(camera.zoom + CAMERA_ZOOM_STEP, width / 2, height / 2);
+          }}
+        >
+          Zoom +
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            const { width, height } = getViewportSize();
+            applyZoomAtPoint(camera.zoom - CAMERA_ZOOM_STEP, width / 2, height / 2);
+          }}
+        >
+          Zoom -
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setCamera({
+              zoom: 1,
+              panX: 0,
+              panY: 0,
+              followSelected: false,
+            });
+          }}
+        >
+          Reset
+        </button>
+        <button
+          type="button"
+          disabled={!selectedPlacement}
+          onClick={() => {
+            setCamera((prev) => ({
+              ...prev,
+              followSelected: !prev.followSelected,
+            }));
+          }}
+        >
+          {shouldFollowSelected ? "Follow on" : "Follow off"}
+        </button>
+        <span>{Math.round(camera.zoom * 100)}%</span>
+      </div>
+
+      <aside className="camera-minimap">
+        <header>
+          <strong>Minimap</strong>
+          <span>Tap to center</span>
+        </header>
+        <button
+          type="button"
+          className="camera-minimap-surface"
+          onClick={(event) => {
+            const bounds = event.currentTarget.getBoundingClientRect();
+            if (bounds.width <= 0 || bounds.height <= 0) {
+              return;
+            }
+            const normalizedX = clamp((event.clientX - bounds.left) / bounds.width, 0, 1);
+            const normalizedY = clamp((event.clientY - bounds.top) / bounds.height, 0, 1);
+            centerCameraOnPoint(normalizedX * STAGE_WIDTH, normalizedY * STAGE_HEIGHT);
+          }}
+        >
+          <svg viewBox={`0 0 ${STAGE_WIDTH} ${STAGE_HEIGHT}`} preserveAspectRatio="none" aria-hidden>
+            {rooms.map((room) => (
+              <rect
+                key={`mini:${room.id}`}
+                x={room.x}
+                y={room.y}
+                width={room.width}
+                height={room.height}
+                className="camera-minimap-room"
+              />
+            ))}
+            {selectedPlacement ? (
+              <circle
+                cx={selectedPlacement.x}
+                cy={selectedPlacement.y}
+                r={12}
+                className="camera-minimap-selected"
+              />
+            ) : null}
+            <rect
+              x={viewportBox.x}
+              y={viewportBox.y}
+              width={viewportBox.width}
+              height={viewportBox.height}
+              className="camera-minimap-viewport"
+            />
+          </svg>
+        </button>
+      </aside>
+
+      <div
+        ref={viewportRef}
+        className="office-stage-camera-viewport"
+        onWheel={(event) => {
+          event.preventDefault();
+          const bounds = event.currentTarget.getBoundingClientRect();
+          const anchorX = event.clientX - bounds.left;
+          const anchorY = event.clientY - bounds.top;
+          const direction = event.deltaY > 0 ? -1 : 1;
+          applyZoomAtPoint(camera.zoom + direction * CAMERA_ZOOM_STEP, anchorX, anchorY);
+        }}
+        onPointerDown={(event) => {
+          if (event.pointerType === "touch") {
+            return;
+          }
+          if (event.pointerType === "mouse" && event.button !== 0) {
+            return;
+          }
+          const target = event.target as HTMLElement;
+          if (target.closest(".entity-token, .camera-controls, .camera-minimap")) {
+            return;
+          }
+          mousePanGestureRef.current = {
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            panX: resolvedCameraPan.panX,
+            panY: resolvedCameraPan.panY,
+          };
+          event.currentTarget.setPointerCapture(event.pointerId);
+        }}
+        onPointerMove={(event) => {
+          const gesture = mousePanGestureRef.current;
+          if (!gesture || gesture.pointerId !== event.pointerId) {
+            return;
+          }
+          const deltaX = event.clientX - gesture.startX;
+          const deltaY = event.clientY - gesture.startY;
+          const { width, height } = getViewportSize();
+          setCamera((prev) => {
+            const nextPan = clampCameraPan(
+              gesture.panX + deltaX,
+              gesture.panY + deltaY,
+              prev.zoom,
+              width,
+              height,
+            );
+            return {
+              ...prev,
+              panX: nextPan.panX,
+              panY: nextPan.panY,
+              followSelected: false,
+            };
+          });
+        }}
+        onPointerUp={(event) => {
+          const gesture = mousePanGestureRef.current;
+          if (gesture && gesture.pointerId === event.pointerId) {
+            mousePanGestureRef.current = null;
+            event.currentTarget.releasePointerCapture(event.pointerId);
+          }
+        }}
+        onPointerCancel={() => {
+          mousePanGestureRef.current = null;
+        }}
+        onTouchStart={(event) => {
+          if (event.touches.length === 1) {
+            const touch = event.touches[0];
+            touchPanGestureRef.current = {
+              startX: touch.clientX,
+              startY: touch.clientY,
+              panX: resolvedCameraPan.panX,
+              panY: resolvedCameraPan.panY,
+            };
+            touchPinchGestureRef.current = null;
+            return;
+          }
+          if (event.touches.length === 2) {
+            const first = event.touches[0];
+            const second = event.touches[1];
+            const center = touchCenter(first, second);
+            touchPinchGestureRef.current = {
+              startZoom: camera.zoom,
+              startDistance: touchDistance(first, second),
+              startCenterX: center.x,
+              startCenterY: center.y,
+              startPanX: resolvedCameraPan.panX,
+              startPanY: resolvedCameraPan.panY,
+            };
+            touchPanGestureRef.current = null;
+          }
+        }}
+        onTouchMove={(event) => {
+          if (event.touches.length === 2 && touchPinchGestureRef.current) {
+            event.preventDefault();
+            const first = event.touches[0];
+            const second = event.touches[1];
+            const center = touchCenter(first, second);
+            const distance = touchDistance(first, second);
+            const gesture = touchPinchGestureRef.current;
+            const nextZoom = clamp(
+              gesture.startZoom * (distance / Math.max(1, gesture.startDistance)),
+              CAMERA_MIN_ZOOM,
+              CAMERA_MAX_ZOOM,
+            );
+            const bounds = event.currentTarget.getBoundingClientRect();
+            const anchorX = center.x - bounds.left;
+            const anchorY = center.y - bounds.top;
+            const startAnchorX = gesture.startCenterX - bounds.left;
+            const startAnchorY = gesture.startCenterY - bounds.top;
+            const stageX = (startAnchorX - gesture.startPanX) / gesture.startZoom;
+            const stageY = (startAnchorY - gesture.startPanY) / gesture.startZoom;
+            const { width, height } = getViewportSize();
+            const nextPan = clampCameraPan(
+              anchorX - stageX * nextZoom,
+              anchorY - stageY * nextZoom,
+              nextZoom,
+              width,
+              height,
+            );
+            setCamera({
+              zoom: nextZoom,
+              panX: nextPan.panX,
+              panY: nextPan.panY,
+              followSelected: false,
+            });
+            return;
+          }
+
+          if (event.touches.length === 1 && touchPanGestureRef.current) {
+            event.preventDefault();
+            const touch = event.touches[0];
+            const gesture = touchPanGestureRef.current;
+            if (!gesture) {
+              return;
+            }
+            const deltaX = touch.clientX - gesture.startX;
+            const deltaY = touch.clientY - gesture.startY;
+            const { width, height } = getViewportSize();
+            setCamera((prev) => {
+              const nextPan = clampCameraPan(
+                gesture.panX + deltaX,
+                gesture.panY + deltaY,
+                prev.zoom,
+                width,
+                height,
+              );
+              return {
+                ...prev,
+                panX: nextPan.panX,
+                panY: nextPan.panY,
+                followSelected: false,
+              };
+            });
+          }
+        }}
+        onTouchEnd={(event) => {
+          if (event.touches.length === 0) {
+            touchPanGestureRef.current = null;
+            touchPinchGestureRef.current = null;
+            return;
+          }
+          if (event.touches.length === 1) {
+            const touch = event.touches[0];
+            touchPanGestureRef.current = {
+              startX: touch.clientX,
+              startY: touch.clientY,
+              panX: resolvedCameraPan.panX,
+              panY: resolvedCameraPan.panY,
+            };
+            touchPinchGestureRef.current = null;
+          }
+        }}
+      >
+        <div className="office-stage-camera" style={cameraStyle}>
+          <div className="office-stage-grid" />
 
       <div className="iso-layer layer-floor" aria-hidden="true">
         {tilesByLayer.floor.map((tile) => (
@@ -768,6 +1249,8 @@ export function OfficeStage({
           </article>
         );
       })}
+        </div>
+      </div>
     </div>
   );
 }
