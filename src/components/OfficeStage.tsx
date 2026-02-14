@@ -11,6 +11,12 @@ import {
 import { indexRunsById } from "../lib/run-graph";
 import { applySemanticRoomMappings, buildSemanticAssetRegistry } from "../lib/semantic-room-mapping";
 import {
+  projectBubbleLaneLayoutForLod,
+  resolveStageLodLevel,
+  shouldRenderRunLinkForLod,
+  type StageLodLevel,
+} from "../lib/stage-lod";
+import {
   buildStageEntityRenderModels,
   evaluateStageEntityPriority,
   type StageEntityRenderModel,
@@ -344,13 +350,20 @@ function bubbleAgeLabel(ageMs: number): string {
 
 type EntityTokenViewProps = {
   model: StageEntityRenderModel;
+  lodLevel: StageLodLevel;
   onSelectEntity?: (entityId: string, mode?: "single" | "toggle") => void;
 };
 
-const EntityTokenView = memo(function EntityTokenView({ model, onSelectEntity }: EntityTokenViewProps) {
+const EntityTokenView = memo(function EntityTokenView({
+  model,
+  lodLevel,
+  onSelectEntity,
+}: EntityTokenViewProps) {
+  const showLabel = lodLevel !== "distant";
+  const showStatus = lodLevel === "detail";
   return (
     <article
-      className={model.className}
+      className={`${model.className} lod-${lodLevel}`}
       style={model.style}
       role="button"
       tabIndex={0}
@@ -371,10 +384,12 @@ const EntityTokenView = memo(function EntityTokenView({ model, onSelectEntity }:
         <div className="sprite" style={model.spriteStyle} />
         <div className="sprite-fallback">{model.kind === "agent" ? "A" : "S"}</div>
       </div>
-      <div className="token-meta">
-        <strong>{model.label}</strong>
-        <span>{model.statusLabel}</span>
-      </div>
+      {showLabel ? (
+        <div className="token-meta">
+          <strong>{model.label}</strong>
+          {showStatus ? <span>{model.statusLabel}</span> : null}
+        </div>
+      ) : null}
     </article>
   );
 });
@@ -720,6 +735,7 @@ export function OfficeStage({
       ? highlightAgentId.trim()
       : null;
   const highlightedRun = normalizedHighlightRunId ? runById.get(normalizedHighlightRunId) : undefined;
+  const lodLevel = resolveStageLodLevel(camera.zoom);
   const alertPrioritySets = useMemo(() => {
     const criticalAlertRunIdSet = new Set<string>();
     const criticalAlertAgentIdSet = new Set<string>();
@@ -909,12 +925,24 @@ export function OfficeStage({
               run.childAgentId === normalizedHighlightAgentId));
         const isOpsHighlighted = hasOpsFilter && linkMatchesOps;
         const hasHighlight = isHighlighted || isOpsHighlighted;
+        if (
+          !shouldRenderRunLinkForLod({
+            lodLevel,
+            hasHighlight,
+            runStatus: run.status,
+            runAgeMs,
+            runRecentWindowMs: RUN_RECENT_WINDOW_MS,
+          })
+        ) {
+          return null;
+        }
 
         return {
           id: `${run.runId}:${sx}:${sy}:${tx}:${ty}`,
           cls: [
             runLineClass(run),
             lifecycleClass,
+            `lod-${lodLevel}`,
             hasHighlight ? "run-highlight" : "",
             hasTimelineHighlight && !isHighlighted ? "run-muted" : "",
             hasOpsFilter && focusMode && !linkMatchesOps ? "run-muted" : "",
@@ -935,11 +963,15 @@ export function OfficeStage({
     normalizedRoomFilterId,
     placementById,
     clusterState.hiddenEntityIdSet,
+    lodLevel,
     snapshot.generatedAt,
     snapshot.runGraph.edges,
     runById,
   ]);
   const bubbleLaneCandidates = useMemo<BubbleLaneCandidate[]>(() => {
+    if (lodLevel === "distant") {
+      return [];
+    }
     const candidates: BubbleLaneCandidate[] = [];
 
     for (const placement of visiblePlacements) {
@@ -1002,6 +1034,7 @@ export function OfficeStage({
     focusMode,
     hasEntityFilter,
     hasOpsFilter,
+    lodLevel,
     normalizedRoomFilterId,
     pinnedBubbleEntityIdSet,
     pinnedEntityIdSet,
@@ -1021,6 +1054,9 @@ export function OfficeStage({
       }),
     [bubbleLaneCandidates],
   );
+  const bubbleLaneRenderState = useMemo(() => {
+    return projectBubbleLaneLayoutForLod(bubbleLaneLayout, lodLevel);
+  }, [bubbleLaneLayout, lodLevel]);
   const hasTimelineHighlight = Boolean(normalizedHighlightRunId || normalizedHighlightAgentId);
   const entityRenderModels = useMemo(
     () =>
@@ -1176,6 +1212,7 @@ export function OfficeStage({
     : undefined;
   const stageClassName = [
     "office-stage-wrap",
+    `lod-${lodLevel}`,
     focusMode ? "is-focus-mode" : "",
     hasFocusSelection ? "has-focus-selection" : "",
     focusMode && selectedPlacement ? `focus-status-${selectedPlacement.entity.status}` : "",
@@ -1550,7 +1587,7 @@ export function OfficeStage({
       </svg>
 
       <section className="bubble-lane-overlay" aria-label="Thread bubble lanes">
-        {bubbleLaneLayout.lanes.map((lane) => (
+        {bubbleLaneRenderState.lanes.map((lane) => (
           <div key={`lane:${lane.id}`} className="bubble-thread-lane" style={{ top: lane.y }}>
             <span className="bubble-thread-label">
               {lane.label}
@@ -1559,7 +1596,7 @@ export function OfficeStage({
           </div>
         ))}
 
-        {bubbleLaneLayout.cards.map((card) => {
+        {bubbleLaneRenderState.cards.map((card) => {
           const entity = card.entityId ? entityById.get(card.entityId) : undefined;
           const isSummary = card.isSummary;
           return (
@@ -1711,7 +1748,12 @@ export function OfficeStage({
       })}
 
       {entityRenderModels.map((model) => (
-        <EntityTokenView key={model.id} model={model} onSelectEntity={onSelectEntity} />
+        <EntityTokenView
+          key={model.id}
+          model={model}
+          lodLevel={lodLevel}
+          onSelectEntity={onSelectEntity}
+        />
       ))}
         </div>
       </div>
