@@ -57,3 +57,5 @@ Run once per week with a fixed owner.
 3. Move one phase lane forward only when exit signal is met.
 4. Record decisions and carry-over risks in the active milestone issue.
 5. Reconfirm that local-only constraints still hold (`127.0.0.1`, 50-agent target).
+
+Operator-facing runbook: `docs/operator-playbook.md`
