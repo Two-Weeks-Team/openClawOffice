@@ -117,12 +117,5 @@ export function setWorkspacePanelPlacement(
 }
 
 export function workspaceDockedPanels(layout: WorkspaceLayoutState): WorkspacePanelId[] {
-  const docked: WorkspacePanelId[] = [];
-  if (layout.timeline === "docked") {
-    docked.push("timeline");
-  }
-  if (layout.detail === "docked") {
-    docked.push("detail");
-  }
-  return docked;
+  return (["timeline", "detail"] as const).filter((panel) => layout[panel] === "docked");
 }

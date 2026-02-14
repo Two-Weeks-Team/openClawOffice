@@ -813,6 +813,10 @@ body {
   grid-row: 1;
 }
 
+.workspace.workspace-preset-three.has-single-docked .workspace-panel.is-docked {
+  grid-column: 2 / -1;
+}
+
 .workspace-panel.is-hidden {
   display: none;
 }

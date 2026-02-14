@@ -55,6 +55,7 @@ import {
   type WorkspaceLayoutPreset,
   type WorkspaceLayoutState,
   type WorkspacePanelId,
+  type WorkspacePanelPlacement,
 } from "./lib/workspace-layout";
 import {
   buildTimelineIndex,
@@ -186,18 +187,22 @@ function StatCard(props: { label: string; value: number | string; accent?: strin
   );
 }
 
+const WORKSPACE_PANEL_PLACEMENT_CLASS: Record<WorkspacePanelPlacement, string> = {
+  docked: "is-docked",
+  detached: "is-detached",
+  hidden: "is-hidden",
+};
+
+const WORKSPACE_PANEL_LABELS: Record<WorkspacePanelId, string> = {
+  timeline: "Timeline",
+  detail: "Detail Panel",
+};
+
 function workspacePanelPlacementClass(
   layout: WorkspaceLayoutState,
   panel: WorkspacePanelId,
 ): string {
-  const placement = layout[panel];
-  if (placement === "docked") {
-    return "is-docked";
-  }
-  if (placement === "detached") {
-    return "is-detached";
-  }
-  return "is-hidden";
+  return WORKSPACE_PANEL_PLACEMENT_CLASS[layout[panel]];
 }
 
 function App() {
@@ -303,6 +308,27 @@ function App() {
   const dockedWorkspacePanels = useMemo(
     () => workspaceDockedPanels(workspaceLayout),
     [workspaceLayout],
+  );
+  const workspaceGridStyle = useMemo(
+    () =>
+      workspaceLayout.preset === "three-pane"
+        ? {
+            gridTemplateColumns: [
+              "minmax(0, 1fr)",
+              ...(workspaceLayout.timeline === "docked" ? ["360px"] : []),
+              ...(workspaceLayout.detail === "docked" ? ["360px"] : []),
+            ].join(" "),
+            gridTemplateRows: "minmax(0, 1fr)",
+          }
+        : {
+            gridTemplateColumns:
+              dockedWorkspacePanels.length > 0 ? "minmax(0, 1fr) 360px" : "minmax(0, 1fr)",
+            gridTemplateRows:
+              dockedWorkspacePanels.length > 1
+                ? "minmax(0, 1fr) minmax(0, 1fr)"
+                : "minmax(0, 1fr)",
+          },
+    [dockedWorkspacePanels.length, workspaceLayout.detail, workspaceLayout.preset, workspaceLayout.timeline],
   );
   const activeEvent = useMemo(
     () => snapshot?.events.find((event) => event.id === activeEventId) ?? null,
@@ -1380,24 +1406,6 @@ function App() {
       : dockedWorkspacePanels.length === 1
         ? "has-single-docked"
         : "has-double-docked";
-  const workspaceGridStyle =
-    workspaceLayout.preset === "three-pane"
-      ? {
-          gridTemplateColumns: [
-            "minmax(0, 1fr)",
-            ...(workspaceLayout.timeline === "docked" ? ["360px"] : []),
-            ...(workspaceLayout.detail === "docked" ? ["360px"] : []),
-          ].join(" "),
-          gridTemplateRows: "minmax(0, 1fr)",
-        }
-      : {
-          gridTemplateColumns:
-            dockedWorkspacePanels.length > 0 ? "minmax(0, 1fr) 360px" : "minmax(0, 1fr)",
-          gridTemplateRows:
-            dockedWorkspacePanels.length > 1
-              ? "minmax(0, 1fr) minmax(0, 1fr)"
-              : "minmax(0, 1fr)",
-        };
 
   return (
     <main className="app-shell">
@@ -1644,7 +1652,7 @@ function App() {
         <div className="workspace-layout-panels">
           {(["timeline", "detail"] as WorkspacePanelId[]).map((panelId) => {
             const placement = workspaceLayout[panelId];
-            const label = panelId === "timeline" ? "Timeline" : "Detail Panel";
+            const label = WORKSPACE_PANEL_LABELS[panelId];
             return (
               <div key={panelId} className="workspace-layout-panel-control">
                 <span>{label}</span>
