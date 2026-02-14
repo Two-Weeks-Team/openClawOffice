@@ -135,6 +135,11 @@ export function parseRunIdDeepLink(search: string): string {
   return normalizeFilterText(params.get("runId") ?? "");
 }
 
+export function parseEventIdDeepLink(search: string): string {
+  const params = new URLSearchParams(search);
+  return normalizeFilterText(params.get("eventId") ?? "");
+}
+
 export function nextPlaybackEventId(
   orderedEvents: OfficeEvent[],
   currentEventId: string | null,
@@ -157,6 +162,53 @@ export function nextPlaybackEventId(
     return null;
   }
   return orderedEvents[nextIndex]?.id ?? null;
+}
+
+export function nextReplayIndex(params: {
+  currentIndex: number;
+  total: number;
+  direction?: 1 | -1;
+  loopStartIndex?: number | null;
+  loopEndIndex?: number | null;
+}): number | null {
+  const direction = params.direction ?? 1;
+  if (!Number.isFinite(params.total) || params.total <= 0) {
+    return null;
+  }
+  const total = Math.max(0, Math.floor(params.total));
+  const maxIndex = total - 1;
+  const currentIndex = Number.isFinite(params.currentIndex) ? Math.floor(params.currentIndex) : -1;
+  const rawStart = params.loopStartIndex;
+  const rawEnd = params.loopEndIndex;
+  const hasLoop = typeof rawStart === "number" && typeof rawEnd === "number";
+  const loopStart = hasLoop ? Math.min(Math.max(0, Math.floor(rawStart)), maxIndex) : null;
+  const loopEnd = hasLoop
+    ? Math.min(Math.max(loopStart ?? 0, Math.floor(rawEnd)), maxIndex)
+    : null;
+
+  if (direction === 1) {
+    if (hasLoop && loopStart !== null && loopEnd !== null) {
+      if (currentIndex < loopStart || currentIndex > loopEnd) {
+        return loopStart;
+      }
+      const next = currentIndex + 1;
+      if (next > loopEnd) {
+        return loopStart;
+      }
+      return next;
+    }
+    const next = currentIndex < 0 ? 0 : currentIndex + 1;
+    if (next < 0 || next >= total) {
+      return null;
+    }
+    return next;
+  }
+
+  const prev = currentIndex < 0 ? maxIndex : currentIndex - 1;
+  if (prev < 0 || prev >= total) {
+    return null;
+  }
+  return prev;
 }
 
 function laneDescriptorForEvent(

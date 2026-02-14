@@ -4,6 +4,7 @@ import {
   buildTimelineIndex,
   filterTimelineEvents,
   nextPlaybackEventId,
+  nextReplayIndex,
   type TimelineFilters,
   type TimelineLane,
   type TimelineLaneMode,
@@ -16,6 +17,8 @@ type LaneContext = {
   laneId: string | null;
   highlightAgentId: string | null;
 };
+
+type ReplayStatus = "idle" | "playing" | "paused";
 
 type Props = {
   roomByAgentId: Map<string, string>;
@@ -80,8 +83,10 @@ export function EventRail({
   onActiveEventIdChange,
   onLaneContextChange,
 }: Props) {
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [replayStatus, setReplayStatus] = useState<ReplayStatus>("idle");
   const [playbackMs, setPlaybackMs] = useState(800);
+  const [loopEnabled, setLoopEnabled] = useState(false);
+  const [loopRange, setLoopRange] = useState<{ startIndex: number; endIndex: number } | null>(null);
   const [laneMode, setLaneMode] = useState<TimelineLaneMode>("room");
   const [manualLaneKey, setManualLaneKey] = useState<string | null>(null);
   const [collapsedLaneKeys, setCollapsedLaneKeys] = useState<string[]>([]);
@@ -121,6 +126,20 @@ export function EventRail({
     [filteredDesc],
   );
   const activePlaybackIndex = playbackEvents.findIndex((event) => event.id === activeEventId);
+  const normalizedLoopRange = useMemo(() => {
+    if (!loopRange || playbackEvents.length === 0) {
+      return null;
+    }
+    const maxIndex = playbackEvents.length - 1;
+    const startIndex = Math.min(Math.max(0, loopRange.startIndex), maxIndex);
+    const endIndex = Math.min(Math.max(startIndex, loopRange.endIndex), maxIndex);
+    return {
+      startIndex,
+      endIndex,
+    };
+  }, [loopRange, playbackEvents.length]);
+  const isPlaying = replayStatus === "playing" && playbackEvents.length > 0;
+  const hasLoopRange = Boolean(normalizedLoopRange);
 
   useEffect(() => {
     if (playbackEvents.length === 0) {
@@ -142,17 +161,35 @@ export function EventRail({
       return undefined;
     }
     const timer = window.setInterval(() => {
-      const nextId = nextPlaybackEventId(playbackEvents, activeEventId, 1);
-      if (!nextId) {
-        setIsPlaying(false);
+      const currentIndex = activeEventId
+        ? playbackEvents.findIndex((event) => event.id === activeEventId)
+        : -1;
+      const nextIndex = nextReplayIndex({
+        currentIndex,
+        total: playbackEvents.length,
+        direction: 1,
+        loopStartIndex: loopEnabled ? normalizedLoopRange?.startIndex : null,
+        loopEndIndex: loopEnabled ? normalizedLoopRange?.endIndex : null,
+      });
+
+      if (nextIndex === null || nextIndex < 0 || nextIndex >= playbackEvents.length) {
+        setReplayStatus("paused");
         return;
       }
-      onActiveEventIdChange(nextId);
+      onActiveEventIdChange(playbackEvents[nextIndex]?.id ?? null);
     }, playbackMs);
     return () => {
       window.clearInterval(timer);
     };
-  }, [activeEventId, isPlaying, onActiveEventIdChange, playbackEvents, playbackMs]);
+  }, [
+    activeEventId,
+    isPlaying,
+    loopEnabled,
+    normalizedLoopRange,
+    onActiveEventIdChange,
+    playbackEvents,
+    playbackMs,
+  ]);
 
   useEffect(() => {
     if (!onLaneContextChange) {
@@ -170,6 +207,10 @@ export function EventRail({
     : null;
   const isEveryLaneCollapsed =
     lanes.length > 0 && lanes.every((lane) => collapsedLaneKeys.includes(lane.key));
+  const replayRunOptions = useMemo(
+    () => [...index.byRunId.keys()].sort((left, right) => left.localeCompare(right)),
+    [index],
+  );
 
   return (
     <aside className="event-rail">
@@ -184,11 +225,17 @@ export function EventRail({
           <input
             type="text"
             placeholder="runId"
+            list="timeline-run-options"
             value={filters.runId}
             onChange={(event) => {
               onFiltersChange({ ...filters, runId: event.target.value });
             }}
           />
+          <datalist id="timeline-run-options">
+            {replayRunOptions.map((runId) => (
+              <option key={runId} value={runId} />
+            ))}
+          </datalist>
         </label>
         <label>
           Agent
@@ -227,7 +274,9 @@ export function EventRail({
             onFiltersChange({ runId: "", agentId: "", status: "all" });
             onActiveEventIdChange(null);
             setManualLaneKey(null);
-            setIsPlaying(false);
+            setReplayStatus("idle");
+            setLoopEnabled(false);
+            setLoopRange(null);
           }}
         >
           Clear
@@ -242,6 +291,7 @@ export function EventRail({
               const prevId = nextPlaybackEventId(playbackEvents, activeEventId, -1);
               if (prevId) {
                 onActiveEventIdChange(prevId);
+                setReplayStatus("paused");
               }
             }}
             disabled={playbackEvents.length === 0 || activePlaybackIndex <= 0}
@@ -251,7 +301,7 @@ export function EventRail({
           <button
             type="button"
             onClick={() => {
-              setIsPlaying((value) => !value);
+              setReplayStatus((value) => (value === "playing" ? "paused" : "playing"));
             }}
             disabled={playbackEvents.length === 0}
           >
@@ -263,6 +313,7 @@ export function EventRail({
               const nextId = nextPlaybackEventId(playbackEvents, activeEventId, 1);
               if (nextId) {
                 onActiveEventIdChange(nextId);
+                setReplayStatus("paused");
               }
             }}
             disabled={playbackEvents.length === 0 || activePlaybackIndex >= playbackEvents.length - 1}
@@ -283,6 +334,68 @@ export function EventRail({
             <option value={450}>2x</option>
           </select>
         </label>
+        <div className="timeline-loop-controls">
+          <button
+            type="button"
+            onClick={() => {
+              if (activePlaybackIndex < 0) {
+                return;
+              }
+              setLoopRange((prev) => ({
+                startIndex: activePlaybackIndex,
+                endIndex:
+                  prev && prev.endIndex >= activePlaybackIndex ? prev.endIndex : activePlaybackIndex,
+              }));
+            }}
+            disabled={activePlaybackIndex < 0}
+          >
+            Set A
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (activePlaybackIndex < 0) {
+                return;
+              }
+              setLoopRange((prev) => ({
+                startIndex:
+                  prev && prev.startIndex <= activePlaybackIndex ? prev.startIndex : activePlaybackIndex,
+                endIndex: activePlaybackIndex,
+              }));
+            }}
+            disabled={activePlaybackIndex < 0}
+          >
+            Set B
+          </button>
+          <label className="timeline-loop-toggle">
+            <input
+              type="checkbox"
+              checked={loopEnabled}
+              onChange={(event) => {
+                const checked = event.target.checked;
+                setLoopEnabled(checked);
+                if (checked && !normalizedLoopRange && activePlaybackIndex >= 0) {
+                  setLoopRange({
+                    startIndex: activePlaybackIndex,
+                    endIndex: activePlaybackIndex,
+                  });
+                }
+              }}
+              disabled={!hasLoopRange}
+            />
+            Loop
+          </label>
+          <button
+            type="button"
+            onClick={() => {
+              setLoopEnabled(false);
+              setLoopRange(null);
+            }}
+            disabled={!hasLoopRange}
+          >
+            Clear Loop
+          </button>
+        </div>
       </section>
 
       <section className="timeline-scrubber">
@@ -300,6 +413,11 @@ export function EventRail({
         <div className="timeline-scrubber-meta">
           <span>{playbackEvents.length} events</span>
           <span>{activeEvent ? new Date(activeEvent.at).toLocaleTimeString() : "-"}</span>
+          <span>
+            {normalizedLoopRange
+              ? `loop ${normalizedLoopRange.startIndex + 1}-${normalizedLoopRange.endIndex + 1}${loopEnabled ? " on" : " off"}`
+              : "loop off"}
+          </span>
         </div>
       </section>
 
