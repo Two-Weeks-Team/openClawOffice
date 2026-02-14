@@ -264,18 +264,7 @@ function normalizeArrayWithFallback<T>(
 }
 
 function dedupeAndAppendDefaults<T>(value: T[], defaults: readonly T[]): T[] {
-  const deduped: T[] = [];
-  for (const item of value) {
-    if (!deduped.includes(item)) {
-      deduped.push(item);
-    }
-  }
-  for (const fallback of defaults) {
-    if (!deduped.includes(fallback)) {
-      deduped.push(fallback);
-    }
-  }
-  return deduped;
+  return [...new Set([...value, ...defaults])];
 }
 
 function isValidStatus(value: unknown): value is OfficeEntityStatus {
