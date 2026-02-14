@@ -37,6 +37,7 @@ Web-based visual command center for OpenClaw agents and subagents.
 - Responsive LOD policy (desktop: full layers, smaller viewport: object/wall detail reduction)
 - Zone rule engine (JSON DSL) with priority routing + room capacity overflow policy
 - Room-level debug overlay (`cap/target/overflow`) for layout diagnostics
+- Occupancy heat overlay (`low/medium/high`) + auto/manual placement mode toggle
 - Lifecycle motion tokens for spawn/start/end/error/cleanup + reduced-motion fallback
 - Entity detail panel (`Overview / Sessions / Runs / Messages / Metrics`) with copy actions
 - Timeline debugger with `runId/agentId/status` filters + playback + run deep link
