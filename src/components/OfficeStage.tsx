@@ -18,6 +18,7 @@ type Props = {
   hasEntityFilter?: boolean;
   roomFilterId?: string;
   focusMode?: boolean;
+  placementMode?: "auto" | "manual";
   onRoomOptionsChange?: (roomIds: string[]) => void;
   onRoomAssignmentsChange?: (roomByAgentId: Map<string, string>) => void;
   onFilterMatchCountChange?: (count: number) => void;
@@ -236,6 +237,7 @@ export function OfficeStage({
   hasEntityFilter = false,
   roomFilterId = "all",
   focusMode = false,
+  placementMode = "auto",
   onRoomOptionsChange,
   onRoomAssignmentsChange,
   onFilterMatchCountChange,
@@ -253,9 +255,10 @@ export function OfficeStage({
       buildPlacements({
         entities: snapshot.entities,
         generatedAt: snapshot.generatedAt,
+        placementMode,
         zoneConfig,
       }),
-    [snapshot.entities, snapshot.generatedAt, zoneConfig],
+    [placementMode, snapshot.entities, snapshot.generatedAt, zoneConfig],
   );
 
   const rooms = layoutState.rooms;
@@ -618,10 +621,14 @@ export function OfficeStage({
       {rooms.map((room) => {
         const debug = layoutState.roomDebug.get(room.id);
         const overflowCount = (debug?.overflowIn ?? 0) + (debug?.overflowOut ?? 0);
+        const occupancyRatio = debug ? debug.assigned / Math.max(1, debug.capacity) : 0;
+        const occupancyPercent = Math.round(occupancyRatio * 100);
+        const occupancyHeatLevel =
+          occupancyRatio >= 1 ? "high" : occupancyRatio >= 0.7 ? "medium" : "low";
         return (
           <section
             key={room.id}
-            className="office-room"
+            className={`office-room heat-${occupancyHeatLevel}`}
             style={{
               left: room.x,
               top: room.y,
@@ -631,6 +638,7 @@ export function OfficeStage({
               borderColor: room.border,
             }}
           >
+            <div className={`occupancy-heat heat-${occupancyHeatLevel}`} aria-hidden="true" />
             <header>{room.label}</header>
             <div className="shape-tag">{room.shape}</div>
             {debug ? (
@@ -638,6 +646,7 @@ export function OfficeStage({
                 <span>
                   cap {debug.assigned}/{debug.capacity}
                 </span>
+                <span>occ {occupancyPercent}%</span>
                 <span>target {debug.targeted}</span>
                 {debug.overflowOut > 0 ? <span>out +{debug.overflowOut}</span> : null}
                 {debug.overflowIn > 0 ? <span>in +{debug.overflowIn}</span> : null}

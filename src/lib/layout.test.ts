@@ -116,6 +116,69 @@ describe("buildPlacements", () => {
     expect(result.roomDebug.get("strategy")?.overflowOut).toBeGreaterThan(0);
   });
 
+  it("supports manual mode without overflow rerouting", () => {
+    const entities = Array.from({ length: 3 }, (_, index) =>
+      makeEntity({
+        id: `agent-manual-${index + 1}`,
+        agentId: `agent-manual-${index + 1}`,
+        label: `Manual Agent ${index + 1}`,
+        status: "active",
+      }),
+    );
+
+    const zoneConfig = {
+      rooms: [
+        {
+          id: "strategy",
+          capacity: 1,
+          secondaryZoneId: "ops",
+          routing: { statuses: ["active"], kinds: ["agent"], recentWeight: 0 },
+        },
+        {
+          id: "ops",
+          capacity: 3,
+          secondaryZoneId: "build",
+          routing: { statuses: ["offline"], kinds: ["agent"], recentWeight: 0 },
+        },
+        {
+          id: "build",
+          capacity: 3,
+          secondaryZoneId: "spawn",
+          routing: { statuses: ["offline"], kinds: ["agent"], recentWeight: 0 },
+        },
+        {
+          id: "spawn",
+          capacity: 3,
+          secondaryZoneId: "lounge",
+          routing: { statuses: ["offline"], kinds: ["agent"], recentWeight: 0 },
+        },
+        {
+          id: "lounge",
+          capacity: 3,
+          secondaryZoneId: "ops",
+          routing: { statuses: ["offline"], kinds: ["agent"], recentWeight: 0 },
+        },
+      ],
+    };
+
+    const autoResult = buildPlacements({
+      entities,
+      generatedAt: 1_000_000,
+      placementMode: "auto",
+      zoneConfig,
+    });
+    const manualResult = buildPlacements({
+      entities,
+      generatedAt: 1_000_000,
+      placementMode: "manual",
+      zoneConfig,
+    });
+
+    expect(autoResult.placements.some((placement) => placement.roomId !== "strategy")).toBe(true);
+    expect(manualResult.placements.every((placement) => placement.roomId === "strategy")).toBe(true);
+    expect(manualResult.placements.some((placement) => placement.overflowed)).toBe(true);
+  });
+
   it("places subagents near parent agents when parent affinity is enabled", () => {
     const parent = makeEntity({
       id: "agent-parent",

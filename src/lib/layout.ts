@@ -3,6 +3,7 @@ import type { OfficeEntity, OfficeEntityStatus } from "../types/office";
 export type RoomShape = "grid" | "ring" | "line" | "cluster";
 export type ZonePriorityKey = "status" | "role" | "parent" | "recent";
 export type EntityRole = "strategy" | "ops" | "build" | "spawn" | "recovery";
+export type PlacementMode = "auto" | "manual";
 
 type RoomRoutingSpec = {
   statuses: OfficeEntityStatus[];
@@ -527,11 +528,16 @@ function resolveOverflowRoom(params: {
   roomById: Map<string, RoomSpec>;
   occupancyByRoom: Map<string, number>;
   defaultOverflowZoneId: string;
+  placementMode: PlacementMode;
 }): { roomId: string; overflowed: boolean } {
-  const { targetRoom, rooms, roomById, occupancyByRoom, defaultOverflowZoneId } = params;
+  const { targetRoom, rooms, roomById, occupancyByRoom, defaultOverflowZoneId, placementMode } =
+    params;
   const targetOccupancy = occupancyByRoom.get(targetRoom.id) ?? 0;
   if (targetOccupancy < targetRoom.capacity) {
     return { roomId: targetRoom.id, overflowed: false };
+  }
+  if (placementMode === "manual") {
+    return { roomId: targetRoom.id, overflowed: true };
   }
 
   const visited = new Set<string>([targetRoom.id]);
@@ -667,9 +673,11 @@ export function getRooms(zoneConfig?: unknown): RoomSpec[] {
 export function buildPlacements(params: {
   entities: OfficeEntity[];
   generatedAt: number;
+  placementMode?: PlacementMode;
   zoneConfig?: unknown;
 }): PlacementResult {
   const config = normalizeZoneConfig(params.zoneConfig);
+  const placementMode = params.placementMode ?? "auto";
   const rooms = config.rooms;
   const roomById = new Map(rooms.map((room) => [room.id, room]));
 
@@ -706,10 +714,11 @@ export function buildPlacements(params: {
       roomById,
       occupancyByRoom,
       defaultOverflowZoneId: config.defaultOverflowZoneId,
+      placementMode,
     });
     occupancyByRoom.set(resolved.roomId, (occupancyByRoom.get(resolved.roomId) ?? 0) + 1);
 
-    if (resolved.overflowed) {
+    if (resolved.overflowed && resolved.roomId !== targetRoom.id) {
       overflowOutByRoom.set(targetRoom.id, (overflowOutByRoom.get(targetRoom.id) ?? 0) + 1);
       overflowInByRoom.set(resolved.roomId, (overflowInByRoom.get(resolved.roomId) ?? 0) + 1);
     }

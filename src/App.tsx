@@ -8,11 +8,13 @@ import { buildEntitySearchIndex, searchEntityIds } from "./lib/entity-search";
 import { parseRunIdDeepLink, type TimelineFilters } from "./lib/timeline";
 
 type EntityStatusFilter = "all" | "active" | "idle" | "error" | "ok" | "offline";
+type PlacementMode = "auto" | "manual";
 type RecentWindowFilter = "all" | 5 | 15 | 30 | 60;
 type OpsFilters = {
   query: string;
   status: EntityStatusFilter;
   roomId: string;
+  placementMode: PlacementMode;
   recentMinutes: RecentWindowFilter;
   focusMode: boolean;
 };
@@ -57,6 +59,7 @@ function App() {
     query: "",
     status: "all",
     roomId: "all",
+    placementMode: "auto",
     recentMinutes: "all",
     focusMode: false,
   });
@@ -336,6 +339,22 @@ function App() {
         </label>
 
         <label className="ops-field">
+          Placement
+          <select
+            value={opsFilters.placementMode}
+            onChange={(event) => {
+              setOpsFilters((prev) => ({
+                ...prev,
+                placementMode: event.target.value as PlacementMode,
+              }));
+            }}
+          >
+            <option value="auto">AUTO</option>
+            <option value="manual">MANUAL</option>
+          </select>
+        </label>
+
+        <label className="ops-field">
           Recent
           <select
             value={opsFilters.recentMinutes}
@@ -396,6 +415,7 @@ function App() {
           hasEntityFilter={hasEntityFilter}
           roomFilterId={opsFilters.roomId}
           focusMode={opsFilters.focusMode}
+          placementMode={opsFilters.placementMode}
           onRoomOptionsChange={setRoomOptions}
           onRoomAssignmentsChange={handleRoomAssignmentsChange}
           onFilterMatchCountChange={setMatchCount}
