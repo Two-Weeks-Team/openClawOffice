@@ -31,6 +31,17 @@ pnpm ci:local
 - Node `heapUsed` memory footprint
 - report artifacts (`JSON`/`MD`): `.reports/perf/local50-latest.json`, `.reports/perf/local50-latest.md`
 
+## Stream Memory Guard
+`OfficeStreamBridge` applies a bounded queue and burst backpressure policy to keep memory usage stable:
+- `maxQueue`: cap lifecycle backfill queue size
+- `maxEmitPerSnapshot`: cap lifecycle frames emitted from a single snapshot burst
+- `maxSeen`: cap deduplication id set size
+
+Check `/api/office/metrics` stream counters during soak runs:
+- `backpressureActivations`
+- `droppedUnseenEvents`
+- `evictedBackfillEvents`
+
 ## Profiling Template
 Use this template when reporting a new measurement run.
 

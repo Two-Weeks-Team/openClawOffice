@@ -8,11 +8,19 @@ export type LifecycleEnvelope = {
 type BridgeOptions = {
   maxQueue: number;
   maxSeen: number;
+  maxEmitPerSnapshot: number;
 };
 
 const DEFAULT_OPTIONS: BridgeOptions = {
   maxQueue: 1200,
   maxSeen: 4000,
+  maxEmitPerSnapshot: 180,
+};
+
+export type StreamPressureStats = {
+  backpressureActivations: number;
+  droppedUnseenEvents: number;
+  evictedBackfillEvents: number;
 };
 
 function lifecycleEventOrder(a: OfficeEvent, b: OfficeEvent): number {
@@ -43,6 +51,12 @@ export class OfficeStreamBridge {
 
   private readonly queue: LifecycleEnvelope[] = [];
 
+  private pendingPressureStats: StreamPressureStats = {
+    backpressureActivations: 0,
+    droppedUnseenEvents: 0,
+    evictedBackfillEvents: 0,
+  };
+
   constructor(options?: Partial<BridgeOptions>) {
     this.options = {
       ...DEFAULT_OPTIONS,
@@ -62,6 +76,16 @@ export class OfficeStreamBridge {
     return this.queue.slice(firstIndex);
   }
 
+  consumePressureStats(): StreamPressureStats {
+    const stats = this.pendingPressureStats;
+    this.pendingPressureStats = {
+      backpressureActivations: 0,
+      droppedUnseenEvents: 0,
+      evictedBackfillEvents: 0,
+    };
+    return stats;
+  }
+
   ingestSnapshot(snapshot: OfficeSnapshot): LifecycleEnvelope[] {
     this.latestSnapshot = snapshot;
 
@@ -79,8 +103,16 @@ export class OfficeStreamBridge {
     unseen.sort(lifecycleEventOrder);
     this.rememberEvents(unseen);
 
+    let toEmit = unseen;
+    if (unseen.length > this.options.maxEmitPerSnapshot) {
+      const dropCount = unseen.length - this.options.maxEmitPerSnapshot;
+      toEmit = unseen.slice(dropCount);
+      this.pendingPressureStats.backpressureActivations += 1;
+      this.pendingPressureStats.droppedUnseenEvents += dropCount;
+    }
+
     const frames: LifecycleEnvelope[] = [];
-    for (const event of unseen) {
+    for (const event of toEmit) {
       this.seq += 1;
       const frame = { seq: this.seq, event };
       this.queue.push(frame);
@@ -88,7 +120,10 @@ export class OfficeStreamBridge {
     }
 
     if (this.queue.length > this.options.maxQueue) {
-      this.queue.splice(0, this.queue.length - this.options.maxQueue);
+      const removeCount = this.queue.length - this.options.maxQueue;
+      this.queue.splice(0, removeCount);
+      this.pendingPressureStats.backpressureActivations += 1;
+      this.pendingPressureStats.evictedBackfillEvents += removeCount;
     }
 
     return frames;
