@@ -273,6 +273,33 @@ body {
   color: var(--muted);
 }
 
+.status-kpi-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.status-kpi-card {
+  border: 1px solid rgba(148, 225, 255, 0.24);
+  border-radius: 12px;
+  background: rgba(8, 31, 44, 0.72);
+  padding: 8px 10px;
+  display: grid;
+  gap: 2px;
+}
+
+.status-kpi-card span {
+  color: #9ed0e3;
+  font-size: 0.66rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.status-kpi-card strong {
+  color: #ebfcff;
+  font-size: 1rem;
+}
+
 .status-pill-row {
   display: flex;
   gap: 8px;
@@ -848,10 +875,20 @@ body {
 
 .ops-actions {
   grid-column: 1 / -1;
+  display: grid;
+  gap: 8px;
+}
+
+.ops-actions-primary,
+.ops-actions-advanced {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
+}
+
+.ops-actions-advanced[hidden] {
+  display: none;
 }
 
 .ops-actions button {
@@ -875,7 +912,7 @@ body {
 }
 
 .ops-match-count {
-  margin-left: auto;
+  justify-self: end;
   font-size: 0.66rem;
   color: #a6d8e6;
 }
@@ -912,6 +949,31 @@ body {
   gap: 10px;
   align-items: center;
   margin-bottom: 8px;
+}
+
+.workspace-layout-advanced {
+  display: grid;
+  gap: 8px;
+}
+
+.workspace-layout-toolbar-toggle {
+  justify-self: start;
+  border-radius: 999px;
+  border: 1px solid rgba(149, 227, 255, 0.34);
+  background: rgba(9, 36, 51, 0.82);
+  color: #d8f4ff;
+  font-size: 0.64rem;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.workspace-layout-toolbar-toggle.is-active {
+  border-color: rgba(132, 255, 198, 0.65);
+  color: #a8ffdd;
+}
+
+.workspace-layout-toolbar[hidden] {
+  display: none;
 }
 
 .workspace-layout-presets,
@@ -3842,6 +3904,10 @@ body {
     justify-content: flex-start;
   }
 
+  .status-kpi-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .office-stage-wrap {
     --tile-scale: 1.35;
   }
@@ -4066,7 +4132,13 @@ body {
   }
 
   .ops-match-count {
-    margin-left: 0;
+    justify-self: start;
+  }
+
+  .ops-actions-primary,
+  .ops-actions-advanced {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .office-room {

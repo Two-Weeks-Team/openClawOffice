@@ -290,6 +290,8 @@ function App() {
     loadWorkspaceLayoutState,
   );
   const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<WorkspaceTabId>("status");
+  const [isOperationsAdvancedOpen, setIsOperationsAdvancedOpen] = useState(false);
+  const [isLayoutAdvancedOpen, setIsLayoutAdvancedOpen] = useState(false);
   const hasBatchStateHydratedRef = useRef(false);
   const hasRunKnowledgeHydratedRef = useRef(false);
   const hasWorkspaceLayoutHydratedRef = useRef(false);
@@ -1571,8 +1573,28 @@ function App() {
           <section className="hero-bar">
             <div>
               <h1>openClawOffice</h1>
-              <p>Zone-based visual HQ for OpenClaw agents and subagents.</p>
+              <p>Stage-first mission control for live OpenClaw operations.</p>
             </div>
+          </section>
+          <section className="status-kpi-strip" aria-label="Core status metrics">
+            <article className="status-kpi-card">
+              <span>Running</span>
+              <strong>{running}</strong>
+            </article>
+            <article className="status-kpi-card">
+              <span>Errors</span>
+              <strong>{failed}</strong>
+            </article>
+            <article className="status-kpi-card">
+              <span>Alerts</span>
+              <strong>{visibleAlertSignals.length}</strong>
+            </article>
+            <article className="status-kpi-card">
+              <span>Selection</span>
+              <strong>
+                {selectedCount}/{(matchCount ?? filteredEntityIds.length).toString()}
+              </strong>
+            </article>
           </section>
         </section>
 
@@ -1682,138 +1704,170 @@ function App() {
             </label>
 
             <div className="ops-actions">
-              <button type="button" onClick={openShortcutHelp}>
-                Shortcut Help ({helpShortcutLabel})
-              </button>
-              <button
-                type="button"
-                className={hasActiveAlerts ? "ops-alert-button has-alerts" : "ops-alert-button"}
-                onClick={toggleAlertCenter}
-              >
-                Alert Center ({alertCenterShortcutLabel}) [{visibleAlertSignals.length}]
-              </button>
-              <button type="button" disabled={filteredEntityIds.length === 0} onClick={selectFilteredEntities}>
-                Select filtered
-              </button>
-              <button
-                type="button"
-                disabled={selectedCount === 0}
-                onClick={() => {
-                  applyEntityBatchAction(allSelectedPinned ? "unpin" : "pin");
-                }}
-              >
-                {allSelectedPinned ? "Unpin selected" : "Pin selected"}
-              </button>
-              <button
-                type="button"
-                disabled={selectedCount === 0}
-                onClick={() => {
-                  applyEntityBatchAction(allSelectedWatched ? "unwatch" : "watch");
-                }}
-              >
-                {allSelectedWatched ? "Unwatch selected" : "Watch selected"}
-              </button>
-              <button
-                type="button"
-                disabled={selectedCount === 0}
-                onClick={() => {
-                  applyEntityBatchAction(allSelectedMuted ? "unmute" : "mute");
-                }}
-              >
-                {allSelectedMuted ? "Unmute selected" : "Mute selected"}
-              </button>
-              <button
-                type="button"
-                disabled={selectedCount === 0}
-                onClick={() => {
-                  applyEntityBatchAction("clear");
-                }}
-              >
-                Clear selected flags
-              </button>
-              <button type="button" disabled={selectedCount === 0} onClick={clearSelectedEntities}>
-                Clear selection
-              </button>
-              <button type="button" onClick={() => void onCopyReplayLink()}>
-                Copy replay link
-              </button>
-              <button type="button" onClick={() => void onCopySessionKey()}>
-                Copy sessionKey
-              </button>
-              <button type="button" onClick={() => void onCopyLogGuide()}>
-                Log path guide
-              </button>
-              <span className="ops-batch-summary">
-                selected {selectedCount} (ctrl/cmd+click) | pin {batchActionState.pinnedEntityIds.length} | watch{" "}
-                {batchActionState.watchedEntityIds.length} | mute {batchActionState.mutedEntityIds.length}
-              </span>
+              <div className="ops-actions-primary">
+                <button type="button" onClick={openShortcutHelp}>
+                  Shortcut Help ({helpShortcutLabel})
+                </button>
+                <button
+                  type="button"
+                  className={hasActiveAlerts ? "ops-alert-button has-alerts" : "ops-alert-button"}
+                  onClick={toggleAlertCenter}
+                >
+                  Alert Center ({alertCenterShortcutLabel}) [{visibleAlertSignals.length}]
+                </button>
+                <button type="button" disabled={filteredEntityIds.length === 0} onClick={selectFilteredEntities}>
+                  Select filtered
+                </button>
+                <button
+                  type="button"
+                  className={isOperationsAdvancedOpen ? "is-active" : ""}
+                  aria-expanded={isOperationsAdvancedOpen}
+                  aria-controls="ops-advanced-actions"
+                  onClick={() => {
+                    setIsOperationsAdvancedOpen((prev) => !prev);
+                  }}
+                >
+                  {isOperationsAdvancedOpen ? "Hide advanced actions" : "Show advanced actions"}
+                </button>
+              </div>
+              <div id="ops-advanced-actions" className="ops-actions-advanced" hidden={!isOperationsAdvancedOpen}>
+                <button
+                  type="button"
+                  disabled={selectedCount === 0}
+                  onClick={() => {
+                    applyEntityBatchAction(allSelectedPinned ? "unpin" : "pin");
+                  }}
+                >
+                  {allSelectedPinned ? "Unpin selected" : "Pin selected"}
+                </button>
+                <button
+                  type="button"
+                  disabled={selectedCount === 0}
+                  onClick={() => {
+                    applyEntityBatchAction(allSelectedWatched ? "unwatch" : "watch");
+                  }}
+                >
+                  {allSelectedWatched ? "Unwatch selected" : "Watch selected"}
+                </button>
+                <button
+                  type="button"
+                  disabled={selectedCount === 0}
+                  onClick={() => {
+                    applyEntityBatchAction(allSelectedMuted ? "unmute" : "mute");
+                  }}
+                >
+                  {allSelectedMuted ? "Unmute selected" : "Mute selected"}
+                </button>
+                <button
+                  type="button"
+                  disabled={selectedCount === 0}
+                  onClick={() => {
+                    applyEntityBatchAction("clear");
+                  }}
+                >
+                  Clear selected flags
+                </button>
+                <button type="button" disabled={selectedCount === 0} onClick={clearSelectedEntities}>
+                  Clear selection
+                </button>
+                <button type="button" onClick={() => void onCopyReplayLink()}>
+                  Copy replay link
+                </button>
+                <button type="button" onClick={() => void onCopySessionKey()}>
+                  Copy sessionKey
+                </button>
+                <button type="button" onClick={() => void onCopyLogGuide()}>
+                  Log path guide
+                </button>
+                <span className="ops-batch-summary">
+                  selected {selectedCount} (ctrl/cmd+click) | pin {batchActionState.pinnedEntityIds.length} | watch{" "}
+                  {batchActionState.watchedEntityIds.length} | mute {batchActionState.mutedEntityIds.length}
+                </span>
+              </div>
               <span className="ops-match-count">
                 match {(matchCount ?? filteredEntityIds.length).toString()}/{snapshot.entities.length}
               </span>
             </div>
           </section>
 
-          <section className="workspace-layout-toolbar">
-            <div className="workspace-layout-presets">
-              <strong>Split View</strong>
-              <button
-                type="button"
-                className={workspaceLayout.preset === "two-pane" ? "is-active" : ""}
-                onClick={() => {
-                  setWorkspacePreset("two-pane");
-                }}
-              >
-                2-pane
-              </button>
-              <button
-                type="button"
-                className={workspaceLayout.preset === "three-pane" ? "is-active" : ""}
-                onClick={() => {
-                  setWorkspacePreset("three-pane");
-                }}
-              >
-                3-pane
-              </button>
-            </div>
-            <div className="workspace-layout-panels">
-              {(["timeline", "detail"] as WorkspacePanelId[]).map((panelId) => {
-                const placement = workspaceLayout[panelId];
-                const label = WORKSPACE_PANEL_LABELS[panelId];
-                return (
-                  <div key={panelId} className="workspace-layout-panel-control">
-                    <span>{label}</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        toggleWorkspacePanelPinned(panelId);
-                      }}
-                    >
-                      {placement === "hidden" ? "Pin" : "Unpin"}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={placement === "hidden"}
-                      onClick={() => {
-                        toggleWorkspacePanelDetached(panelId);
-                      }}
-                    >
-                      {placement === "detached" ? "Attach" : "Detach"}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="workspace-layout-actions">
-              <button type="button" onClick={saveWorkspaceLayout}>
-                Save layout
-              </button>
-              <button type="button" onClick={restoreWorkspaceLayout}>
-                Restore layout
-              </button>
-              <button type="button" onClick={resetWorkspaceLayout}>
-                Reset layout
-              </button>
-            </div>
+          <section className="workspace-layout-advanced">
+            <button
+              type="button"
+              className={`workspace-layout-toolbar-toggle ${isLayoutAdvancedOpen ? "is-active" : ""}`}
+              aria-expanded={isLayoutAdvancedOpen}
+              aria-controls="workspace-layout-toolbar"
+              onClick={() => {
+                setIsLayoutAdvancedOpen((prev) => !prev);
+              }}
+            >
+              {isLayoutAdvancedOpen ? "Hide layout controls" : "Show layout controls"}
+            </button>
+            <section
+              id="workspace-layout-toolbar"
+              className="workspace-layout-toolbar"
+              hidden={!isLayoutAdvancedOpen}
+            >
+              <div className="workspace-layout-presets">
+                <strong>Split View</strong>
+                <button
+                  type="button"
+                  className={workspaceLayout.preset === "two-pane" ? "is-active" : ""}
+                  onClick={() => {
+                    setWorkspacePreset("two-pane");
+                  }}
+                >
+                  2-pane
+                </button>
+                <button
+                  type="button"
+                  className={workspaceLayout.preset === "three-pane" ? "is-active" : ""}
+                  onClick={() => {
+                    setWorkspacePreset("three-pane");
+                  }}
+                >
+                  3-pane
+                </button>
+              </div>
+              <div className="workspace-layout-panels">
+                {(["timeline", "detail"] as WorkspacePanelId[]).map((panelId) => {
+                  const placement = workspaceLayout[panelId];
+                  const label = WORKSPACE_PANEL_LABELS[panelId];
+                  return (
+                    <div key={panelId} className="workspace-layout-panel-control">
+                      <span>{label}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          toggleWorkspacePanelPinned(panelId);
+                        }}
+                      >
+                        {placement === "hidden" ? "Pin" : "Unpin"}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={placement === "hidden"}
+                        onClick={() => {
+                          toggleWorkspacePanelDetached(panelId);
+                        }}
+                      >
+                        {placement === "detached" ? "Attach" : "Detach"}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="workspace-layout-actions">
+                <button type="button" onClick={saveWorkspaceLayout}>
+                  Save layout
+                </button>
+                <button type="button" onClick={restoreWorkspaceLayout}>
+                  Restore layout
+                </button>
+                <button type="button" onClick={resetWorkspaceLayout}>
+                  Reset layout
+                </button>
+              </div>
+            </section>
           </section>
         </section>
 
