@@ -94,6 +94,22 @@ describe("OfficeStreamBridge", () => {
     });
   });
 
+  it("reports backfill gap when cursor is older than retained window", () => {
+    const bridge = new OfficeStreamBridge({ maxQueue: 2, maxSeen: 8, maxEmitPerSnapshot: 10 });
+
+    bridge.ingestSnapshot(makeSnapshot([makeEvent({ id: "seed:1", type: "spawn", runId: "seed", at: 1 })]));
+    bridge.ingestSnapshot(makeSnapshot([makeEvent({ id: "ev:2", type: "spawn", runId: "x", at: 2 })]));
+    bridge.ingestSnapshot(makeSnapshot([makeEvent({ id: "ev:3", type: "start", runId: "x", at: 3 })]));
+    bridge.ingestSnapshot(makeSnapshot([makeEvent({ id: "ev:4", type: "end", runId: "x", at: 4 })]));
+    bridge.ingestSnapshot(makeSnapshot([makeEvent({ id: "ev:5", type: "cleanup", runId: "x", at: 5 })]));
+
+    const window = bridge.getBackfillWindow(1);
+    expect(window.gapDetected).toBe(true);
+    expect(window.oldestSeq).toBe(3);
+    expect(window.latestSeq).toBe(4);
+    expect(window.frames.map((frame) => frame.seq)).toEqual([3, 4]);
+  });
+
   it("drops excess unseen events when burst exceeds backpressure budget", () => {
     const bridge = new OfficeStreamBridge({ maxQueue: 20, maxSeen: 40, maxEmitPerSnapshot: 2 });
 

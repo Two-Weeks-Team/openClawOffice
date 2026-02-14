@@ -14,8 +14,16 @@ type LifecyclePayload = {
   event: OfficeEvent;
 };
 
+type BackfillGapPayload = {
+  requestedCursor: number;
+  oldestAvailableSeq: number;
+  latestAvailableSeq: number;
+  droppedCount: number;
+};
+
 const POLL_INTERVAL_MS = 4_000;
 const RECONNECT_DELAY_MS = 1_200;
+const MAX_SEEN_LIFECYCLE_IDS = 4_000;
 
 async function fetchSnapshot(signal: AbortSignal): Promise<OfficeSnapshot> {
   const response = await fetch("/api/office/snapshot", {
@@ -68,6 +76,8 @@ export function useOfficeStream() {
   const pollTimer = useRef<number | null>(null);
   const reconnectTimer = useRef<number | null>(null);
   const lastLifecycleSeq = useRef(0);
+  const seenLifecycleEventIds = useRef(new Set<string>());
+  const seenLifecycleEventOrder = useRef<string[]>([]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -88,10 +98,32 @@ export function useOfficeStream() {
       }
     };
 
+    const rememberLifecycleEventId = (eventId: string) => {
+      if (seenLifecycleEventIds.current.has(eventId)) {
+        return;
+      }
+      seenLifecycleEventIds.current.add(eventId);
+      seenLifecycleEventOrder.current.push(eventId);
+      if (seenLifecycleEventOrder.current.length > MAX_SEEN_LIFECYCLE_IDS) {
+        const removeCount = seenLifecycleEventOrder.current.length - MAX_SEEN_LIFECYCLE_IDS;
+        const removed = seenLifecycleEventOrder.current.splice(0, removeCount);
+        for (const removedEventId of removed) {
+          seenLifecycleEventIds.current.delete(removedEventId);
+        }
+      }
+    };
+
+    const seedSeenLifecycleEvents = (events: OfficeEvent[]) => {
+      for (const event of events) {
+        rememberLifecycleEventId(event.id);
+      }
+    };
+
     const applySnapshot = (snapshot: OfficeSnapshot, connected: boolean) => {
       if (stopped) {
         return;
       }
+      seedSeenLifecycleEvents(snapshot.events);
       setState({
         snapshot,
         connected,
@@ -188,6 +220,12 @@ export function useOfficeStream() {
           lastLifecycleSeq.current = payload.seq;
         }
 
+        if (seenLifecycleEventIds.current.has(payload.event.id)) {
+          return;
+        }
+
+        rememberLifecycleEventId(payload.event.id);
+
         setState((prev) => {
           if (!prev.snapshot) {
             return prev;
@@ -202,6 +240,26 @@ export function useOfficeStream() {
             error: undefined,
           };
         });
+      });
+
+      source.addEventListener("backfill-gap", (event) => {
+        let payload: BackfillGapPayload | undefined;
+        try {
+          payload = JSON.parse((event as MessageEvent<string>).data) as BackfillGapPayload;
+        } catch (err: unknown) {
+          const rawData = (event as MessageEvent<string>).data;
+          if (err instanceof Error) {
+            console.warn("Malformed SSE backfill-gap frame", rawData, err);
+          } else {
+            console.warn("Malformed SSE backfill-gap frame", rawData);
+          }
+          payload = undefined;
+        }
+
+        if (payload?.latestAvailableSeq && payload.latestAvailableSeq > lastLifecycleSeq.current) {
+          lastLifecycleSeq.current = payload.latestAvailableSeq;
+        }
+        void loadSnapshot(true);
       });
 
       source.onerror = (event) => {

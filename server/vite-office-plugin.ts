@@ -60,6 +60,12 @@ type ReplayStoreMetric = {
 type StreamSubscriber = {
   sendSnapshot: (snapshot: OfficeSnapshot) => void;
   sendLifecycle: (frame: LifecycleEnvelope) => void;
+  sendBackfillGap: (payload: {
+    requestedCursor: number;
+    oldestAvailableSeq: number;
+    latestAvailableSeq: number;
+    droppedCount: number;
+  }) => void;
   sendError: (code: ApiErrorCode, message: string) => void;
   close: () => void;
 };
@@ -697,6 +703,10 @@ function createSubscriber(
       safeWrite("event: lifecycle\n");
       safeWrite(`data: ${JSON.stringify(frame)}\n\n`);
     },
+    sendBackfillGap(payload) {
+      safeWrite("event: backfill-gap\n");
+      safeWrite(`data: ${JSON.stringify(payload)}\n\n`);
+    },
     sendError(code, message) {
       safeWrite("event: error\n");
       safeWrite(
@@ -749,7 +759,29 @@ function handleStream(req: IncomingMessage, res: ServerResponse, context: ApiReq
       streamMetrics.snapshotFramesSent += 1;
 
       if (cursor > 0) {
-        for (const frame of streamBridge.getBackfill(cursor)) {
+        const backfill = streamBridge.getBackfillWindow(cursor);
+        if (backfill.gapDetected && typeof backfill.oldestSeq === "number") {
+          const droppedCount = Math.max(0, backfill.oldestSeq - (cursor + 1));
+          subscriber.sendBackfillGap({
+            requestedCursor: cursor,
+            oldestAvailableSeq: backfill.oldestSeq,
+            latestAvailableSeq: backfill.latestSeq,
+            droppedCount,
+          });
+          logStructuredEvent({
+            level: "warn",
+            event: "stream.backfill.gap",
+            requestId: context.requestId,
+            details: "Cursor is older than retained lifecycle backfill window",
+            extra: {
+              requestedCursor: cursor,
+              oldestAvailableSeq: backfill.oldestSeq,
+              latestAvailableSeq: backfill.latestSeq,
+              droppedCount,
+            },
+          });
+        }
+        for (const frame of backfill.frames) {
           if (isStreamClosed()) {
             return;
           }

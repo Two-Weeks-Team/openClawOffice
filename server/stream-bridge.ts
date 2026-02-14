@@ -5,6 +5,13 @@ export type LifecycleEnvelope = {
   event: OfficeEvent;
 };
 
+export type BackfillWindow = {
+  frames: LifecycleEnvelope[];
+  gapDetected: boolean;
+  oldestSeq: number | null;
+  latestSeq: number;
+};
+
 type BridgeOptions = {
   maxQueue: number;
   maxSeen: number;
@@ -69,11 +76,39 @@ export class OfficeStreamBridge {
   }
 
   getBackfill(afterSeq: number): LifecycleEnvelope[] {
+    return this.getBackfillWindow(afterSeq).frames;
+  }
+
+  getBackfillWindow(afterSeq: number): BackfillWindow {
+    if (this.queue.length === 0) {
+      return {
+        frames: [],
+        gapDetected: false,
+        oldestSeq: null,
+        latestSeq: this.seq,
+      };
+    }
+
+    const oldestSeq = this.queue[0]?.seq ?? null;
+    const gapDetected =
+      oldestSeq !== null && afterSeq > 0 && afterSeq + 1 < oldestSeq;
+
     const firstIndex = this.queue.findIndex((entry) => entry.seq > afterSeq);
     if (firstIndex === -1) {
-      return [];
+      return {
+        frames: [],
+        gapDetected,
+        oldestSeq,
+        latestSeq: this.seq,
+      };
     }
-    return this.queue.slice(firstIndex);
+
+    return {
+      frames: this.queue.slice(firstIndex),
+      gapDetected,
+      oldestSeq,
+      latestSeq: this.seq,
+    };
   }
 
   consumePressureStats(): StreamPressureStats {
