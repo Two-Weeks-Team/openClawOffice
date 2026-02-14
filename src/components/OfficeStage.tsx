@@ -740,31 +740,27 @@ export function OfficeStage({
   }, [alertSignals]);
 
   const sortedPlacements = useMemo(() => {
+    const scoreByEntityId = new Map<string, number>();
+    for (const placement of placements) {
+      const priority = evaluateStageEntityPriority({
+        entity: placement.entity,
+        isSelected: selectedEntityIdSet.has(placement.entity.id),
+        isPinned: pinnedEntityIdSet.has(placement.entity.id),
+        isWatched: watchedEntityIdSet.has(placement.entity.id),
+        hasCriticalAlertTargets: alertPrioritySets.hasCriticalAlertTargets,
+        criticalAlertRunIdSet: alertPrioritySets.criticalAlertRunIdSet,
+        criticalAlertAgentIdSet: alertPrioritySets.criticalAlertAgentIdSet,
+        warningAlertRunIdSet: alertPrioritySets.warningAlertRunIdSet,
+        warningAlertAgentIdSet: alertPrioritySets.warningAlertAgentIdSet,
+      });
+      scoreByEntityId.set(placement.entity.id, priority.score);
+    }
+
     return [...placements].sort((left, right) => {
-      const leftPriority = evaluateStageEntityPriority({
-        entity: left.entity,
-        isSelected: selectedEntityIdSet.has(left.entity.id),
-        isPinned: pinnedEntityIdSet.has(left.entity.id),
-        isWatched: watchedEntityIdSet.has(left.entity.id),
-        hasCriticalAlertTargets: alertPrioritySets.hasCriticalAlertTargets,
-        criticalAlertRunIdSet: alertPrioritySets.criticalAlertRunIdSet,
-        criticalAlertAgentIdSet: alertPrioritySets.criticalAlertAgentIdSet,
-        warningAlertRunIdSet: alertPrioritySets.warningAlertRunIdSet,
-        warningAlertAgentIdSet: alertPrioritySets.warningAlertAgentIdSet,
-      });
-      const rightPriority = evaluateStageEntityPriority({
-        entity: right.entity,
-        isSelected: selectedEntityIdSet.has(right.entity.id),
-        isPinned: pinnedEntityIdSet.has(right.entity.id),
-        isWatched: watchedEntityIdSet.has(right.entity.id),
-        hasCriticalAlertTargets: alertPrioritySets.hasCriticalAlertTargets,
-        criticalAlertRunIdSet: alertPrioritySets.criticalAlertRunIdSet,
-        criticalAlertAgentIdSet: alertPrioritySets.criticalAlertAgentIdSet,
-        warningAlertRunIdSet: alertPrioritySets.warningAlertRunIdSet,
-        warningAlertAgentIdSet: alertPrioritySets.warningAlertAgentIdSet,
-      });
-      if (leftPriority.score !== rightPriority.score) {
-        return rightPriority.score - leftPriority.score;
+      const leftScore = scoreByEntityId.get(left.entity.id) ?? 0;
+      const rightScore = scoreByEntityId.get(right.entity.id) ?? 0;
+      if (leftScore !== rightScore) {
+        return rightScore - leftScore;
       }
       return left.y - right.y;
     });

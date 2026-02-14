@@ -251,11 +251,12 @@ export function evaluateStageEntityPriority(
   }
 
   let band: StagePriorityBand = "normal";
-  if (alertSeverity === "critical" || input.entity.status === "error" || score >= 320) {
+  if (alertSeverity === "critical" || input.entity.status === "error") {
     band = "critical";
   } else if (
     alertSeverity === "warning" ||
     input.entity.status === "active" ||
+    input.isSelected ||
     input.isWatched ||
     input.isPinned ||
     score >= 190
