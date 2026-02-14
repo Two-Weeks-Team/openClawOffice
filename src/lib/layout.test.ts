@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { buildPlacements } from "./layout";
+import { buildPlacements, buildRoomCapacityPlan } from "./layout";
 import type { OfficeEntity } from "../types/office";
+import { createLocal50Scenario } from "./local50-scenario";
 
 function makeEntity(params: Partial<OfficeEntity> & Pick<OfficeEntity, "id" | "agentId" | "label">): OfficeEntity {
   return {
@@ -258,5 +259,183 @@ describe("buildPlacements", () => {
     const dy = (parentPlacement?.y ?? 0) - (childPlacement?.y ?? 0);
     const distance = Math.sqrt(dx * dx + dy * dy);
     expect(distance).toBeLessThanOrEqual(parentAffinityPx * 1.15);
+  });
+
+  it("builds an explicit capacity plan table for local50 targets", () => {
+    const plan = buildRoomCapacityPlan({ expectedEntities: 50 });
+    expect(plan.totalCapacity).toBeGreaterThanOrEqual(50);
+    expect(plan.entries.reduce((sum, room) => sum + room.capacity, 0)).toBe(plan.totalCapacity);
+    expect(plan.entries).toHaveLength(5);
+    expect(plan.entries.every((entry) => Number.isFinite(entry.targetSharePct))).toBe(true);
+  });
+
+  it("uses status/team/parent priorities to keep same-team agents together while spreading overflow", () => {
+    const entities: OfficeEntity[] = [
+      makeEntity({
+        id: "team-openai-1",
+        agentId: "team-openai-1",
+        label: "OpenAI 1",
+        status: "active",
+        model: "openai/gpt-5",
+      }),
+      makeEntity({
+        id: "team-openai-2",
+        agentId: "team-openai-2",
+        label: "OpenAI 2",
+        status: "active",
+        model: "openai/gpt-5",
+      }),
+      makeEntity({
+        id: "team-anthropic-1",
+        agentId: "team-anthropic-1",
+        label: "Anthropic 1",
+        status: "active",
+        model: "anthropic/claude-sonnet",
+      }),
+    ];
+
+    const result = buildPlacements({
+      entities,
+      generatedAt: 1_000_000,
+      zoneConfig: {
+        priorityOrder: ["status", "team", "role", "parent", "recent"],
+        rooms: [
+          {
+            id: "strategy",
+            role: "ops",
+            capacity: 4,
+            routing: {
+              statuses: ["active"],
+              kinds: ["agent"],
+              recentWeight: 0,
+              teamWeight: 0.9,
+            },
+          },
+          {
+            id: "ops",
+            role: "ops",
+            capacity: 4,
+            routing: {
+              statuses: ["active"],
+              kinds: ["agent"],
+              recentWeight: 0,
+              teamWeight: 0.9,
+            },
+          },
+          {
+            id: "build",
+            routing: {
+              statuses: ["offline"],
+              kinds: ["agent"],
+              recentWeight: 0,
+            },
+          },
+          {
+            id: "spawn",
+            routing: {
+              statuses: ["offline"],
+              kinds: ["agent"],
+              recentWeight: 0,
+            },
+          },
+          {
+            id: "lounge",
+            routing: {
+              statuses: ["offline"],
+              kinds: ["agent"],
+              recentWeight: 0,
+            },
+          },
+        ],
+      },
+    });
+
+    const openAiRooms = result.placements
+      .filter((placement) => placement.entity.id.startsWith("team-openai"))
+      .map((placement) => placement.roomId);
+    const anthropicRoom = result.placements.find((placement) =>
+      placement.entity.id.startsWith("team-anthropic"),
+    )?.roomId;
+
+    expect(new Set(openAiRooms).size).toBe(1);
+    expect(anthropicRoom).toBe("ops");
+  });
+
+  it("honors manual room override hints", () => {
+    const entity = makeEntity({
+      id: "agent-manual-override",
+      agentId: "agent-manual-override",
+      label: "Manual Override",
+      status: "active",
+      task: "investigate queue drift [room:build]",
+    });
+
+    const result = buildPlacements({
+      entities: [entity],
+      generatedAt: 1_000_000,
+      zoneConfig: {
+        rooms: [
+          {
+            id: "strategy",
+            routing: {
+              statuses: ["active"],
+              kinds: ["agent"],
+              recentWeight: 0,
+            },
+          },
+          {
+            id: "ops",
+            routing: {
+              statuses: ["offline"],
+              kinds: ["agent"],
+              recentWeight: 0,
+            },
+          },
+          {
+            id: "build",
+            routing: {
+              statuses: ["offline"],
+              kinds: ["agent"],
+              recentWeight: 0,
+            },
+          },
+          {
+            id: "spawn",
+            routing: {
+              statuses: ["offline"],
+              kinds: ["agent"],
+              recentWeight: 0,
+            },
+          },
+          {
+            id: "lounge",
+            routing: {
+              statuses: ["offline"],
+              kinds: ["agent"],
+              recentWeight: 0,
+            },
+          },
+        ],
+      },
+    });
+
+    expect(result.placements[0]?.roomId).toBe("build");
+    expect(result.placements[0]?.targetRoomId).toBe("build");
+    expect(result.roomDebug.get("build")?.manualOverrides).toBe(1);
+  });
+
+  it("auto-distributes local50 agents under room capacities", () => {
+    const { snapshot } = createLocal50Scenario({ profile: "local50", seed: 19 });
+    const agents = snapshot.entities.filter((entity) => entity.kind === "agent");
+
+    const result = buildPlacements({
+      entities: agents,
+      generatedAt: snapshot.generatedAt,
+    });
+
+    const debug = [...result.roomDebug.values()];
+    expect(debug.every((entry) => entry.assigned <= entry.capacity)).toBe(true);
+    expect(debug.some((entry) => entry.overflowOut > 0)).toBe(true);
+    expect(debug.filter((entry) => entry.assigned > 0).length).toBeGreaterThanOrEqual(4);
   });
 });
