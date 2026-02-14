@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { OfficeEvent, OfficeRun } from "../types/office";
 import { buildRunGraph } from "./run-graph";
 import {
+  buildTimelineLanes,
   buildTimelineIndex,
   filterTimelineEvents,
   nextPlaybackEventId,
@@ -134,5 +135,94 @@ describe("timeline helpers", () => {
     expect(nextPlaybackEventId(ascending, "run-a:spawn")).toBe("run-a:start");
     expect(nextPlaybackEventId(ascending, "run-b:cleanup")).toBeNull();
     expect(nextPlaybackEventId(ascending, "run-b:error", -1)).toBe("run-a:start");
+  });
+});
+
+describe("timeline lanes", () => {
+  it("groups by room/agent/subagent with stable summary values", () => {
+    const baseAt = 1_700_000_000_000;
+    const laneEvents: OfficeEvent[] = [
+      {
+        id: "a:spawn",
+        type: "spawn",
+        runId: "run-a",
+        at: baseAt,
+        agentId: "child-a",
+        parentAgentId: "parent-a",
+        text: "spawn a",
+      },
+      {
+        id: "a:start",
+        type: "start",
+        runId: "run-a",
+        at: baseAt + 60_000,
+        agentId: "child-a",
+        parentAgentId: "parent-a",
+        text: "start a",
+      },
+      {
+        id: "b:spawn",
+        type: "spawn",
+        runId: "run-b",
+        at: baseAt + 120_000,
+        agentId: "child-b",
+        parentAgentId: "parent-b",
+        text: "spawn b",
+      },
+      {
+        id: "b:error",
+        type: "error",
+        runId: "run-b",
+        at: baseAt + 180_000,
+        agentId: "child-b",
+        parentAgentId: "parent-b",
+        text: "error b",
+      },
+      {
+        id: "c:spawn",
+        type: "spawn",
+        runId: "run-c",
+        at: baseAt + 240_000,
+        agentId: "child-c",
+        parentAgentId: "parent-a",
+        text: "spawn c",
+      },
+    ];
+
+    const roomLanes = buildTimelineLanes({
+      events: laneEvents,
+      mode: "room",
+      resolveRoomId: (agentId) => {
+        if (agentId === "child-c") {
+          return "lounge";
+        }
+        return "ops";
+      },
+    });
+    expect(roomLanes.map((lane) => [lane.id, lane.eventCount])).toEqual([
+      ["ops", 4],
+      ["lounge", 1],
+    ]);
+    expect(roomLanes[0]?.runCount).toBe(2);
+    expect(roomLanes[0]?.densityPerMinute).toBeCloseTo(1.33, 2);
+
+    const agentLanes = buildTimelineLanes({
+      events: laneEvents,
+      mode: "agent",
+    });
+    expect(agentLanes.map((lane) => [lane.id, lane.eventCount])).toEqual([
+      ["parent-a", 3],
+      ["parent-b", 2],
+    ]);
+
+    const subagentLanes = buildTimelineLanes({
+      events: laneEvents,
+      mode: "subagent",
+    });
+    expect(subagentLanes.map((lane) => [lane.id, lane.eventCount])).toEqual([
+      ["child-b", 2],
+      ["child-a", 2],
+      ["child-c", 1],
+    ]);
   });
 });

@@ -9,6 +9,26 @@ export type TimelineFilters = {
   status: TimelineStatusFilter;
 };
 
+export type TimelineLaneMode = "room" | "agent" | "subagent";
+
+export type TimelineLane = {
+  key: string;
+  id: string;
+  mode: TimelineLaneMode;
+  label: string;
+  events: OfficeEvent[];
+  eventCount: number;
+  runCount: number;
+  densityPerMinute: number;
+  latestAt: number;
+};
+
+export type BuildTimelineLanesParams = {
+  events: OfficeEvent[];
+  mode: TimelineLaneMode;
+  resolveRoomId?: (agentId: string, event: OfficeEvent) => string | null | undefined;
+};
+
 export type TimelineIndex = {
   ordered: OfficeEvent[];
   byRunId: Map<string, OfficeEvent[]>;
@@ -137,4 +157,104 @@ export function nextPlaybackEventId(
     return null;
   }
   return orderedEvents[nextIndex]?.id ?? null;
+}
+
+function laneDescriptorForEvent(
+  event: OfficeEvent,
+  mode: TimelineLaneMode,
+  resolveRoomId?: BuildTimelineLanesParams["resolveRoomId"],
+): { id: string; label: string } {
+  if (mode === "agent") {
+    return {
+      id: event.parentAgentId,
+      label: `Agent ${event.parentAgentId}`,
+    };
+  }
+
+  if (mode === "subagent") {
+    return {
+      id: event.agentId,
+      label: `Subagent ${event.agentId}`,
+    };
+  }
+
+  const roomId = resolveRoomId?.(event.agentId, event) ?? "unassigned";
+  return {
+    id: roomId,
+    label: roomId === "unassigned" ? "Room Unassigned" : `Room ${roomId}`,
+  };
+}
+
+function calculateDensityPerMinute(events: OfficeEvent[]): number {
+  if (events.length === 0) {
+    return 0;
+  }
+
+  let minAt = Number.POSITIVE_INFINITY;
+  let maxAt = Number.NEGATIVE_INFINITY;
+  for (const event of events) {
+    minAt = Math.min(minAt, event.at);
+    maxAt = Math.max(maxAt, event.at);
+  }
+
+  const spanMinutes = Math.max(1, (maxAt - minAt) / 60_000);
+  return Number((events.length / spanMinutes).toFixed(2));
+}
+
+export function buildTimelineLanes({
+  events,
+  mode,
+  resolveRoomId,
+}: BuildTimelineLanesParams): TimelineLane[] {
+  const laneMap = new Map<string, TimelineLane>();
+
+  for (const event of events) {
+    const descriptor = laneDescriptorForEvent(event, mode, resolveRoomId);
+    const key = `${mode}:${descriptor.id}`;
+    const existing = laneMap.get(key);
+    if (existing) {
+      existing.events.push(event);
+      continue;
+    }
+
+    laneMap.set(key, {
+      key,
+      id: descriptor.id,
+      mode,
+      label: descriptor.label,
+      events: [event],
+      eventCount: 0,
+      runCount: 0,
+      densityPerMinute: 0,
+      latestAt: 0,
+    });
+  }
+
+  const lanes = [...laneMap.values()].map((lane) => {
+    const sortedEvents = [...lane.events].sort((left, right) => {
+      if (left.at !== right.at) {
+        return right.at - left.at;
+      }
+      return left.id.localeCompare(right.id);
+    });
+    const runCount = new Set(sortedEvents.map((event) => event.runId)).size;
+    return {
+      ...lane,
+      events: sortedEvents,
+      eventCount: sortedEvents.length,
+      runCount,
+      densityPerMinute: calculateDensityPerMinute(sortedEvents),
+      latestAt: sortedEvents[0]?.at ?? 0,
+    };
+  });
+
+  return lanes.sort((left, right) => {
+    if (left.eventCount !== right.eventCount) {
+      return right.eventCount - left.eventCount;
+    }
+    if (left.latestAt !== right.latestAt) {
+      return right.latestAt - left.latestAt;
+    }
+    return left.label.localeCompare(right.label);
+  });
 }
