@@ -1,5 +1,5 @@
 import type { OfficeEvent, OfficeRun, OfficeSnapshot } from "../types/office";
-import type { RunKnowledgeEntry } from "./run-notes-store";
+import { indexRunKnowledgeByRunId, type RunKnowledgeEntry } from "./run-notes-store";
 
 export type SummaryTemplate = "daily" | "incident";
 export type SummaryWindow = "5m" | "1h" | "24h" | "all";
@@ -123,26 +123,22 @@ function normalizeScreenshotPaths(paths: string[] | undefined): string[] {
 function normalizeRunKnowledgeEntries(
   entries: RunKnowledgeEntry[] | undefined,
 ): Map<string, SummaryRunKnowledgeRecord> {
-  if (!entries) {
+  if (!entries || entries.length === 0) {
     return new Map();
   }
+  const indexed = indexRunKnowledgeByRunId(entries);
   const byRunId = new Map<string, SummaryRunKnowledgeRecord>();
-  for (const entry of entries) {
-    const runId = typeof entry.runId === "string" ? entry.runId.trim() : "";
+  for (const entry of indexed.values()) {
+    const runId = entry.runId.trim();
     if (!runId) {
       continue;
     }
-    const note = typeof entry.note === "string" ? entry.note.trim() : "";
-    const tags = (Array.isArray(entry.tags) ? entry.tags : [])
-      .map((tag) => (typeof tag === "string" ? tag.trim().replace(/^#+/, "").toLowerCase() : ""))
-      .filter((tag, index, list) => Boolean(tag) && list.indexOf(tag) === index);
+    const note = entry.note.trim();
+    const tags = [...new Set(entry.tags.map((tag) => tag.trim()).filter((tag) => Boolean(tag)))];
     if (!note && tags.length === 0) {
       continue;
     }
-    const updatedAt =
-      typeof entry.updatedAt === "number" && Number.isFinite(entry.updatedAt)
-        ? entry.updatedAt
-        : 0;
+    const updatedAt = Number.isFinite(entry.updatedAt) ? entry.updatedAt : 0;
     if (updatedAt <= 0) {
       continue;
     }
@@ -152,10 +148,7 @@ function normalizeRunKnowledgeEntries(
       tags,
       updatedAt,
     };
-    const existing = byRunId.get(runId);
-    if (!existing || normalized.updatedAt > existing.updatedAt) {
-      byRunId.set(runId, normalized);
-    }
+    byRunId.set(runId, normalized);
   }
   return byRunId;
 }
@@ -543,15 +536,25 @@ function renderScreenshotSection(screenshots: string[]): string {
   return screenshots.map((path) => `- [${path}](${path})`).join("\n");
 }
 
+function escapeMarkdownText(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/([`*_{}()[\]#+.!|>~-])/g, "\\$1");
+}
+
 function renderRunKnowledge(records: SummaryRunKnowledgeRecord[]): string {
   if (records.length === 0) {
     return "No saved run notes for this scope.";
   }
   return records
     .map((record) => {
-      const tagText = record.tags.length > 0 ? record.tags.map((tag) => `#${tag}`).join(" ") : "(no tags)";
-      const noteText = record.note || "(no note)";
-      return `- \`${record.runId}\` | ${tagText} | updated ${formatDatetime(record.updatedAt)}\n  - ${noteText}`;
+      const tagText =
+        record.tags.length > 0
+          ? record.tags.map((tag) => `#${escapeMarkdownText(tag)}`).join(" ")
+          : "(no tags)";
+      const noteLines = escapeMarkdownText(record.note || "(no note)")
+        .split(/\r?\n/)
+        .map((line, index) => (index === 0 ? line : `    ${line}`))
+        .join("\n");
+      return `- ${escapeMarkdownText(record.runId)} | ${tagText} | updated ${escapeMarkdownText(formatDatetime(record.updatedAt))}\n  - ${noteLines}`;
     })
     .join("\n");
 }

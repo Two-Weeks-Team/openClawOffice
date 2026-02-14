@@ -210,6 +210,7 @@ function App() {
     loadRunKnowledgeEntries,
   );
   const hasBatchStateHydratedRef = useRef(false);
+  const hasRunKnowledgeHydratedRef = useRef(false);
   const shortcutPlatform = useMemo(() => detectShortcutPlatform(), []);
 
   const showToast = useCallback((kind: NonNullable<ToastState>["kind"], message: string) => {
@@ -408,6 +409,10 @@ function App() {
   }, [batchActionState]);
 
   useEffect(() => {
+    if (!hasRunKnowledgeHydratedRef.current) {
+      hasRunKnowledgeHydratedRef.current = true;
+      return;
+    }
     persistRunKnowledgeEntries(runKnowledgeEntries);
   }, [runKnowledgeEntries]);
 

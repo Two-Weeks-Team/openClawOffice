@@ -38,6 +38,8 @@ type RunKnowledgeDraft = {
   tagsInput: string;
 };
 
+const RUN_KNOWLEDGE_DRAFT_STORAGE_KEY = "openclawoffice.run-knowledge-drafts.v1";
+
 const DETAIL_PANEL_TABS: Array<{ id: DetailPanelTab; label: string }> = [
   { id: "overview", label: "Overview" },
   { id: "sessions", label: "Sessions" },
@@ -121,6 +123,65 @@ function runKnowledgeDraftFromEntry(entry: RunKnowledgeEntry | undefined): RunKn
   };
 }
 
+function hasBrowserStorage(): boolean {
+  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+}
+
+function normalizeDraft(value: unknown): RunKnowledgeDraft | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  if (typeof record.note !== "string" || typeof record.tagsInput !== "string") {
+    return null;
+  }
+  return {
+    note: record.note,
+    tagsInput: record.tagsInput,
+  };
+}
+
+function loadRunKnowledgeDrafts(): Record<string, RunKnowledgeDraft> {
+  if (!hasBrowserStorage()) {
+    return {};
+  }
+  try {
+    const raw = window.localStorage.getItem(RUN_KNOWLEDGE_DRAFT_STORAGE_KEY);
+    if (!raw) {
+      return {};
+    }
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {};
+    }
+    const normalized: Record<string, RunKnowledgeDraft> = {};
+    for (const [runId, draft] of Object.entries(parsed)) {
+      if (!runId.trim()) {
+        continue;
+      }
+      const hydrated = normalizeDraft(draft);
+      if (!hydrated) {
+        continue;
+      }
+      normalized[runId] = hydrated;
+    }
+    return normalized;
+  } catch {
+    return {};
+  }
+}
+
+function persistRunKnowledgeDrafts(drafts: Record<string, RunKnowledgeDraft>): void {
+  if (!hasBrowserStorage()) {
+    return;
+  }
+  try {
+    window.localStorage.setItem(RUN_KNOWLEDGE_DRAFT_STORAGE_KEY, JSON.stringify(drafts));
+  } catch {
+    // Ignore localStorage persistence errors in restricted browser modes.
+  }
+}
+
 export function EntityDetailPanel({
   snapshot,
   selectedEntityId,
@@ -135,7 +196,7 @@ export function EntityDetailPanel({
   const [runTagFilter, setRunTagFilter] = useState("");
   const [runKnowledgeDraftByRunId, setRunKnowledgeDraftByRunId] = useState<
     Record<string, RunKnowledgeDraft>
-  >({});
+  >(loadRunKnowledgeDrafts);
   const [savedComparisons, setSavedComparisons] = useState<SavedRunComparison[]>(
     loadSavedRunComparisons,
   );
@@ -207,6 +268,10 @@ export function EntityDetailPanel({
   useEffect(() => {
     persistSavedRunComparisons(savedComparisons);
   }, [savedComparisons]);
+
+  useEffect(() => {
+    persistRunKnowledgeDrafts(runKnowledgeDraftByRunId);
+  }, [runKnowledgeDraftByRunId]);
 
   const copyText = async (key: string, value: string | undefined) => {
     if (!value) {
@@ -590,6 +655,9 @@ export function EntityDetailPanel({
                     }}
                   />
                 </label>
+                <p className="detail-muted detail-run-filter-note">
+                  Tag filter searches within this entity&apos;s recent 6 runs.
+                </p>
                 {readyModel.recentRuns.length === 0 ? (
                   <p className="detail-muted">No related runs were found.</p>
                 ) : filteredRecentRuns.length === 0 ? (
@@ -680,6 +748,7 @@ export function EntityDetailPanel({
                               <textarea
                                 rows={2}
                                 placeholder="Run context, failure root cause, follow-up..."
+                                aria-label={`Note for run ${runId}`}
                                 value={draft.note}
                                 onChange={(event) => {
                                   updateRunKnowledgeDraft(runId, {

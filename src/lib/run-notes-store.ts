@@ -147,8 +147,8 @@ export function upsertRunKnowledgeEntry(
   if (!note && tags.length === 0) {
     return withoutCurrent;
   }
-  const updatedAt = Number.isFinite(input.updatedAt) && (input.updatedAt ?? 0) > 0
-    ? (input.updatedAt as number)
+  const updatedAt = typeof input.updatedAt === "number" && input.updatedAt > 0
+    ? input.updatedAt
     : Date.now();
   const nextEntry: RunKnowledgeEntry = {
     runId,

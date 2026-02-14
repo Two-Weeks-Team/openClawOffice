@@ -86,4 +86,19 @@ describe("run notes store", () => {
     expect(map.get("run-1")?.note).toBe("n1");
     expect(map.get("run-2")?.note).toBe("n2");
   });
+
+  it("keeps only the latest capped run knowledge entries", () => {
+    let entries: RunKnowledgeEntry[] = [];
+    for (let index = 0; index < 410; index += 1) {
+      entries = upsertRunKnowledgeEntry(entries, {
+        runId: `run-${index}`,
+        note: `note-${index}`,
+        tags: [],
+        updatedAt: index + 1,
+      });
+    }
+    expect(entries.length).toBe(400);
+    expect(entries[0]?.runId).toBe("run-409");
+    expect(entries.some((entry) => entry.runId === "run-0")).toBe(false);
+  });
 });

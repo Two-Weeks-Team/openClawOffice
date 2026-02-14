@@ -94,4 +94,31 @@ describe("summary exporter", () => {
     expect(() => JSON.parse(json)).not.toThrow();
     expect(filename).toMatch(/^openclaw-daily-summary-[0-9-]+\.json$/);
   });
+
+  it("escapes markdown-sensitive run notes and preserves multiline indentation", () => {
+    const { snapshot } = createLocal50Scenario({
+      profile: "local10",
+      seed: 41,
+      seedTime: 1_700_000_110_000,
+    });
+    const targetRun = snapshot.runs[1] ?? snapshot.runs[0];
+
+    const report = buildSummaryReport(snapshot, "incident", {
+      window: "all",
+      runId: targetRun?.runId,
+      runKnowledgeEntries: [
+        {
+          runId: targetRun?.runId ?? "run-fallback",
+          note: "line one\nline two [link](javascript:alert(1))",
+          tags: ["ops*tag"],
+          updatedAt: snapshot.generatedAt - 30_000,
+        },
+      ],
+    });
+
+    const markdown = renderSummaryMarkdown(report);
+    expect(markdown).toContain("\\[link\\]\\(javascript:alert\\(1\\)\\)");
+    expect(markdown).toContain("#ops\\*tag");
+    expect(markdown).toContain("line one\n    line two");
+  });
 });
