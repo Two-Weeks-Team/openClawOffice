@@ -173,6 +173,61 @@ describe("evaluateAlertSignals", () => {
     const ruleIds = evaluateAlertSignals(snapshot).map((signal) => signal.ruleId);
     expect(ruleIds).toContain("event-stall");
   });
+
+  it("does not trigger when thresholds are not met", () => {
+    const now = 6_000_000;
+    const snapshot = createSnapshot({
+      generatedAt: now,
+      runs: [
+        {
+          runId: "run-active-short",
+          childSessionKey: "child",
+          requesterSessionKey: "req",
+          childAgentId: "sub-4",
+          parentAgentId: "agent-d",
+          status: "active",
+          task: "short active",
+          cleanup: "keep",
+          createdAt: now - 4 * 60_000,
+          startedAt: now - 4 * 60_000,
+        },
+        {
+          runId: "run-cleanup-short",
+          childSessionKey: "child",
+          requesterSessionKey: "req",
+          childAgentId: "sub-5",
+          parentAgentId: "agent-e",
+          status: "ok",
+          task: "cleanup short",
+          cleanup: "delete",
+          createdAt: now - 4 * 60_000,
+          endedAt: now - 60_000,
+        },
+      ],
+      events: [
+        {
+          id: "evt-2",
+          type: "error",
+          runId: "run-a",
+          at: now - 30_000,
+          agentId: "sub-a",
+          parentAgentId: "agent-a",
+          text: "error",
+        },
+        {
+          id: "evt-1",
+          type: "error",
+          runId: "run-b",
+          at: now - 45_000,
+          agentId: "sub-b",
+          parentAgentId: "agent-b",
+          text: "error",
+        },
+      ],
+    });
+
+    expect(evaluateAlertSignals(snapshot)).toHaveLength(0);
+  });
 });
 
 describe("alert rule preferences", () => {

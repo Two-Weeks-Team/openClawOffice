@@ -8,6 +8,7 @@ import { useOfficeStream } from "./hooks/useOfficeStream";
 import {
   ALERT_RULE_LABELS,
   DEFAULT_ALERT_RULE_PREFERENCES,
+  RULE_IDS,
   evaluateAlertSignals,
   isAlertRuleSuppressed,
   normalizeAlertRulePreferences,
@@ -72,13 +73,6 @@ const SHORTCUT_OVERRIDES_KEY = "openclawoffice.shortcut-overrides.v1";
 const RECENT_COMMANDS_KEY = "openclawoffice.recent-commands.v1";
 const ALERT_RULE_PREFERENCES_KEY = "openclawoffice.alert-rule-preferences.v1";
 const MAX_RECENT_COMMANDS = 8;
-
-const ALERT_RULE_ORDER: AlertRuleId[] = [
-  "consecutive-errors",
-  "long-active",
-  "cleanup-pending",
-  "event-stall",
-];
 
 const DEFAULT_OPS_FILTERS: OpsFilters = {
   query: "",
@@ -493,7 +487,7 @@ function App() {
   }, []);
 
   const snoozeAlertRule = useCallback((ruleId: AlertRuleId, durationMs: number) => {
-    const baseTime = snapshot?.generatedAt ?? Date.now();
+    const baseTime = Math.max(snapshot?.generatedAt ?? 0, Date.now());
     setAlertRulePreferences((prev) => ({
       ...prev,
       [ruleId]: {
@@ -923,6 +917,23 @@ function App() {
     showToast,
   ]);
 
+  useEffect(() => {
+    if (!isAlertCenterOpen) {
+      return undefined;
+    }
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+      event.preventDefault();
+      closeAlertCenter();
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [closeAlertCenter, isAlertCenterOpen]);
+
   if (!snapshot) {
     return (
       <main className="app-shell">
@@ -1251,7 +1262,7 @@ function App() {
             <section className="alert-center-section">
               <h3>Rule Controls</h3>
               <ol className="alert-rule-list">
-                {ALERT_RULE_ORDER.map((ruleId) => {
+                {RULE_IDS.map((ruleId) => {
                   const preference = alertRulePreferences[ruleId];
                   const isSnoozed = preference.snoozeUntil > snapshot.generatedAt;
                   return (

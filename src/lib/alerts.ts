@@ -30,7 +30,7 @@ const LONG_ACTIVE_MS = 8 * 60_000;
 const CLEANUP_PENDING_MS = 3 * 60_000;
 const EVENT_STALL_MS = 90_000;
 
-const RULE_IDS: AlertRuleId[] = [
+export const RULE_IDS: AlertRuleId[] = [
   "consecutive-errors",
   "long-active",
   "cleanup-pending",
@@ -99,7 +99,10 @@ function evaluateLongActiveRuns(snapshot: OfficeSnapshot, now: number): AlertSig
     return null;
   }
 
-  const sorted = [...staleActiveRuns].sort((left, right) => left.createdAt - right.createdAt);
+  const sorted = [...staleActiveRuns].sort(
+    (left, right) =>
+      (left.startedAt ?? left.createdAt) - (right.startedAt ?? right.createdAt),
+  );
   const longestAgeMs = now - (sorted[0]?.startedAt ?? sorted[0]?.createdAt ?? now);
   const longestAgeMin = Math.floor(longestAgeMs / 60_000);
 
