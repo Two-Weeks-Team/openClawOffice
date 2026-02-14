@@ -54,6 +54,13 @@ export type Placement = {
   overflowed: boolean;
 };
 
+export type PlacementCollision = {
+  roomId: string;
+  leftEntityId: string;
+  rightEntityId: string;
+  intersectionArea: number;
+};
+
 export type RoomDebugInfo = {
   roomId: string;
   capacity: number;
@@ -64,12 +71,14 @@ export type RoomDebugInfo = {
   utilizationPct: number;
   saturation: "low" | "medium" | "high";
   manualOverrides: number;
+  collisionPairs: number;
   secondaryZoneId?: string;
 };
 
 export type PlacementResult = {
   rooms: RoomSpec[];
   placements: Placement[];
+  collisionPairs: PlacementCollision[];
   roomDebug: Map<string, RoomDebugInfo>;
   configVersion: number;
 };
@@ -78,6 +87,12 @@ const VALID_STATUSES: readonly OfficeEntityStatus[] = ["active", "idle", "offlin
 const VALID_ENTITY_KINDS: readonly OfficeEntity["kind"][] = ["agent", "subagent"];
 const DEFAULT_PRIORITY_ORDER: ZonePriorityKey[] = ["status", "team", "role", "parent", "recent"];
 const VALID_PRIORITIES: readonly ZonePriorityKey[] = DEFAULT_PRIORITY_ORDER;
+const TOKEN_COLLISION_WIDTH = 46;
+const TOKEN_COLLISION_HEIGHT = 46;
+const TOKEN_COLLISION_SPACING = 6;
+const COLLISION_SEARCH_MAX_RING = 6;
+const COLLISION_FALLBACK_SLOT_LIMIT = 400;
+const COLLISION_OFFSETS = buildCollisionOffsets(COLLISION_SEARCH_MAX_RING);
 
 const DEFAULT_ZONE_CONFIG: ZoneLayoutConfig = {
   version: 1,
@@ -792,6 +807,266 @@ function applyParentAffinity(params: {
   );
 }
 
+type CollisionOffset = {
+  dx: number;
+  dy: number;
+};
+
+type CollisionBounds = {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+};
+
+type CollisionPlacement = {
+  placement: Placement;
+  bounds: CollisionBounds;
+};
+
+function buildCollisionOffsets(maxRing: number): CollisionOffset[] {
+  const offsets: CollisionOffset[] = [{ dx: 0, dy: 0 }];
+  for (let ring = 1; ring <= maxRing; ring += 1) {
+    for (let dy = -ring; dy <= ring; dy += 1) {
+      for (let dx = -ring; dx <= ring; dx += 1) {
+        if (Math.abs(dx) !== ring && Math.abs(dy) !== ring) {
+          continue;
+        }
+        offsets.push({ dx, dy });
+      }
+    }
+  }
+  return offsets;
+}
+
+function collisionHalfWidth(): number {
+  return TOKEN_COLLISION_WIDTH / 2 + TOKEN_COLLISION_SPACING / 2;
+}
+
+function collisionHalfHeight(): number {
+  return TOKEN_COLLISION_HEIGHT / 2 + TOKEN_COLLISION_SPACING / 2;
+}
+
+function clampPointToRoomWithCollisionBounds(
+  point: { x: number; y: number },
+  room: RoomSpec,
+): { x: number; y: number } {
+  const halfWidth = collisionHalfWidth();
+  const halfHeight = collisionHalfHeight();
+  const minX = room.x + halfWidth;
+  const maxX = room.x + room.width - halfWidth;
+  const minY = room.y + halfHeight;
+  const maxY = room.y + room.height - halfHeight;
+
+  return {
+    x: minX > maxX ? room.x + room.width / 2 : clamp(point.x, minX, maxX),
+    y: minY > maxY ? room.y + room.height / 2 : clamp(point.y, minY, maxY),
+  };
+}
+
+function collisionBoundsForPoint(point: { x: number; y: number }): CollisionBounds {
+  const halfWidth = collisionHalfWidth();
+  const halfHeight = collisionHalfHeight();
+  return {
+    left: point.x - halfWidth,
+    right: point.x + halfWidth,
+    top: point.y - halfHeight,
+    bottom: point.y + halfHeight,
+  };
+}
+
+function collisionAreaBetweenBounds(left: CollisionBounds, right: CollisionBounds): number {
+  const overlapWidth = Math.min(left.right, right.right) - Math.max(left.left, right.left);
+  const overlapHeight = Math.min(left.bottom, right.bottom) - Math.max(left.top, right.top);
+  if (overlapWidth <= 0 || overlapHeight <= 0) {
+    return 0;
+  }
+  return overlapWidth * overlapHeight;
+}
+
+function areParentLinkedEntities(left: OfficeEntity, right: OfficeEntity): boolean {
+  if (left.kind === "subagent" && left.parentAgentId && left.parentAgentId === right.agentId) {
+    return true;
+  }
+  if (right.kind === "subagent" && right.parentAgentId && right.parentAgentId === left.agentId) {
+    return true;
+  }
+  return false;
+}
+
+function placementCollisionArea(left: Placement, right: Placement): number {
+  if (left.roomId !== right.roomId) {
+    return 0;
+  }
+  if (areParentLinkedEntities(left.entity, right.entity)) {
+    return 0;
+  }
+  return collisionAreaBetweenBounds(
+    collisionBoundsForPoint({ x: left.x, y: left.y }),
+    collisionBoundsForPoint({ x: right.x, y: right.y }),
+  );
+}
+
+function hasCollisionAtPoint(
+  point: { x: number; y: number },
+  entity: OfficeEntity,
+  placed: CollisionPlacement[],
+): boolean {
+  const candidateBounds = collisionBoundsForPoint(point);
+  for (const entry of placed) {
+    if (areParentLinkedEntities(entity, entry.placement.entity)) {
+      continue;
+    }
+    if (collisionAreaBetweenBounds(candidateBounds, entry.bounds) > 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function overflowSafeSlotPoint(room: RoomSpec, slotIndex: number): { x: number; y: number } {
+  const slotWidth = TOKEN_COLLISION_WIDTH + TOKEN_COLLISION_SPACING;
+  const slotHeight = TOKEN_COLLISION_HEIGHT + TOKEN_COLLISION_SPACING;
+  const halfWidth = collisionHalfWidth();
+  const halfHeight = collisionHalfHeight();
+  const usableWidth = Math.max(slotWidth, room.width - halfWidth * 2);
+  const columns = Math.max(1, Math.floor(usableWidth / slotWidth));
+  const column = slotIndex % columns;
+  const row = Math.floor(slotIndex / columns);
+  const candidate = {
+    x: room.x + halfWidth + column * slotWidth,
+    y: room.y + room.height - halfHeight - row * slotHeight,
+  };
+  return clampPointToRoomWithCollisionBounds(candidate, room);
+}
+
+function resolveCollisionPointForRoom(params: {
+  basePoint: { x: number; y: number };
+  entity: OfficeEntity;
+  room: RoomSpec;
+  placed: CollisionPlacement[];
+  seed: string;
+  fallbackIndex: number;
+}): { point: { x: number; y: number }; nextFallbackIndex: number } {
+  const { basePoint, entity, room, placed, seed, fallbackIndex } = params;
+  const stepX = Math.max(room.spacing.x, TOKEN_COLLISION_WIDTH + TOKEN_COLLISION_SPACING);
+  const stepY = Math.max(room.spacing.y, TOKEN_COLLISION_HEIGHT + TOKEN_COLLISION_SPACING);
+  const rotation = hashString(seed) % COLLISION_OFFSETS.length;
+  const clampedBasePoint = clampPointToRoomWithCollisionBounds(basePoint, room);
+
+  if (!hasCollisionAtPoint(clampedBasePoint, entity, placed)) {
+    return {
+      point: clampedBasePoint,
+      nextFallbackIndex: fallbackIndex,
+    };
+  }
+
+  for (let index = 1; index < COLLISION_OFFSETS.length; index += 1) {
+    const offset = COLLISION_OFFSETS[(rotation + index) % COLLISION_OFFSETS.length];
+    if (offset.dx === 0 && offset.dy === 0) {
+      continue;
+    }
+    const candidate = clampPointToRoomWithCollisionBounds(
+      {
+        x: basePoint.x + offset.dx * stepX,
+        y: basePoint.y + offset.dy * stepY,
+      },
+      room,
+    );
+    if (!hasCollisionAtPoint(candidate, entity, placed)) {
+      return {
+        point: candidate,
+        nextFallbackIndex: fallbackIndex,
+      };
+    }
+  }
+
+  for (let probe = 0; probe < COLLISION_FALLBACK_SLOT_LIMIT; probe += 1) {
+    const slotIndex = fallbackIndex + probe;
+    const candidate = overflowSafeSlotPoint(room, slotIndex);
+    if (!hasCollisionAtPoint(candidate, entity, placed)) {
+      return {
+        point: candidate,
+        nextFallbackIndex: slotIndex + 1,
+      };
+    }
+  }
+
+  return {
+    point: overflowSafeSlotPoint(room, fallbackIndex),
+    nextFallbackIndex: fallbackIndex + 1,
+  };
+}
+
+function resolvePlacementCollisions(params: {
+  rooms: RoomSpec[];
+  placements: Placement[];
+}): void {
+  const placementsByRoomId = new Map<string, Placement[]>();
+  for (const placement of params.placements) {
+    const bucket = placementsByRoomId.get(placement.roomId) ?? [];
+    bucket.push(placement);
+    placementsByRoomId.set(placement.roomId, bucket);
+  }
+
+  for (const room of params.rooms) {
+    const bucket = placementsByRoomId.get(room.id) ?? [];
+    bucket.sort((left, right) => compareEntities(left.entity, right.entity));
+    const settledPlacements: CollisionPlacement[] = [];
+    let fallbackIndex = 0;
+
+    for (const placement of bucket) {
+      const resolved = resolveCollisionPointForRoom({
+        basePoint: { x: placement.x, y: placement.y },
+        entity: placement.entity,
+        room,
+        placed: settledPlacements,
+        seed: placement.entity.id,
+        fallbackIndex,
+      });
+      placement.x = resolved.point.x;
+      placement.y = resolved.point.y;
+      fallbackIndex = resolved.nextFallbackIndex;
+      settledPlacements.push({
+        placement,
+        bounds: collisionBoundsForPoint(resolved.point),
+      });
+    }
+  }
+}
+
+export function detectPlacementCollisions(placements: Placement[]): PlacementCollision[] {
+  const placementsByRoomId = new Map<string, Placement[]>();
+  for (const placement of placements) {
+    const bucket = placementsByRoomId.get(placement.roomId) ?? [];
+    bucket.push(placement);
+    placementsByRoomId.set(placement.roomId, bucket);
+  }
+
+  const collisionPairs: PlacementCollision[] = [];
+  for (const [roomId, bucket] of placementsByRoomId.entries()) {
+    bucket.sort((left, right) => compareEntities(left.entity, right.entity));
+    for (let leftIndex = 0; leftIndex < bucket.length; leftIndex += 1) {
+      const left = bucket[leftIndex];
+      for (let rightIndex = leftIndex + 1; rightIndex < bucket.length; rightIndex += 1) {
+        const right = bucket[rightIndex];
+        const intersectionArea = placementCollisionArea(left, right);
+        if (intersectionArea <= 0) {
+          continue;
+        }
+        collisionPairs.push({
+          roomId,
+          leftEntityId: left.entity.id,
+          rightEntityId: right.entity.id,
+          intersectionArea: Math.round(intersectionArea * 100) / 100,
+        });
+      }
+    }
+  }
+
+  return collisionPairs;
+}
+
 export type RoomCapacityPlanEntry = {
   roomId: string;
   label: string;
@@ -982,6 +1257,13 @@ export function buildPlacements(params: {
     });
   }
 
+  resolvePlacementCollisions({ rooms, placements });
+  const collisionPairs = detectPlacementCollisions(placements);
+  const collisionPairsByRoomId = new Map<string, number>();
+  for (const pair of collisionPairs) {
+    collisionPairsByRoomId.set(pair.roomId, (collisionPairsByRoomId.get(pair.roomId) ?? 0) + 1);
+  }
+
   const roomDebug = new Map<string, RoomDebugInfo>();
   for (const room of rooms) {
     const assigned = roomBuckets.get(room.id)?.length ?? 0;
@@ -999,6 +1281,7 @@ export function buildPlacements(params: {
       utilizationPct,
       saturation,
       manualOverrides: manualOverridesByRoom.get(room.id) ?? 0,
+      collisionPairs: collisionPairsByRoomId.get(room.id) ?? 0,
       secondaryZoneId: room.secondaryZoneId,
     });
   }
@@ -1006,6 +1289,7 @@ export function buildPlacements(params: {
   return {
     rooms,
     placements,
+    collisionPairs,
     roomDebug,
     configVersion: config.version,
   };
