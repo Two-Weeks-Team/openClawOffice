@@ -1984,7 +1984,6 @@ function App() {
           hidden={activeWorkspaceTab !== "analysis"}
         >
           <EntityDetailPanel
-            key={effectiveSelectedEntityId ?? "detail-empty"}
             snapshot={snapshot}
             selectedEntityId={effectiveSelectedEntityId}
             runKnowledgeByRunId={runKnowledgeByRunId}
