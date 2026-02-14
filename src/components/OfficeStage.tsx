@@ -808,7 +808,7 @@ export function OfficeStage({
     "office-stage-wrap",
     focusMode ? "is-focus-mode" : "",
     hasFocusSelection ? "has-focus-selection" : "",
-    selectedPlacement ? `focus-status-${selectedPlacement.entity.status}` : "focus-status-none",
+    focusMode && selectedPlacement ? `focus-status-${selectedPlacement.entity.status}` : "",
   ]
     .filter(Boolean)
     .join(" ");
