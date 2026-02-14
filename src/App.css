@@ -1144,6 +1144,17 @@ body {
   filter: none;
 }
 
+.run-link.lod-distant {
+  stroke-width: 1.4;
+  stroke-dasharray: 2 9;
+  opacity: 0.42;
+}
+
+.run-link.lod-mid {
+  stroke-width: 1.9;
+  stroke-dasharray: 4 6;
+}
+
 .run-link.run-ok {
   stroke: #85ffc4;
   opacity: 0.54;
@@ -1309,6 +1320,50 @@ body {
 .entity-token .token-meta span {
   font-size: 0.67rem;
   color: #b0dceb;
+}
+
+.office-stage-wrap .entity-token .sprite-shell,
+.office-stage-wrap .entity-token .token-meta,
+.office-stage-wrap .entity-token .sprite {
+  transition:
+    width var(--motion-mid) ease,
+    height var(--motion-mid) ease,
+    transform var(--motion-mid) ease,
+    opacity var(--motion-mid) ease;
+}
+
+.office-stage-wrap.lod-distant .entity-token {
+  min-width: 56px;
+}
+
+.office-stage-wrap.lod-distant .entity-token .sprite-shell {
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+}
+
+.office-stage-wrap.lod-distant .entity-token .sprite {
+  transform: scale(1.78);
+}
+
+.office-stage-wrap.lod-distant .entity-token .sprite-fallback {
+  font-size: 0.62rem;
+}
+
+.office-stage-wrap.lod-distant .entity-token .token-meta {
+  opacity: 0;
+}
+
+.office-stage-wrap.lod-mid .entity-token .token-meta span {
+  display: none;
+}
+
+.office-stage-wrap.lod-mid .entity-token .token-meta strong {
+  font-size: 0.7rem;
+}
+
+.office-stage-wrap.lod-distant .bubble-lane-overlay {
+  display: none;
 }
 
 .entity-token .bubble {
