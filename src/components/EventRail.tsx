@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  buildTimelineLaneItems,
   buildTimelineLanes,
   buildTimelineIndex,
   filterTimelineEvents,
   nextPlaybackEventId,
   nextReplayIndex,
+  timelineLaneItemEventCount,
   type TimelineFilters,
   type TimelineLane,
+  type TimelineLaneItem,
   type TimelineLaneMode,
   type TimelineStatusFilter,
 } from "../lib/timeline";
@@ -59,6 +62,13 @@ function eventBadge(type: OfficeEvent["type"]) {
   return "DONE";
 }
 
+function summaryBadge(kind: "run-burst" | "dense-window") {
+  if (kind === "run-burst") {
+    return "BURST";
+  }
+  return "DENSE";
+}
+
 function laneHighlightAgentId(lane: TimelineLane | null): string | null {
   if (!lane) {
     return null;
@@ -90,6 +100,8 @@ export function EventRail({
   const [laneMode, setLaneMode] = useState<TimelineLaneMode>("room");
   const [manualLaneKey, setManualLaneKey] = useState<string | null>(null);
   const [collapsedLaneKeys, setCollapsedLaneKeys] = useState<string[]>([]);
+  const [compressionEnabled, setCompressionEnabled] = useState(true);
+  const [expandedSummaryKeys, setExpandedSummaryKeys] = useState<string[]>([]);
 
   const index = useMemo(() => buildTimelineIndex(events, runGraph), [events, runGraph]);
   const filteredDesc = useMemo(() => filterTimelineEvents(index, filters), [index, filters]);
@@ -121,6 +133,57 @@ export function EventRail({
     () => lanes.find((lane) => lane.key === selectedLaneKey) ?? null,
     [lanes, selectedLaneKey],
   );
+  const laneItemsByKey = useMemo(() => {
+    const map = new Map<string, TimelineLaneItem[]>();
+    for (const lane of lanes) {
+      map.set(
+        lane.key,
+        buildTimelineLaneItems({
+          lane,
+          enableCompression: compressionEnabled,
+        }),
+      );
+    }
+    return map;
+  }, [compressionEnabled, lanes]);
+  const summaryKeyByEventId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const items of laneItemsByKey.values()) {
+      for (const item of items) {
+        if (item.kind !== "summary") {
+          continue;
+        }
+        for (const event of item.events) {
+          map.set(event.id, item.key);
+        }
+      }
+    }
+    return map;
+  }, [laneItemsByKey]);
+  const summaryKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const items of laneItemsByKey.values()) {
+      for (const item of items) {
+        if (item.kind === "summary") {
+          keys.add(item.key);
+        }
+      }
+    }
+    return keys;
+  }, [laneItemsByKey]);
+  const effectiveExpandedSummaryKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const key of expandedSummaryKeys) {
+      if (summaryKeys.has(key)) {
+        keys.add(key);
+      }
+    }
+    const activeSummaryKey = activeEventId ? summaryKeyByEventId.get(activeEventId) : undefined;
+    if (activeSummaryKey && summaryKeys.has(activeSummaryKey)) {
+      keys.add(activeSummaryKey);
+    }
+    return keys;
+  }, [activeEventId, expandedSummaryKeys, summaryKeyByEventId, summaryKeys]);
   const playbackEvents = useMemo(
     () => [...filteredDesc].sort((a, b) => a.at - b.at),
     [filteredDesc],
@@ -277,6 +340,7 @@ export function EventRail({
             setReplayStatus("idle");
             setLoopEnabled(false);
             setLoopRange(null);
+            setExpandedSummaryKeys([]);
           }}
         >
           Clear
@@ -437,6 +501,16 @@ export function EventRail({
             <option value="subagent">SUBAGENT</option>
           </select>
         </label>
+        <label className="timeline-compression-toggle">
+          <input
+            type="checkbox"
+            checked={compressionEnabled}
+            onChange={(event) => {
+              setCompressionEnabled(event.target.checked);
+            }}
+          />
+          Compress dense lanes
+        </label>
         <button
           type="button"
           className="timeline-lane-action"
@@ -459,6 +533,13 @@ export function EventRail({
         <ol className="timeline-lane-list">
           {lanes.map((lane) => {
             const collapsed = collapsedLaneKeys.includes(lane.key);
+            const laneItems = laneItemsByKey.get(lane.key) ?? [];
+            const summarizedEventCount = laneItems.reduce((count, item) => {
+              if (item.kind !== "summary") {
+                return count;
+              }
+              return count + Math.max(0, item.eventCount - 1);
+            }, 0);
             return (
               <li
                 key={lane.key}
@@ -476,6 +557,7 @@ export function EventRail({
                     <strong>{lane.label}</strong>
                     <span className="timeline-lane-meta">
                       {lane.eventCount} events | {lane.runCount} runs | {lane.densityPerMinute}/min
+                      {summarizedEventCount > 0 ? ` | ${summarizedEventCount} summarized` : ""}
                     </span>
                   </button>
                   <button
@@ -494,34 +576,102 @@ export function EventRail({
                 </div>
                 {!collapsed ? (
                   <ol className="timeline-lane-events">
-                    {lane.events.map((event) => (
-                      <li
-                        key={event.id}
-                        className={`event event-${event.type} ${
-                          activeEventId === event.id ? "is-current" : ""
-                        }`}
-                      >
-                        <button
-                          type="button"
-                          className="event-hit"
-                          onClick={() => {
-                            setManualLaneKey(lane.key);
-                            onActiveEventIdChange(event.id);
-                          }}
-                        >
-                          <span className="badge">{eventBadge(event.type)}</span>
-                          <div className="event-body">
-                            <strong>
-                              {event.parentAgentId} {"->"} {event.agentId}
-                            </strong>
-                            <p>{event.text}</p>
-                            <p className="event-meta">
-                              run {event.runId} | {relativeTime(event.at, now)}
-                            </p>
+                    {laneItems.map((item) => {
+                      if (item.kind === "event") {
+                        const event = item.event;
+                        return (
+                          <li
+                            key={item.key}
+                            className={`event event-${event.type} ${
+                              activeEventId === event.id ? "is-current" : ""
+                            }`}
+                          >
+                            <button
+                              type="button"
+                              className="event-hit"
+                              onClick={() => {
+                                setManualLaneKey(lane.key);
+                                onActiveEventIdChange(event.id);
+                              }}
+                            >
+                              <span className="badge">{eventBadge(event.type)}</span>
+                              <div className="event-body">
+                                <strong>
+                                  {event.parentAgentId} {"->"} {event.agentId}
+                                </strong>
+                                <p>{event.text}</p>
+                                <p className="event-meta">
+                                  run {event.runId} | {relativeTime(event.at, now)}
+                                </p>
+                              </div>
+                            </button>
+                          </li>
+                        );
+                      }
+
+                      const expanded = effectiveExpandedSummaryKeys.has(item.key);
+                      return (
+                        <li key={item.key} className={`event event-summary event-summary-${item.summaryKind}`}>
+                          <div className="event-hit">
+                            <span className="badge">{summaryBadge(item.summaryKind)}</span>
+                            <div className="event-body">
+                              <strong>{item.label}</strong>
+                              <p className="event-meta">
+                                {item.eventCount} events | {item.runCount} runs |{" "}
+                                {relativeTime(item.latestAt, now)}
+                              </p>
+                              <button
+                                type="button"
+                                className="timeline-summary-toggle"
+                                onClick={() => {
+                                  setExpandedSummaryKeys((previous) =>
+                                    previous.includes(item.key)
+                                      ? previous.filter((key) => key !== item.key)
+                                      : [...previous, item.key],
+                                  );
+                                }}
+                              >
+                                {expanded
+                                  ? "Hide grouped events"
+                                  : `Show grouped events (${timelineLaneItemEventCount(item)})`}
+                              </button>
+                            </div>
                           </div>
-                        </button>
-                      </li>
-                    ))}
+                          {expanded ? (
+                            <ol className="timeline-summary-events">
+                              {item.events.map((event) => (
+                                <li
+                                  key={`${item.key}:${event.id}`}
+                                  className={`event event-${event.type} ${
+                                    activeEventId === event.id ? "is-current" : ""
+                                  }`}
+                                >
+                                  <button
+                                    type="button"
+                                    className="event-hit"
+                                    onClick={() => {
+                                      setManualLaneKey(lane.key);
+                                      onActiveEventIdChange(event.id);
+                                    }}
+                                  >
+                                    <span className="badge">{eventBadge(event.type)}</span>
+                                    <div className="event-body">
+                                      <strong>
+                                        {event.parentAgentId} {"->"} {event.agentId}
+                                      </strong>
+                                      <p>{event.text}</p>
+                                      <p className="event-meta">
+                                        run {event.runId} | {relativeTime(event.at, now)}
+                                      </p>
+                                    </div>
+                                  </button>
+                                </li>
+                              ))}
+                            </ol>
+                          ) : null}
+                        </li>
+                      );
+                    })}
                   </ol>
                 ) : null}
               </li>

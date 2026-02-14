@@ -1751,6 +1751,21 @@ body {
   color: #91c9dc;
 }
 
+.timeline-compression-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.64rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #9acee0;
+  margin-left: auto;
+}
+
+.timeline-compression-toggle input {
+  accent-color: #7bd8ff;
+}
+
 .timeline-lane-mode select {
   border-radius: 8px;
   border: 1px solid rgba(144, 221, 255, 0.34);
@@ -1905,6 +1920,45 @@ body {
   margin: 5px 0 0;
   font-size: 0.64rem;
   color: #8dc2d6;
+}
+
+.event-summary {
+  border-color: rgba(244, 212, 138, 0.42);
+  background: rgba(35, 29, 14, 0.52);
+}
+
+.event-summary .badge {
+  color: #f7ddad;
+  border-color: rgba(250, 209, 128, 0.56);
+}
+
+.event-summary-dense-window {
+  border-color: rgba(255, 172, 142, 0.46);
+  background: rgba(49, 24, 18, 0.45);
+}
+
+.event-summary-dense-window .badge {
+  color: #ffc9b0;
+  border-color: rgba(255, 170, 136, 0.58);
+}
+
+.timeline-summary-toggle {
+  border-radius: 8px;
+  border: 1px solid rgba(255, 211, 139, 0.44);
+  background: rgba(69, 43, 13, 0.68);
+  color: #ffe8bd;
+  font-size: 0.64rem;
+  padding: 5px 8px;
+  cursor: pointer;
+  margin-top: 2px;
+}
+
+.timeline-summary-events {
+  margin: 0;
+  padding: 0 6px 6px 12px;
+  list-style: none;
+  display: grid;
+  gap: 6px;
 }
 
 .event-spawn .badge {
@@ -3276,6 +3330,10 @@ body {
   .timeline-lane-mode {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .timeline-compression-toggle {
+    margin-left: 0;
   }
 
   .footer-bar {
