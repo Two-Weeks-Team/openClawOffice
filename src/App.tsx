@@ -4,6 +4,7 @@ import { CommandPalette, type CommandPaletteEntry } from "./components/CommandPa
 import { EntityDetailPanel } from "./components/EntityDetailPanel";
 import { EventRail } from "./components/EventRail";
 import { OfficeStage } from "./components/OfficeStage";
+import { SummaryExporter } from "./components/SummaryExporter";
 import { ThroughputDashboard } from "./components/ThroughputDashboard";
 import { useOfficeStream } from "./hooks/useOfficeStream";
 import {
@@ -1370,6 +1371,15 @@ function App() {
           />
           Focus mode ({focusModeShortcutLabel})
         </label>
+
+        <SummaryExporter
+          snapshot={snapshot}
+          defaultAgentId={selectedEntity?.agentId ?? activeEvent?.agentId ?? null}
+          defaultRunId={
+            selectedRun?.runId ?? selectedEntity?.runId ?? activeEvent?.runId ?? null
+          }
+          onNotify={showToast}
+        />
 
         <div className="ops-actions">
           <button type="button" onClick={toggleCommandPalette}>
