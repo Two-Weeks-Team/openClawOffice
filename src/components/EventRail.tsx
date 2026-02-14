@@ -3,6 +3,7 @@ import {
   buildTimelineLaneItems,
   buildTimelineLanes,
   buildTimelineIndex,
+  buildTimelineSegments,
   filterTimelineEvents,
   nextPlaybackEventId,
   nextReplayIndex,
@@ -34,6 +35,9 @@ type Props = {
   onActiveEventIdChange: (eventId: string | null) => void;
   onLaneContextChange?: (next: LaneContext) => void;
 };
+
+const TIMELINE_SEGMENT_WINDOW_MS = 10 * 60_000;
+const INITIAL_SEGMENT_LOAD_COUNT = 2;
 
 function relativeTime(timestamp: number, now: number) {
   const ms = Math.max(0, now - timestamp);
@@ -102,17 +106,38 @@ export function EventRail({
   const [collapsedLaneKeys, setCollapsedLaneKeys] = useState<string[]>([]);
   const [compressionEnabled, setCompressionEnabled] = useState(true);
   const [expandedSummaryKeys, setExpandedSummaryKeys] = useState<string[]>([]);
+  const [loadedSegmentCount, setLoadedSegmentCount] = useState(INITIAL_SEGMENT_LOAD_COUNT);
 
   const index = useMemo(() => buildTimelineIndex(events, runGraph), [events, runGraph]);
   const filteredDesc = useMemo(() => filterTimelineEvents(index, filters), [index, filters]);
+  const timelineSegments = useMemo(
+    () =>
+      buildTimelineSegments({
+        events: filteredDesc,
+        segmentWindowMs: TIMELINE_SEGMENT_WINDOW_MS,
+      }),
+    [filteredDesc],
+  );
+  const effectiveLoadedSegmentCount = Math.min(
+    timelineSegments.length,
+    Math.max(1, loadedSegmentCount),
+  );
+  const loadedSegments = useMemo(
+    () => timelineSegments.slice(0, effectiveLoadedSegmentCount),
+    [effectiveLoadedSegmentCount, timelineSegments],
+  );
+  const loadedDesc = useMemo(
+    () => loadedSegments.flatMap((segment) => segment.events),
+    [loadedSegments],
+  );
   const lanes = useMemo(
     () =>
       buildTimelineLanes({
-        events: filteredDesc,
+        events: loadedDesc,
         mode: laneMode,
         resolveRoomId: (agentId) => roomByAgentId.get(agentId),
       }),
-    [filteredDesc, laneMode, roomByAgentId],
+    [laneMode, loadedDesc, roomByAgentId],
   );
   const laneKeyByActiveEvent = useMemo(() => {
     if (!activeEventId) {
@@ -185,8 +210,8 @@ export function EventRail({
     return keys;
   }, [activeEventId, expandedSummaryKeys, summaryKeyByEventId, summaryKeys]);
   const playbackEvents = useMemo(
-    () => [...filteredDesc].sort((a, b) => a.at - b.at),
-    [filteredDesc],
+    () => [...loadedDesc].sort((a, b) => a.at - b.at),
+    [loadedDesc],
   );
   const activePlaybackIndex = playbackEvents.findIndex((event) => event.id === activeEventId);
   const normalizedLoopRange = useMemo(() => {
@@ -270,6 +295,9 @@ export function EventRail({
     : null;
   const isEveryLaneCollapsed =
     lanes.length > 0 && lanes.every((lane) => collapsedLaneKeys.includes(lane.key));
+  const resetLoadedSegments = () => {
+    setLoadedSegmentCount(INITIAL_SEGMENT_LOAD_COUNT);
+  };
   const replayRunOptions = useMemo(
     () => [...index.byRunId.keys()].sort((left, right) => left.localeCompare(right)),
     [index],
@@ -292,6 +320,7 @@ export function EventRail({
             value={filters.runId}
             onChange={(event) => {
               onFiltersChange({ ...filters, runId: event.target.value });
+              resetLoadedSegments();
             }}
           />
           <datalist id="timeline-run-options">
@@ -308,6 +337,7 @@ export function EventRail({
             value={filters.agentId}
             onChange={(event) => {
               onFiltersChange({ ...filters, agentId: event.target.value });
+              resetLoadedSegments();
             }}
           />
         </label>
@@ -320,6 +350,7 @@ export function EventRail({
                 ...filters,
                 status: event.target.value as TimelineStatusFilter,
               });
+              resetLoadedSegments();
             }}
           >
             <option value="all">ALL</option>
@@ -341,6 +372,7 @@ export function EventRail({
             setLoopEnabled(false);
             setLoopRange(null);
             setExpandedSummaryKeys([]);
+            resetLoadedSegments();
           }}
         >
           Clear
@@ -494,6 +526,7 @@ export function EventRail({
               setLaneMode(event.target.value as TimelineLaneMode);
               setManualLaneKey(null);
               setCollapsedLaneKeys([]);
+              resetLoadedSegments();
             }}
           >
             <option value="room">ROOM</option>
@@ -525,6 +558,52 @@ export function EventRail({
         >
           {isEveryLaneCollapsed ? "Expand all" : "Collapse all"}
         </button>
+      </section>
+
+      <section className="timeline-segments">
+        <header>
+          <strong>Segments</strong>
+          <span>
+            loaded {loadedSegments.length}/{timelineSegments.length}
+          </span>
+        </header>
+        {timelineSegments.length > 0 ? (
+          <ol className="timeline-segment-list">
+            {timelineSegments.slice(0, 6).map((segment, index) => {
+              const loaded = index < loadedSegments.length;
+              return (
+                <li key={segment.id} className={loaded ? "is-loaded" : ""}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLoadedSegmentCount((prev) =>
+                        Math.max(prev, index + 1),
+                      );
+                    }}
+                  >
+                    <strong>{segment.label}</strong>
+                    <span>
+                      {segment.eventCount} events | {segment.runCount} runs
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
+        ) : (
+          <p className="timeline-empty">No timeline segments to load.</p>
+        )}
+        {loadedSegments.length < timelineSegments.length ? (
+          <button
+            type="button"
+            className="timeline-segment-load"
+            onClick={() => {
+              setLoadedSegmentCount((prev) => prev + 1);
+            }}
+          >
+            Load older segment
+          </button>
+        ) : null}
       </section>
 
       {lanes.length === 0 ? (

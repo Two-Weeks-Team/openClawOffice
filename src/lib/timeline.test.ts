@@ -4,6 +4,7 @@ import { buildRunGraph } from "./run-graph";
 import {
   buildTimelineLaneItems,
   buildTimelineLanes,
+  buildTimelineSegments,
   buildTimelineIndex,
   filterTimelineEvents,
   nextPlaybackEventId,
@@ -338,5 +339,48 @@ describe("timeline lanes", () => {
     });
     expect(uncompressed.every((item) => item.kind === "event")).toBe(true);
     expect(uncompressed.length).toBe(denseEvents.length);
+  });
+
+  it("builds time segments for lazy timeline loading", () => {
+    const baseAt = 1_700_000_600_000;
+    const segmentEvents: OfficeEvent[] = [
+      {
+        id: "seg:new-1",
+        type: "start",
+        runId: "run-new",
+        at: baseAt + 30_000,
+        agentId: "child-new",
+        parentAgentId: "parent-a",
+        text: "new 1",
+      },
+      {
+        id: "seg:new-2",
+        type: "error",
+        runId: "run-new",
+        at: baseAt + 20_000,
+        agentId: "child-new",
+        parentAgentId: "parent-a",
+        text: "new 2",
+      },
+      {
+        id: "seg:old-1",
+        type: "spawn",
+        runId: "run-old",
+        at: baseAt - 700_000,
+        agentId: "child-old",
+        parentAgentId: "parent-b",
+        text: "old 1",
+      },
+    ];
+
+    const segments = buildTimelineSegments({
+      events: segmentEvents,
+      segmentWindowMs: 300_000,
+    });
+    expect(segments).toHaveLength(2);
+    expect(segments[0]?.eventCount).toBe(2);
+    expect(segments[0]?.runCount).toBe(1);
+    expect(segments[0]?.events[0]?.id).toBe("seg:new-1");
+    expect(segments[1]?.eventCount).toBe(1);
   });
 });
