@@ -1,7 +1,7 @@
 import type { OfficeEntity, OfficeEntityStatus } from "../types/office";
 
 export type RoomShape = "grid" | "ring" | "line" | "cluster";
-export type ZonePriorityKey = "status" | "role" | "parent" | "recent";
+export type ZonePriorityKey = "status" | "team" | "role" | "parent" | "recent";
 export type EntityRole = "strategy" | "ops" | "build" | "spawn" | "recovery";
 export type PlacementMode = "auto" | "manual";
 
@@ -9,6 +9,7 @@ type RoomRoutingSpec = {
   statuses: OfficeEntityStatus[];
   kinds: Array<OfficeEntity["kind"]>;
   recentWeight: number;
+  teamWeight?: number;
 };
 
 export type RoomSpec = {
@@ -60,6 +61,9 @@ export type RoomDebugInfo = {
   targeted: number;
   overflowIn: number;
   overflowOut: number;
+  utilizationPct: number;
+  saturation: "low" | "medium" | "high";
+  manualOverrides: number;
   secondaryZoneId?: string;
 };
 
@@ -72,7 +76,7 @@ export type PlacementResult = {
 
 const VALID_STATUSES: readonly OfficeEntityStatus[] = ["active", "idle", "offline", "ok", "error"];
 const VALID_ENTITY_KINDS: readonly OfficeEntity["kind"][] = ["agent", "subagent"];
-const DEFAULT_PRIORITY_ORDER: ZonePriorityKey[] = ["status", "role", "parent", "recent"];
+const DEFAULT_PRIORITY_ORDER: ZonePriorityKey[] = ["status", "team", "role", "parent", "recent"];
 const VALID_PRIORITIES: readonly ZonePriorityKey[] = DEFAULT_PRIORITY_ORDER;
 
 const DEFAULT_ZONE_CONFIG: ZoneLayoutConfig = {
@@ -101,6 +105,7 @@ const DEFAULT_ZONE_CONFIG: ZoneLayoutConfig = {
         statuses: ["active"],
         kinds: ["agent"],
         recentWeight: 0.2,
+        teamWeight: 0.3,
       },
     },
     {
@@ -122,6 +127,7 @@ const DEFAULT_ZONE_CONFIG: ZoneLayoutConfig = {
         statuses: ["ok", "offline"],
         kinds: ["agent"],
         recentWeight: 0.15,
+        teamWeight: 0.18,
       },
     },
     {
@@ -143,6 +149,7 @@ const DEFAULT_ZONE_CONFIG: ZoneLayoutConfig = {
         statuses: ["idle"],
         kinds: ["agent"],
         recentWeight: 0.1,
+        teamWeight: 0.2,
       },
     },
     {
@@ -164,6 +171,7 @@ const DEFAULT_ZONE_CONFIG: ZoneLayoutConfig = {
         statuses: ["active", "idle"],
         kinds: ["subagent"],
         recentWeight: 0.35,
+        teamWeight: 0.32,
       },
     },
     {
@@ -185,6 +193,7 @@ const DEFAULT_ZONE_CONFIG: ZoneLayoutConfig = {
         statuses: ["ok", "error", "offline"],
         kinds: ["agent", "subagent"],
         recentWeight: 0.25,
+        teamWeight: 0.26,
       },
     },
   ],
@@ -333,6 +342,7 @@ function normalizeRoom(rawValue: unknown, fallback: RoomSpec): RoomSpec {
       statuses: normalizeStatuses(rawRouting.statuses, fallback.routing.statuses),
       kinds: normalizeKinds(rawRouting.kinds, fallback.routing.kinds),
       recentWeight: toFiniteNumber(rawRouting.recentWeight, fallback.routing.recentWeight),
+      teamWeight: toFiniteNumber(rawRouting.teamWeight, fallback.routing.teamWeight ?? 0),
     },
   };
   return room;
@@ -414,19 +424,91 @@ function deriveRole(entity: OfficeEntity): EntityRole {
   return "ops";
 }
 
+function deriveModelTeam(model: string | undefined): string | undefined {
+  if (typeof model !== "string") {
+    return undefined;
+  }
+  const normalized = model.trim().toLowerCase();
+  if (!normalized) {
+    return undefined;
+  }
+  const provider = normalized.split("/")[0];
+  if (!provider) {
+    return undefined;
+  }
+  return provider;
+}
+
+function deriveTeamId(entity: OfficeEntity, teamByAgentId: Map<string, string>): string | undefined {
+  const modelTeam = deriveModelTeam(entity.model);
+  if (modelTeam) {
+    return modelTeam;
+  }
+  if (entity.parentAgentId) {
+    const parentTeam = teamByAgentId.get(entity.parentAgentId);
+    if (parentTeam) {
+      return parentTeam;
+    }
+  }
+  const primaryToken = entity.agentId.split("-")[0]?.trim().toLowerCase();
+  if (primaryToken && primaryToken !== entity.agentId.toLowerCase()) {
+    return primaryToken;
+  }
+  return undefined;
+}
+
+function incrementTeamLoad(
+  teamLoadByRoom: Map<string, Map<string, number>>,
+  roomId: string,
+  teamId: string,
+) {
+  const roomLoad = teamLoadByRoom.get(roomId) ?? new Map<string, number>();
+  roomLoad.set(teamId, (roomLoad.get(teamId) ?? 0) + 1);
+  teamLoadByRoom.set(roomId, roomLoad);
+}
+
+function parseManualRoomOverride(entity: OfficeEntity, roomById: Map<string, RoomSpec>): string | undefined {
+  const textSources = [entity.task, entity.bubble, entity.label];
+  const patterns = [
+    /\broom\s*[:=]\s*([a-z0-9_-]+)/i,
+    /\[(?:room|zone)\s*:\s*([a-z0-9_-]+)\]/i,
+  ];
+
+  for (const source of textSources) {
+    if (typeof source !== "string" || source.trim() === "") {
+      continue;
+    }
+    for (const pattern of patterns) {
+      const matched = source.match(pattern)?.[1]?.toLowerCase();
+      if (matched && roomById.has(matched)) {
+        return matched;
+      }
+    }
+  }
+  return undefined;
+}
+
 function scoreRoom(params: {
   entity: OfficeEntity;
   role: EntityRole;
   room: RoomSpec;
   parentRoomId?: string;
+  teamId?: string;
+  teamLoadByRoom: Map<string, Map<string, number>>;
   generatedAt: number;
   recentWindowMs: number;
 }): ScoreVector {
-  const { entity, role, room, parentRoomId, generatedAt, recentWindowMs } = params;
+  const { entity, role, room, parentRoomId, teamId, teamLoadByRoom, generatedAt, recentWindowMs } =
+    params;
   const statusMatch = room.routing.statuses.includes(entity.status) ? 1 : 0;
   const kindMatch = room.routing.kinds.includes(entity.kind) ? 1 : 0;
   const roleMatch = room.role === role ? 1 : 0;
   const parentMatch = entity.kind === "subagent" && parentRoomId === room.id ? 1 : 0;
+  const teamLoad = teamId ? (teamLoadByRoom.get(room.id)?.get(teamId) ?? 0) : 0;
+  const teamMatch =
+    teamLoad > 0
+      ? 1 + Math.min(0.6, teamLoad * Math.max(0, room.routing.teamWeight ?? 0))
+      : 0;
   const isRecent =
     typeof entity.lastUpdatedAt === "number" &&
     generatedAt - entity.lastUpdatedAt >= 0 &&
@@ -434,6 +516,7 @@ function scoreRoom(params: {
 
   return {
     status: statusMatch,
+    team: teamMatch,
     role: kindMatch + roleMatch,
     parent: parentMatch,
     recent: isRecent ? room.routing.recentWeight : 0,
@@ -459,14 +542,34 @@ function compareScoreVectors(
 function shouldPromoteRoomCandidate(params: {
   candidateRoom: RoomSpec;
   candidateScore: ScoreVector;
+  candidateOccupancy: number;
   currentRoom: RoomSpec;
   currentScore: ScoreVector;
+  currentOccupancy: number;
   priorityOrder: ZonePriorityKey[];
 }): boolean {
-  const { candidateRoom, candidateScore, currentRoom, currentScore, priorityOrder } = params;
+  const {
+    candidateRoom,
+    candidateScore,
+    candidateOccupancy,
+    currentRoom,
+    currentScore,
+    currentOccupancy,
+    priorityOrder,
+  } = params;
   const scoreOrder = compareScoreVectors(candidateScore, currentScore, priorityOrder);
   if (scoreOrder !== 0) {
     return scoreOrder > 0;
+  }
+  const candidateSpare = candidateRoom.capacity - candidateOccupancy;
+  const currentSpare = currentRoom.capacity - currentOccupancy;
+  if (candidateSpare !== currentSpare) {
+    return candidateSpare > currentSpare;
+  }
+  const candidateUtilization = candidateOccupancy / Math.max(1, candidateRoom.capacity);
+  const currentUtilization = currentOccupancy / Math.max(1, currentRoom.capacity);
+  if (candidateUtilization !== currentUtilization) {
+    return candidateUtilization < currentUtilization;
   }
   return candidateRoom.id.localeCompare(currentRoom.id) < 0;
 }
@@ -478,9 +581,23 @@ function pickTargetRoom(params: {
   generatedAt: number;
   recentWindowMs: number;
   parentRoomByAgentId: Map<string, string>;
+  teamByAgentId: Map<string, string>;
+  teamLoadByRoom: Map<string, Map<string, number>>;
+  occupancyByRoom: Map<string, number>;
 }): RoomSpec {
-  const { entity, rooms, priorityOrder, generatedAt, recentWindowMs, parentRoomByAgentId } = params;
+  const {
+    entity,
+    rooms,
+    priorityOrder,
+    generatedAt,
+    recentWindowMs,
+    parentRoomByAgentId,
+    teamByAgentId,
+    teamLoadByRoom,
+    occupancyByRoom,
+  } = params;
   const role = deriveRole(entity);
+  const teamId = deriveTeamId(entity, teamByAgentId);
   const parentRoomId = entity.parentAgentId
     ? parentRoomByAgentId.get(entity.parentAgentId)
     : undefined;
@@ -491,17 +608,23 @@ function pickTargetRoom(params: {
     role,
     room: bestRoom,
     parentRoomId,
+    teamId,
+    teamLoadByRoom,
     generatedAt,
     recentWindowMs,
   });
+  let bestOccupancy = occupancyByRoom.get(bestRoom.id) ?? 0;
 
   for (let index = 1; index < rooms.length; index += 1) {
     const candidate = rooms[index];
+    const candidateOccupancy = occupancyByRoom.get(candidate.id) ?? 0;
     const candidateScore = scoreRoom({
       entity,
       role,
       room: candidate,
       parentRoomId,
+      teamId,
+      teamLoadByRoom,
       generatedAt,
       recentWindowMs,
     });
@@ -509,13 +632,16 @@ function pickTargetRoom(params: {
       shouldPromoteRoomCandidate({
         candidateRoom: candidate,
         candidateScore,
+        candidateOccupancy,
         currentRoom: bestRoom,
         currentScore: bestScore,
+        currentOccupancy: bestOccupancy,
         priorityOrder,
       })
     ) {
       bestRoom = candidate;
       bestScore = candidateScore;
+      bestOccupancy = candidateOccupancy;
     }
   }
 
@@ -666,6 +792,54 @@ function applyParentAffinity(params: {
   );
 }
 
+export type RoomCapacityPlanEntry = {
+  roomId: string;
+  label: string;
+  capacity: number;
+  targetSharePct: number;
+  recommendedLoad: number;
+  headroom: number;
+  secondaryZoneId?: string;
+};
+
+export type RoomCapacityPlan = {
+  totalCapacity: number;
+  expectedEntities: number;
+  utilizationTargetPct: number;
+  entries: RoomCapacityPlanEntry[];
+};
+
+export function buildRoomCapacityPlan(params?: {
+  zoneConfig?: unknown;
+  expectedEntities?: number;
+}): RoomCapacityPlan {
+  const config = normalizeZoneConfig(params?.zoneConfig);
+  const totalCapacity = config.rooms.reduce((sum, room) => sum + room.capacity, 0);
+  const expectedEntities = Math.max(0, Math.round(params?.expectedEntities ?? totalCapacity));
+  const entries = config.rooms.map((room) => {
+    const targetSharePct = totalCapacity > 0 ? (room.capacity / totalCapacity) * 100 : 0;
+    const recommendedLoad = Math.round((targetSharePct / 100) * expectedEntities);
+    const headroom = room.capacity - recommendedLoad;
+    return {
+      roomId: room.id,
+      label: room.label,
+      capacity: room.capacity,
+      targetSharePct: Number(targetSharePct.toFixed(2)),
+      recommendedLoad,
+      headroom,
+      secondaryZoneId: room.secondaryZoneId,
+    };
+  });
+
+  return {
+    totalCapacity,
+    expectedEntities,
+    utilizationTargetPct:
+      totalCapacity > 0 ? Number(((expectedEntities / totalCapacity) * 100).toFixed(2)) : 0,
+    entries,
+  };
+}
+
 export function getRooms(zoneConfig?: unknown): RoomSpec[] {
   return normalizeZoneConfig(zoneConfig).rooms;
 }
@@ -687,6 +861,9 @@ export function buildPlacements(params: {
   const overflowOutByRoom = new Map<string, number>();
   const overflowInByRoom = new Map<string, number>();
   const parentRoomByAgentId = new Map<string, string>();
+  const teamByAgentId = new Map<string, string>();
+  const teamLoadByRoom = new Map<string, Map<string, number>>();
+  const manualOverridesByRoom = new Map<string, number>();
   const assignmentByEntityId = new Map<string, AssignmentMeta>();
 
   for (const room of rooms) {
@@ -697,14 +874,25 @@ export function buildPlacements(params: {
   const assignmentOrder = [...params.entities].sort(compareEntities);
 
   for (const entity of assignmentOrder) {
-    const targetRoom = pickTargetRoom({
-      entity,
-      rooms,
-      priorityOrder: config.priorityOrder,
-      generatedAt: params.generatedAt,
-      recentWindowMs: config.recentWindowMs,
-      parentRoomByAgentId,
-    });
+    const manualOverrideRoomId = parseManualRoomOverride(entity, roomById);
+    const targetRoom =
+      manualOverrideRoomId && roomById.has(manualOverrideRoomId)
+        ? (roomById.get(manualOverrideRoomId) as RoomSpec)
+        : pickTargetRoom({
+            entity,
+            rooms,
+            priorityOrder: config.priorityOrder,
+            generatedAt: params.generatedAt,
+            recentWindowMs: config.recentWindowMs,
+            parentRoomByAgentId,
+            teamByAgentId,
+            teamLoadByRoom,
+            occupancyByRoom,
+          });
+
+    if (manualOverrideRoomId && targetRoom.id === manualOverrideRoomId) {
+      manualOverridesByRoom.set(targetRoom.id, (manualOverridesByRoom.get(targetRoom.id) ?? 0) + 1);
+    }
 
     targetedByRoom.set(targetRoom.id, (targetedByRoom.get(targetRoom.id) ?? 0) + 1);
 
@@ -714,7 +902,7 @@ export function buildPlacements(params: {
       roomById,
       occupancyByRoom,
       defaultOverflowZoneId: config.defaultOverflowZoneId,
-      placementMode,
+      placementMode: manualOverrideRoomId ? "manual" : placementMode,
     });
     occupancyByRoom.set(resolved.roomId, (occupancyByRoom.get(resolved.roomId) ?? 0) + 1);
 
@@ -729,6 +917,14 @@ export function buildPlacements(params: {
       targetRoomId: targetRoom.id,
       overflowed: resolved.overflowed,
     });
+
+    const teamId = deriveTeamId(entity, teamByAgentId);
+    if (teamId) {
+      incrementTeamLoad(teamLoadByRoom, resolved.roomId, teamId);
+      if (entity.kind === "agent") {
+        teamByAgentId.set(entity.agentId, teamId);
+      }
+    }
 
     if (entity.kind === "agent") {
       parentRoomByAgentId.set(entity.agentId, resolved.roomId);
@@ -790,6 +986,9 @@ export function buildPlacements(params: {
   for (const room of rooms) {
     const assigned = roomBuckets.get(room.id)?.length ?? 0;
     const targeted = targetedByRoom.get(room.id) ?? 0;
+    const utilizationPct = Math.round((assigned / Math.max(1, room.capacity)) * 100);
+    const saturation: RoomDebugInfo["saturation"] =
+      utilizationPct >= 100 ? "high" : utilizationPct >= 70 ? "medium" : "low";
     roomDebug.set(room.id, {
       roomId: room.id,
       capacity: room.capacity,
@@ -797,6 +996,9 @@ export function buildPlacements(params: {
       targeted,
       overflowIn: overflowInByRoom.get(room.id) ?? 0,
       overflowOut: overflowOutByRoom.get(room.id) ?? 0,
+      utilizationPct,
+      saturation,
+      manualOverrides: manualOverridesByRoom.get(room.id) ?? 0,
       secondaryZoneId: room.secondaryZoneId,
     });
   }

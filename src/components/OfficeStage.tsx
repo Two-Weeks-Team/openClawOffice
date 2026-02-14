@@ -1505,10 +1505,12 @@ export function OfficeStage({
                 <span>
                   cap {debug.assigned}/{debug.capacity}
                 </span>
-                <span>occ {occupancyPercent}%</span>
+                <span>occ {debug.utilizationPct || occupancyPercent}%</span>
                 <span>target {debug.targeted}</span>
+                <span>{debug.saturation}</span>
                 {debug.overflowOut > 0 ? <span>out +{debug.overflowOut}</span> : null}
                 {debug.overflowIn > 0 ? <span>in +{debug.overflowIn}</span> : null}
+                {debug.manualOverrides > 0 ? <span>override {debug.manualOverrides}</span> : null}
               </div>
             ) : null}
           </section>
