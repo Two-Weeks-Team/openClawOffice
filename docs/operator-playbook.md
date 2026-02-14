@@ -15,6 +15,8 @@
    - `.reports/perf/local50-latest.json`
    - `.reports/readiness/readiness-latest.md`
 4. Open `GET /api/office/metrics` and verify no abnormal growth in:
+   - base URL: `http://127.0.0.1:5179` (dev server running)
+   - example: `curl http://127.0.0.1:5179/api/office/metrics`
    - `stream.backpressureActivations`
    - `stream.droppedUnseenEvents`
    - `stream.evictedBackfillEvents`
@@ -40,12 +42,20 @@
      - `Depends on: #<blocking issue>`
 
 ## Replay And Reporting
+Artifact rule:
+- daily checks: attach `.json` artifacts
+- operator/review reports: attach `.md` artifacts
+- release decision reviews: attach both `.json` and `.md`
+
 1. Build replay evidence from workflow suite:
    - `pnpm e2e:workflow`
 2. Attach readiness summary:
+   - `.reports/readiness/readiness-latest.json`
    - `.reports/readiness/readiness-latest.md`
 3. Attach perf snapshots:
+   - `.reports/perf/local25-latest.json`
    - `.reports/perf/local25-latest.md`
+   - `.reports/perf/local50-latest.json`
    - `.reports/perf/local50-latest.md`
 4. Use this report skeleton:
 
