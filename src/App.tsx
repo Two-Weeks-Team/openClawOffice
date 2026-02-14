@@ -31,6 +31,7 @@ import {
   buildTimelineIndex,
   filterTimelineEvents,
   nextPlaybackEventId,
+  parseEventIdDeepLink,
   parseRunIdDeepLink,
   type TimelineFilters,
 } from "./lib/timeline";
@@ -159,7 +160,10 @@ function StatCard(props: { label: string; value: number | string; accent?: strin
 function App() {
   const { snapshot, connected, liveSource, error } = useOfficeStream();
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
-  const [activeEventId, setActiveEventId] = useState<string | null>(null);
+  const [activeEventId, setActiveEventId] = useState<string | null>(() => {
+    const eventId = parseEventIdDeepLink(window.location.search);
+    return eventId.length > 0 ? eventId : null;
+  });
   const [timelineRoomByAgentId, setTimelineRoomByAgentId] = useState<Map<string, string>>(
     () => new Map(),
   );
@@ -243,9 +247,18 @@ function App() {
     () => snapshot?.events.find((event) => event.id === activeEventId) ?? null,
     [activeEventId, snapshot],
   );
+  const effectiveSelectedEntityId = useMemo(() => {
+    if (!snapshot || !activeEvent) {
+      return selectedEntityId;
+    }
+    const replayEntityId = `subagent:${activeEvent.runId}`;
+    return snapshot.entities.some((entity) => entity.id === replayEntityId)
+      ? replayEntityId
+      : selectedEntityId;
+  }, [activeEvent, selectedEntityId, snapshot]);
   const selectedEntity = useMemo(
-    () => snapshot?.entities.find((entity) => entity.id === selectedEntityId) ?? null,
-    [selectedEntityId, snapshot],
+    () => snapshot?.entities.find((entity) => entity.id === effectiveSelectedEntityId) ?? null,
+    [effectiveSelectedEntityId, snapshot],
   );
   const selectedRun = useMemo(() => {
     if (!snapshot) {
@@ -286,8 +299,19 @@ function App() {
     } else {
       url.searchParams.delete("runId");
     }
+    const eventId = activeEventId?.trim();
+    if (eventId) {
+      url.searchParams.set("eventId", eventId);
+    } else {
+      url.searchParams.delete("eventId");
+    }
+    if (runId || eventId) {
+      url.searchParams.set("replay", "1");
+    } else {
+      url.searchParams.delete("replay");
+    }
     window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
-  }, [timelineFilters.runId]);
+  }, [activeEventId, timelineFilters.runId]);
 
   useEffect(() => {
     if (!toast) {
@@ -408,6 +432,35 @@ function App() {
     }
     jumpToRunId(runId, "toolbar");
   }, [activeEvent?.runId, jumpToRunId, selectedEntity?.runId, selectedRun?.runId, showToast]);
+
+  const onCopyReplayLink = useCallback(async () => {
+    const runId =
+      timelineFilters.runId.trim() ||
+      activeEvent?.runId ||
+      selectedRun?.runId ||
+      selectedEntity?.runId;
+    if (!runId) {
+      showToast("error", "No runId available for replay link.");
+      return;
+    }
+    const url = new URL(window.location.href);
+    url.searchParams.set("runId", runId);
+    if (activeEventId) {
+      url.searchParams.set("eventId", activeEventId);
+    } else {
+      url.searchParams.delete("eventId");
+    }
+    url.searchParams.set("replay", "1");
+    await copyText(url.toString(), "Copied replay link.");
+  }, [
+    activeEvent?.runId,
+    activeEventId,
+    copyText,
+    selectedEntity?.runId,
+    selectedRun?.runId,
+    showToast,
+    timelineFilters.runId,
+  ]);
 
   const clearOpsFilters = useCallback(() => {
     setOpsFilters(DEFAULT_OPS_FILTERS);
@@ -654,6 +707,17 @@ function App() {
         },
       },
       {
+        id: "timeline.copy.replayLink",
+        label: "Copy Replay Link",
+        description: "Copy a local replay deep-link with runId and active event.",
+        section: "Timeline",
+        defaultShortcut: "alt+shift+l",
+        keywords: ["timeline", "replay", "link", "copy"],
+        run: () => {
+          void onCopyReplayLink();
+        },
+      },
+      {
         id: "run.jump",
         label: "Jump to Selected Run",
         description: "Apply selected runId to timeline filter.",
@@ -701,6 +765,7 @@ function App() {
       clearTimelineFilters,
       moveTimelineEvent,
       onCopyLogGuide,
+      onCopyReplayLink,
       onCopyRunId,
       onCopySessionKey,
       onJumpToRun,
@@ -1115,6 +1180,9 @@ function App() {
           <button type="button" onClick={() => void onCopyRunId()}>
             Copy runId
           </button>
+          <button type="button" onClick={() => void onCopyReplayLink()}>
+            Copy replay link
+          </button>
           <button type="button" onClick={() => void onCopySessionKey()}>
             Copy sessionKey
           </button>
@@ -1133,7 +1201,7 @@ function App() {
       <section className="workspace">
         <OfficeStage
           snapshot={snapshot}
-          selectedEntityId={selectedEntityId}
+          selectedEntityId={effectiveSelectedEntityId}
           highlightRunId={highlightRunId}
           highlightAgentId={highlightAgentId}
           filterEntityIds={filteredEntityIds}
@@ -1161,9 +1229,9 @@ function App() {
             onLaneContextChange={handleLaneContextChange}
           />
           <EntityDetailPanel
-            key={selectedEntityId ?? "detail-empty"}
+            key={effectiveSelectedEntityId ?? "detail-empty"}
             snapshot={snapshot}
-            selectedEntityId={selectedEntityId}
+            selectedEntityId={effectiveSelectedEntityId}
             onJumpToRun={(runId) => {
               if (!runId.trim()) {
                 return;

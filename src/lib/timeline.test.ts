@@ -6,6 +6,8 @@ import {
   buildTimelineIndex,
   filterTimelineEvents,
   nextPlaybackEventId,
+  nextReplayIndex,
+  parseEventIdDeepLink,
   parseRunIdDeepLink,
 } from "./timeline";
 
@@ -129,12 +131,25 @@ describe("timeline helpers", () => {
     expect(parseRunIdDeepLink("?agentId=main")).toBe("");
   });
 
+  it("parses eventId from deep link query", () => {
+    expect(parseEventIdDeepLink("?eventId=run-1:start:1700000000")).toBe("run-1:start:1700000000");
+    expect(parseEventIdDeepLink("?runId=run-123")).toBe("");
+  });
+
   it("returns next playback id in order", () => {
     const ascending = [...makeEvents()].sort((a, b) => a.at - b.at);
     expect(nextPlaybackEventId(ascending, null)).toBe("run-a:spawn");
     expect(nextPlaybackEventId(ascending, "run-a:spawn")).toBe("run-a:start");
     expect(nextPlaybackEventId(ascending, "run-b:cleanup")).toBeNull();
     expect(nextPlaybackEventId(ascending, "run-b:error", -1)).toBe("run-a:start");
+  });
+
+  it("calculates next replay index with optional loop range", () => {
+    expect(nextReplayIndex({ currentIndex: -1, total: 4 })).toBe(0);
+    expect(nextReplayIndex({ currentIndex: 2, total: 4 })).toBe(3);
+    expect(nextReplayIndex({ currentIndex: 3, total: 4 })).toBeNull();
+    expect(nextReplayIndex({ currentIndex: 2, total: 4, loopStartIndex: 1, loopEndIndex: 2 })).toBe(1);
+    expect(nextReplayIndex({ currentIndex: 0, total: 4, loopStartIndex: 1, loopEndIndex: 2 })).toBe(1);
   });
 });
 
