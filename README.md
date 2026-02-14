@@ -43,6 +43,7 @@ Web-based visual command center for OpenClaw agents and subagents.
 - Timeline debugger with `runId/agentId/status` filters + playback + run deep link
 - Multi-lane timeline groups (`room`, `agent`, `subagent`) with lane collapse + density summary
 - Command palette + global shortcuts with keymap override and recent command history
+- Local alert rules engine with badge/toast/alert-center and rule mute/snooze controls
 
 ## Motion Lifecycle Guide
 
@@ -88,6 +89,11 @@ Web-based visual command center for OpenClaw agents and subagents.
 4. 운영자 액션(`runId/sessionKey/log guide`) 성공/실패 토스트가 즉시 표시
 5. 선택/필터가 없는 실패 케이스에서도 안내 문구가 누락되지 않음
 6. Command Palette(`mod+k`)에서 핵심 액션 10개 이상 실행 가능하며 Shortcut Help에서 키맵 재설정 가능
+
+## Alert Rules
+
+- Rule thresholds and tuning guide: `docs/alert-rules.md`
+- Alert center shortcut: `mod+shift+a`
 
 ## Data source
 

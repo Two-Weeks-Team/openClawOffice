@@ -6,6 +6,16 @@ import { EventRail } from "./components/EventRail";
 import { OfficeStage } from "./components/OfficeStage";
 import { useOfficeStream } from "./hooks/useOfficeStream";
 import {
+  ALERT_RULE_LABELS,
+  DEFAULT_ALERT_RULE_PREFERENCES,
+  evaluateAlertSignals,
+  isAlertRuleSuppressed,
+  normalizeAlertRulePreferences,
+  type AlertRuleId,
+  type AlertRulePreferences,
+  type AlertSignal,
+} from "./lib/alerts";
+import {
   formatShortcut,
   isEditableEventTarget,
   keyboardEventToShortcut,
@@ -60,7 +70,15 @@ type CommandEntry = CommandSpec & {
 
 const SHORTCUT_OVERRIDES_KEY = "openclawoffice.shortcut-overrides.v1";
 const RECENT_COMMANDS_KEY = "openclawoffice.recent-commands.v1";
+const ALERT_RULE_PREFERENCES_KEY = "openclawoffice.alert-rule-preferences.v1";
 const MAX_RECENT_COMMANDS = 8;
+
+const ALERT_RULE_ORDER: AlertRuleId[] = [
+  "consecutive-errors",
+  "long-active",
+  "cleanup-pending",
+  "event-stall",
+];
 
 const DEFAULT_OPS_FILTERS: OpsFilters = {
   query: "",
@@ -122,6 +140,19 @@ function loadRecentCommands(): string[] {
   }
 }
 
+function loadAlertRulePreferences(): AlertRulePreferences {
+  try {
+    const raw = window.localStorage.getItem(ALERT_RULE_PREFERENCES_KEY);
+    if (!raw) {
+      return DEFAULT_ALERT_RULE_PREFERENCES;
+    }
+    const parsed: unknown = JSON.parse(raw);
+    return normalizeAlertRulePreferences(parsed);
+  } catch {
+    return DEFAULT_ALERT_RULE_PREFERENCES;
+  }
+}
+
 function StatCard(props: { label: string; value: number | string; accent?: string }) {
   return (
     <article className="stat-card" style={props.accent ? { borderColor: props.accent } : undefined}>
@@ -152,9 +183,13 @@ function App() {
   const [opsFilters, setOpsFilters] = useState<OpsFilters>(DEFAULT_OPS_FILTERS);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isShortcutHelpOpen, setIsShortcutHelpOpen] = useState(false);
+  const [isAlertCenterOpen, setIsAlertCenterOpen] = useState(false);
   const [rebindingCommandId, setRebindingCommandId] = useState<string | null>(null);
   const [shortcutOverrides, setShortcutOverrides] = useState<Record<string, string>>(loadShortcutOverrides);
   const [recentCommandIds, setRecentCommandIds] = useState<string[]>(loadRecentCommands);
+  const [alertRulePreferences, setAlertRulePreferences] = useState<AlertRulePreferences>(
+    loadAlertRulePreferences,
+  );
   const shortcutPlatform = useMemo(() => detectShortcutPlatform(), []);
 
   const showToast = useCallback((kind: NonNullable<ToastState>["kind"], message: string) => {
@@ -244,6 +279,11 @@ function App() {
     [activeEventId, timelinePlaybackEvents],
   );
 
+  const alertSignals = useMemo<AlertSignal[]>(
+    () => (snapshot ? evaluateAlertSignals(snapshot, snapshot.generatedAt) : []),
+    [snapshot],
+  );
+
   useEffect(() => {
     const url = new URL(window.location.href);
     const runId = timelineFilters.runId.trim();
@@ -282,6 +322,17 @@ function App() {
       // Ignore localStorage persistence errors in restricted browser modes.
     }
   }, [recentCommandIds]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        ALERT_RULE_PREFERENCES_KEY,
+        JSON.stringify(alertRulePreferences),
+      );
+    } catch {
+      // Ignore localStorage persistence errors in restricted browser modes.
+    }
+  }, [alertRulePreferences]);
 
   const handleLaneContextChange = useCallback((next: { highlightAgentId: string | null }) => {
     setTimelineLaneHighlightAgentId(next.highlightAgentId);
@@ -401,14 +452,27 @@ function App() {
     setOpsFilters((prev) => ({ ...prev, focusMode: !prev.focusMode }));
   }, []);
 
+  const toggleAlertCenter = useCallback(() => {
+    setRebindingCommandId(null);
+    setIsCommandPaletteOpen(false);
+    setIsShortcutHelpOpen(false);
+    setIsAlertCenterOpen((prev) => !prev);
+  }, []);
+
+  const closeAlertCenter = useCallback(() => {
+    setIsAlertCenterOpen(false);
+  }, []);
+
   const toggleCommandPalette = useCallback(() => {
     setRebindingCommandId(null);
+    setIsAlertCenterOpen(false);
     setIsShortcutHelpOpen(false);
     setIsCommandPaletteOpen((prev) => !prev);
   }, []);
 
   const openShortcutHelp = useCallback(() => {
     setRebindingCommandId(null);
+    setIsAlertCenterOpen(false);
     setIsCommandPaletteOpen(false);
     setIsShortcutHelpOpen(true);
   }, []);
@@ -416,6 +480,38 @@ function App() {
   const closeShortcutHelp = useCallback(() => {
     setRebindingCommandId(null);
     setIsShortcutHelpOpen(false);
+  }, []);
+
+  const toggleAlertRuleMute = useCallback((ruleId: AlertRuleId) => {
+    setAlertRulePreferences((prev) => ({
+      ...prev,
+      [ruleId]: {
+        ...prev[ruleId],
+        muted: !prev[ruleId].muted,
+      },
+    }));
+  }, []);
+
+  const snoozeAlertRule = useCallback((ruleId: AlertRuleId, durationMs: number) => {
+    const baseTime = snapshot?.generatedAt ?? Date.now();
+    setAlertRulePreferences((prev) => ({
+      ...prev,
+      [ruleId]: {
+        ...prev[ruleId],
+        muted: false,
+        snoozeUntil: baseTime + durationMs,
+      },
+    }));
+  }, [snapshot?.generatedAt]);
+
+  const clearAlertRuleSuppression = useCallback((ruleId: AlertRuleId) => {
+    setAlertRulePreferences((prev) => ({
+      ...prev,
+      [ruleId]: {
+        muted: false,
+        snoozeUntil: 0,
+      },
+    }));
   }, []);
 
   const entityCommandSpecs = useMemo<CommandSpec[]>(() => {
@@ -460,6 +556,17 @@ function App() {
         allowWhenOverlayOpen: true,
         keywords: ["cheat", "keymap", "shortcut", "help"],
         run: openShortcutHelp,
+      },
+      {
+        id: "alerts.center.toggle",
+        label: "Toggle Alert Center",
+        description: "Open or close alert center and rule controls.",
+        section: "Global",
+        defaultShortcut: "mod+shift+a",
+        allowInInput: true,
+        allowWhenOverlayOpen: true,
+        keywords: ["alerts", "center", "rules", "mute", "snooze"],
+        run: toggleAlertCenter,
       },
       {
         id: "filters.clear",
@@ -604,6 +711,7 @@ function App() {
       onCopySessionKey,
       onJumpToRun,
       openShortcutHelp,
+      toggleAlertCenter,
       toggleCommandPalette,
       toggleFocusMode,
       togglePlacementMode,
@@ -703,7 +811,7 @@ function App() {
       }
 
       const isInputTarget = isEditableEventTarget(event.target);
-      const isOverlayOpen = isCommandPaletteOpen || isShortcutHelpOpen;
+      const isOverlayOpen = isCommandPaletteOpen || isShortcutHelpOpen || isAlertCenterOpen;
 
       const matchedCommand = commandEntries.find((command) => {
         if (!command.effectiveShortcut || command.disabled) {
@@ -736,6 +844,7 @@ function App() {
   }, [
     commandEntries,
     executeCommandById,
+    isAlertCenterOpen,
     isCommandPaletteOpen,
     isShortcutHelpOpen,
     rebindingCommandId,
@@ -840,9 +949,15 @@ function App() {
     opsFilters.status !== "all" ||
     opsFilters.roomId !== "all" ||
     opsFilters.recentMinutes !== "all";
+  const visibleAlertSignals = alertSignals.filter(
+    (signal) => !isAlertRuleSuppressed(alertRulePreferences, signal.ruleId, snapshot.generatedAt),
+  );
+  const hasActiveAlerts = visibleAlertSignals.length > 0;
+  const alertToastSignals = visibleAlertSignals.slice(0, 2);
 
   const paletteShortcutLabel = formatShortcut("mod+k", shortcutPlatform);
   const helpShortcutLabel = formatShortcut("shift+/", shortcutPlatform);
+  const alertCenterShortcutLabel = formatShortcut("mod+shift+a", shortcutPlatform);
 
   return (
     <main className="app-shell">
@@ -858,6 +973,9 @@ function App() {
           </span>
           <span className={`status-pill ${liveSource ? "online" : "demo"}`}>
             {liveSource ? "Live Runtime" : "Demo Snapshot"}
+          </span>
+          <span className={`status-pill alert-pill ${hasActiveAlerts ? "active" : ""}`}>
+            Alerts {visibleAlertSignals.length}
           </span>
         </div>
       </section>
@@ -975,6 +1093,13 @@ function App() {
           <button type="button" onClick={openShortcutHelp}>
             Shortcut Help ({helpShortcutLabel})
           </button>
+          <button
+            type="button"
+            className={hasActiveAlerts ? "ops-alert-button has-alerts" : "ops-alert-button"}
+            onClick={toggleAlertCenter}
+          >
+            Alert Center ({alertCenterShortcutLabel}) [{visibleAlertSignals.length}]
+          </button>
           <button type="button" onClick={() => void onCopyRunId()}>
             Copy runId
           </button>
@@ -1061,6 +1186,129 @@ function App() {
           {activeTimelineIndex >= 0 ? activeTimelineIndex + 1 : 0}/{timelinePlaybackEvents.length}
         </span>
       </footer>
+
+      {isAlertCenterOpen ? (
+        <div
+          className="alert-center-overlay"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              closeAlertCenter();
+            }
+          }}
+        >
+          <section className="alert-center" role="dialog" aria-modal="true" aria-label="Alert Center">
+            <header className="alert-center-header">
+              <div>
+                <h2>Alert Center</h2>
+                <p>
+                  Event-driven local alerts with duplicate suppression and rule-level mute/snooze.
+                </p>
+              </div>
+              <button type="button" onClick={closeAlertCenter}>
+                Close
+              </button>
+            </header>
+
+            <section className="alert-center-section">
+              <h3>Active Alerts ({alertSignals.length})</h3>
+              {alertSignals.length === 0 ? (
+                <p className="alert-center-empty">No active alerts from current rule evaluation.</p>
+              ) : (
+                <ol className="alert-center-list">
+                  {alertSignals.map((signal) => {
+                    const suppressed = isAlertRuleSuppressed(
+                      alertRulePreferences,
+                      signal.ruleId,
+                      snapshot.generatedAt,
+                    );
+                    return (
+                      <li
+                        key={signal.dedupeKey}
+                        className={`alert-center-item ${signal.severity} ${
+                          suppressed ? "is-suppressed" : ""
+                        }`}
+                      >
+                        <div className="alert-center-item-main">
+                          <strong>{signal.title}</strong>
+                          <p>{signal.message}</p>
+                          <p className="alert-center-meta">
+                            Rule {ALERT_RULE_LABELS[signal.ruleId]} | runs {signal.runIds.length} | agents{" "}
+                            {signal.agentIds.length}
+                          </p>
+                        </div>
+                        <div className="alert-center-item-tags">
+                          <span className="alert-severity-tag">{signal.severity.toUpperCase()}</span>
+                          {suppressed ? <span className="alert-suppressed-tag">Suppressed</span> : null}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ol>
+              )}
+            </section>
+
+            <section className="alert-center-section">
+              <h3>Rule Controls</h3>
+              <ol className="alert-rule-list">
+                {ALERT_RULE_ORDER.map((ruleId) => {
+                  const preference = alertRulePreferences[ruleId];
+                  const isSnoozed = preference.snoozeUntil > snapshot.generatedAt;
+                  return (
+                    <li key={ruleId} className="alert-rule-item">
+                      <div className="alert-rule-main">
+                        <strong>{ALERT_RULE_LABELS[ruleId]}</strong>
+                        <p>
+                          {preference.muted
+                            ? "Muted"
+                            : isSnoozed
+                              ? `Snoozed until ${new Date(preference.snoozeUntil).toLocaleTimeString()}`
+                              : "Active"}
+                        </p>
+                      </div>
+                      <div className="alert-rule-actions">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            toggleAlertRuleMute(ruleId);
+                          }}
+                        >
+                          {preference.muted ? "Unmute" : "Mute"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            snoozeAlertRule(ruleId, 15 * 60_000);
+                          }}
+                        >
+                          Snooze 15m
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            snoozeAlertRule(ruleId, 60 * 60_000);
+                          }}
+                        >
+                          Snooze 1h
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            clearAlertRuleSuppression(ruleId);
+                          }}
+                          disabled={!preference.muted && !isSnoozed}
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ol>
+            </section>
+          </section>
+        </div>
+      ) : null}
 
       {isCommandPaletteOpen ? (
         <CommandPalette
@@ -1153,6 +1401,17 @@ function App() {
               })}
             </ol>
           </section>
+        </div>
+      ) : null}
+
+      {alertToastSignals.length > 0 ? (
+        <div className="alert-toast-stack" role="status" aria-live="polite">
+          {alertToastSignals.map((signal) => (
+            <article key={signal.dedupeKey} className={`alert-toast ${signal.severity}`}>
+              <strong>{signal.title}</strong>
+              <p>{signal.message}</p>
+            </article>
+          ))}
         </div>
       ) : null}
 
