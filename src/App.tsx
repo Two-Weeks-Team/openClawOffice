@@ -4,6 +4,7 @@ import { CommandPalette, type CommandPaletteEntry } from "./components/CommandPa
 import { EntityDetailPanel } from "./components/EntityDetailPanel";
 import { EventRail } from "./components/EventRail";
 import { OfficeStage } from "./components/OfficeStage";
+import { ThroughputDashboard } from "./components/ThroughputDashboard";
 import { useOfficeStream } from "./hooks/useOfficeStream";
 import {
   ALERT_RULE_LABELS,
@@ -1269,6 +1270,8 @@ function App() {
         <StatCard label="Errors" value={failed} accent="#ff8686" />
         <StatCard label="Events" value={snapshot.events.length} accent="#96b4ff" />
       </section>
+
+      <ThroughputDashboard snapshot={snapshot} />
 
       <section className="ops-toolbar">
         <label className="ops-field ops-search">
