@@ -14,7 +14,8 @@
     "readiness:gate": "pnpm readiness:rehearsal && node scripts/readiness-gate.mjs",
     "e2e:workflow": "vitest run server/workflow-e2e.test.ts",
     "e2e:smoke": "node scripts/e2e-smoke.mjs",
-    "ci:local": "pnpm lint && pnpm test && pnpm benchmark:local50 && pnpm build && pnpm e2e:smoke",
+    "ux:verify": "node scripts/ux-verify.mjs",
+    "ci:local": "pnpm lint && pnpm test && pnpm benchmark:local50 && pnpm build && pnpm e2e:smoke && pnpm ux:verify",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -31,6 +32,7 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
+    "playwright": "^1.58.2",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.48.0",
     "vite": "^7.3.1",
