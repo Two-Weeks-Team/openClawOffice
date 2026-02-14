@@ -59,6 +59,28 @@ describe("createLocal50Scenario", () => {
     expect(deltas.some((delta) => delta < 700)).toBe(true);
   });
 
+  it("supports all-ok pattern and seed zero deterministically", () => {
+    const first = createLocal50Scenario({
+      profile: "local10",
+      seed: 0,
+      pattern: {
+        errorRate: 0,
+        activeRate: 0,
+      },
+    });
+    const second = createLocal50Scenario({
+      profile: "local10",
+      seed: 0,
+      pattern: {
+        errorRate: 0,
+        activeRate: 0,
+      },
+    });
+
+    expect(first).toEqual(second);
+    expect(first.snapshot.runs.every((run) => run.status === "ok")).toBe(true);
+  });
+
   it("exposes standard local10/local25/local50 presets", () => {
     const profiles = Object.keys(SYNTHETIC_SCENARIO_PRESETS).sort();
     expect(profiles).toEqual(["local10", "local25", "local50"]);
@@ -68,5 +90,10 @@ describe("createLocal50Scenario", () => {
 
     expect(local25.snapshot.runs).toHaveLength(SYNTHETIC_SCENARIO_PRESETS.local25.runs);
     expect(local50.snapshot.runs).toHaveLength(SYNTHETIC_SCENARIO_PRESETS.local50.runs);
+  });
+
+  it("defaults to local50 profile when profile is omitted", () => {
+    const scenario = createLocal50Scenario({ seed: 13 });
+    expect(scenario.snapshot.runs).toHaveLength(SYNTHETIC_SCENARIO_PRESETS.local50.runs);
   });
 });

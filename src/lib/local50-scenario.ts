@@ -285,7 +285,12 @@ export function createLocal50Scenario(options: ScenarioOptions = {}): Local50Sce
           endedAt: run.endedAt,
           cleanupCompletedAt: run.cleanupCompletedAt,
           status: run.status,
-          outcome: run.status === "error" ? { status: "error" } : { status: "ok" },
+          outcome:
+            run.status === "active"
+              ? undefined
+              : run.status === "error"
+                ? { status: "error" }
+                : { status: "ok" },
         },
       ]),
     ),

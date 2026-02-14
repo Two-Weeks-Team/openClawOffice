@@ -30,6 +30,8 @@ const scenario = createLocal50Scenario({
 });
 ```
 
+If `profile` is omitted, it defaults to `local50`.
+
 ## Pattern Options
 
 - `errorRate`: share of runs emitted as `error`
@@ -38,6 +40,17 @@ const scenario = createLocal50Scenario({
 - `eventIntervalMs`: base event timestamp interval
 - `eventBurstEvery`: periodic burst cycle size
 - `eventBurstSize`: number of burst events inside each cycle
+
+Default values:
+
+| Option | Default |
+| --- | --- |
+| `errorRate` | `1 / 11` |
+| `activeRate` | `1 / 3` |
+| `runSpacingMs` | `9000` |
+| `eventIntervalMs` | `700` |
+| `eventBurstEvery` | `18` |
+| `eventBurstSize` | `5` |
 
 ## Determinism
 
