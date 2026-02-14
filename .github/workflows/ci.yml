@@ -32,5 +32,16 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Install Playwright browser
+        run: pnpm exec playwright install chromium
+
       - name: Run local quality gate
         run: pnpm ci:local
+
+      - name: Upload UX verify artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ux-verify-artifacts
+          path: output/ux-verify
+          if-no-files-found: ignore
