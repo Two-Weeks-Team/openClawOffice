@@ -12,12 +12,15 @@ type Props = {
   onOpenAlerts?: () => void;
 };
 
+const MAX_STATE_DIR_LENGTH = 34;
+const STATE_DIR_EDGE_LENGTH = 14;
+
 function shortStateDir(stateDir: string): string {
   const normalized = stateDir.trim();
-  if (normalized.length <= 34) {
+  if (normalized.length <= MAX_STATE_DIR_LENGTH) {
     return normalized;
   }
-  return `${normalized.slice(0, 14)}...${normalized.slice(-14)}`;
+  return `${normalized.slice(0, STATE_DIR_EDGE_LENGTH)}...${normalized.slice(-STATE_DIR_EDGE_LENGTH)}`;
 }
 
 export function GlobalStatusBar({
