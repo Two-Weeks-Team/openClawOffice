@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { buildBubbleLaneLayout, type BubbleLaneCandidate } from "../lib/bubble-lanes";
 import { buildPlacements, type PlacementMode } from "../lib/layout";
 import {
   compileRoomBlueprintLayers,
@@ -95,6 +96,9 @@ const ENTITY_Z_OFFSET = 320;
 
 const SPAWN_PULSE_WINDOW_MS = 12_000;
 const BUBBLE_VISIBLE_WINDOW_MS = 45_000;
+const BUBBLE_COLLAPSE_AFTER_MS = 20_000;
+const BUBBLE_PINNED_STORAGE_KEY = "openclawoffice.bubble-lane.pinned.v1";
+const BUBBLE_EXPANDED_STORAGE_KEY = "openclawoffice.bubble-lane.expanded.v1";
 const RUN_RECENT_WINDOW_MS = 10_000;
 const RUN_STALE_WINDOW_MS = 120_000;
 const START_ORBIT_WINDOW_MS = 12_000;
@@ -325,6 +329,50 @@ function statusFocusAccent(status: OfficeEntity["status"]): string {
   return "173, 231, 250";
 }
 
+function loadBubbleEntityIds(storageKey: string): string[] {
+  try {
+    const raw = window.localStorage.getItem(storageKey);
+    if (!raw) {
+      return [];
+    }
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed.filter((value): value is string => typeof value === "string");
+  } catch {
+    return [];
+  }
+}
+
+function compactBubbleLabel(value: string, max = 28): string {
+  const compact = value.replace(/\s+/g, " ").trim();
+  if (compact.length <= max) {
+    return compact;
+  }
+  return `${compact.slice(0, Math.max(1, max - 1)).trimEnd()}…`;
+}
+
+function bubbleThreadLabel(entity: OfficeEntity, linkedRun?: OfficeRun): string {
+  if (entity.kind === "subagent" && entity.runId) {
+    if (linkedRun?.task) {
+      return compactBubbleLabel(linkedRun.task);
+    }
+    return compactBubbleLabel(entity.runId);
+  }
+  return compactBubbleLabel(`agent:${entity.agentId}`);
+}
+
+function bubbleAgeLabel(ageMs: number): string {
+  if (ageMs < 60_000) {
+    return `${Math.max(1, Math.floor(ageMs / 1000))}s`;
+  }
+  if (ageMs < 3_600_000) {
+    return `${Math.floor(ageMs / 60_000)}m`;
+  }
+  return `${Math.floor(ageMs / 3_600_000)}h`;
+}
+
 export function OfficeStage({
   snapshot,
   selectedEntityId = null,
@@ -356,6 +404,12 @@ export function OfficeStage({
     panY: 0,
     followSelected: false,
   });
+  const [pinnedBubbleEntityIds, setPinnedBubbleEntityIds] = useState<string[]>(() =>
+    loadBubbleEntityIds(BUBBLE_PINNED_STORAGE_KEY),
+  );
+  const [expandedBubbleEntityIds, setExpandedBubbleEntityIds] = useState<string[]>(() =>
+    loadBubbleEntityIds(BUBBLE_EXPANDED_STORAGE_KEY),
+  );
   const previousRoomOptionsKeyRef = useRef("");
   const previousRoomAssignmentsKeyRef = useRef("");
   const previousBlueprintDiagnosticKeyRef = useRef("");
@@ -369,6 +423,14 @@ export function OfficeStage({
   } | null>(null);
   const touchPanGestureRef = useRef<TouchPanGesture | null>(null);
   const touchPinchGestureRef = useRef<TouchPinchGesture | null>(null);
+  const pinnedBubbleEntityIdSet = useMemo(
+    () => new Set(pinnedBubbleEntityIds),
+    [pinnedBubbleEntityIds],
+  );
+  const expandedBubbleEntityIdSet = useMemo(
+    () => new Set(expandedBubbleEntityIds),
+    [expandedBubbleEntityIds],
+  );
   const selectedEntityIdSet = useMemo(() => new Set(selectedEntityIds), [selectedEntityIds]);
   const pinnedEntityIdSet = useMemo(() => new Set(pinnedEntityIds), [pinnedEntityIds]);
   const watchedEntityIdSet = useMemo(() => new Set(watchedEntityIds), [watchedEntityIds]);
@@ -445,6 +507,28 @@ export function OfficeStage({
     }
     onFilterMatchCountChange(matchedEntityCount);
   }, [matchedEntityCount, onFilterMatchCountChange]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        BUBBLE_PINNED_STORAGE_KEY,
+        JSON.stringify(pinnedBubbleEntityIds),
+      );
+    } catch {
+      // Ignore localStorage persistence errors in restricted browser modes.
+    }
+  }, [pinnedBubbleEntityIds]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        BUBBLE_EXPANDED_STORAGE_KEY,
+        JSON.stringify(expandedBubbleEntityIds),
+      );
+    } catch {
+      // Ignore localStorage persistence errors in restricted browser modes.
+    }
+  }, [expandedBubbleEntityIds]);
 
   useEffect(() => {
     let cancelled = false;
@@ -609,6 +693,10 @@ export function OfficeStage({
   const runById = useMemo(() => {
     return indexRunsById(snapshot.runs);
   }, [snapshot.runs]);
+  const entityById = useMemo(
+    () => new Map(snapshot.entities.map((entity) => [entity.id, entity] as const)),
+    [snapshot.entities],
+  );
 
   const normalizedHighlightRunId =
     typeof highlightRunId === "string" && highlightRunId.trim().length > 0
@@ -723,6 +811,88 @@ export function OfficeStage({
     snapshot.runGraph.edges,
     runById,
   ]);
+  const bubbleLaneCandidates = useMemo<BubbleLaneCandidate[]>(() => {
+    const candidates: BubbleLaneCandidate[] = [];
+
+    for (const placement of sortedPlacements) {
+      const entity = placement.entity;
+      const matchesEntityFilter = !hasEntityFilter || filteredEntityIdSet.has(entity.id);
+      const matchesRoomFilter =
+        !normalizedRoomFilterId || placement.roomId === normalizedRoomFilterId;
+      const matchesOpsFilter = matchesEntityFilter && matchesRoomFilter;
+      const isSelected = selectedEntityIdSet.has(entity.id);
+      const isWatched = watchedEntityIdSet.has(entity.id);
+      if (hasOpsFilter && !focusMode && !matchesOpsFilter && !isSelected && !isWatched) {
+        continue;
+      }
+
+      const linkedRun =
+        entity.kind === "subagent" && entity.runId ? runById.get(entity.runId) : undefined;
+      const entityAgeMs =
+        typeof entity.lastUpdatedAt === "number"
+          ? Math.max(0, snapshot.generatedAt - entity.lastUpdatedAt)
+          : Number.POSITIVE_INFINITY;
+      const bubbleVisible =
+        Boolean(entity.bubble) &&
+        (entity.status === "active" ||
+          entity.status === "error" ||
+          entityAgeMs <= BUBBLE_VISIBLE_WINDOW_MS);
+
+      if (!bubbleVisible || !entity.bubble) {
+        continue;
+      }
+
+      const laneId =
+        entity.kind === "subagent" && entity.runId
+          ? `run:${entity.runId}`
+          : `agent:${entity.agentId}`;
+      const priority =
+        (isSelected ? 6 : 0) +
+        (isWatched ? 5 : 0) +
+        (pinnedEntityIdSet.has(entity.id) ? 4 : 0) +
+        (pinnedBubbleEntityIdSet.has(entity.id) ? 3 : 0) +
+        (entity.status === "error" ? 3 : entity.status === "active" ? 2 : 0);
+
+      candidates.push({
+        id: `bubble:${entity.id}`,
+        entityId: entity.id,
+        laneId,
+        laneLabel: bubbleThreadLabel(entity, linkedRun),
+        anchorX: placement.x,
+        text: entity.bubble,
+        ageMs: entityAgeMs,
+        priority,
+        isPinned: pinnedBubbleEntityIdSet.has(entity.id),
+        isExpanded: expandedBubbleEntityIdSet.has(entity.id),
+      });
+    }
+
+    return candidates;
+  }, [
+    expandedBubbleEntityIdSet,
+    filteredEntityIdSet,
+    focusMode,
+    hasEntityFilter,
+    hasOpsFilter,
+    normalizedRoomFilterId,
+    pinnedBubbleEntityIdSet,
+    pinnedEntityIdSet,
+    runById,
+    selectedEntityIdSet,
+    snapshot.generatedAt,
+    sortedPlacements,
+    watchedEntityIdSet,
+  ]);
+  const bubbleLaneLayout = useMemo(
+    () =>
+      buildBubbleLaneLayout(bubbleLaneCandidates, {
+        stageWidth: STAGE_WIDTH,
+        maxVisiblePerLane: 3,
+        maxRowsPerLane: 3,
+        collapseAfterMs: BUBBLE_COLLAPSE_AFTER_MS,
+      }),
+    [bubbleLaneCandidates],
+  );
   const hasTimelineHighlight = Boolean(normalizedHighlightRunId || normalizedHighlightAgentId);
   const selectedPlacement = selectedEntityId ? placementById.get(selectedEntityId) : undefined;
   const shouldFollowSelected = camera.followSelected && Boolean(selectedPlacement);
@@ -988,7 +1158,7 @@ export function OfficeStage({
             return;
           }
           const target = event.target as HTMLElement;
-          if (target.closest(".entity-token, .camera-controls, .camera-minimap")) {
+          if (target.closest(".entity-token, .camera-controls, .camera-minimap, .bubble-lane-card")) {
             return;
           }
           mousePanGestureRef.current = {
@@ -1176,6 +1346,92 @@ export function OfficeStage({
         ))}
       </svg>
 
+      <section className="bubble-lane-overlay" aria-label="Thread bubble lanes">
+        {bubbleLaneLayout.lanes.map((lane) => (
+          <div key={`lane:${lane.id}`} className="bubble-thread-lane" style={{ top: lane.y }}>
+            <span className="bubble-thread-label">
+              {lane.label}
+              {lane.hiddenCount > 0 ? ` (+${lane.hiddenCount})` : ""}
+            </span>
+          </div>
+        ))}
+
+        {bubbleLaneLayout.cards.map((card) => {
+          const entity = card.entityId ? entityById.get(card.entityId) : undefined;
+          const isSummary = card.isSummary;
+          return (
+            <article
+              key={card.id}
+              className={[
+                "bubble-lane-card",
+                isSummary ? "is-summary" : "",
+                card.isPinned ? "is-pinned" : "",
+                card.isExpanded ? "is-expanded" : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              style={{
+                left: card.x,
+                top: card.y,
+                width: card.width,
+              }}
+              role={isSummary ? undefined : "button"}
+              tabIndex={isSummary ? -1 : 0}
+              onClick={() => {
+                if (!isSummary && card.entityId) {
+                  onSelectEntity?.(card.entityId, "single");
+                }
+              }}
+              onKeyDown={(event) => {
+                if (isSummary || !card.entityId) {
+                  return;
+                }
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  onSelectEntity?.(card.entityId, "single");
+                }
+              }}
+            >
+              <header>
+                <strong>{entity?.label ?? card.laneLabel}</strong>
+                <span>{isSummary ? "summary" : bubbleAgeLabel(card.ageMs)}</span>
+              </header>
+              <p>{card.text}</p>
+              {!isSummary ? (
+                <div className="bubble-card-actions">
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setPinnedBubbleEntityIds((prev) =>
+                        prev.includes(card.entityId)
+                          ? prev.filter((entityId) => entityId !== card.entityId)
+                          : [...prev, card.entityId],
+                      );
+                    }}
+                  >
+                    {card.isPinned ? "Unpin" : "Pin"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setExpandedBubbleEntityIds((prev) =>
+                        prev.includes(card.entityId)
+                          ? prev.filter((entityId) => entityId !== card.entityId)
+                          : [...prev, card.entityId],
+                      );
+                    }}
+                  >
+                    {card.isExpanded ? "Collapse" : "Expand"}
+                  </button>
+                </div>
+              ) : null}
+            </article>
+          );
+        })}
+      </section>
+
       {rooms.map((room) => {
         const debug = layoutState.roomDebug.get(room.id);
         const overflowCount = (debug?.overflowIn ?? 0) + (debug?.overflowOut ?? 0);
@@ -1263,12 +1519,6 @@ export function OfficeStage({
           entity.kind === "subagent" &&
           entity.status === "ok" &&
           cleanupAgeMs <= CLEANUP_FADE_WINDOW_MS;
-        const bubbleVisible =
-          Boolean(entity.bubble) &&
-          (entity.status === "active" ||
-            entity.status === "error" ||
-            entityAgeMs <= BUBBLE_VISIBLE_WINDOW_MS);
-        const bubbleClass = spawnAgeMs <= SPAWN_PULSE_WINDOW_MS ? "is-fresh" : "is-calm";
         const isOccluded = occlusion
           ? placement.x >= occlusion.left &&
             placement.x <= occlusion.right &&
@@ -1342,7 +1592,6 @@ export function OfficeStage({
                   : entity.status}
               </span>
             </div>
-            {bubbleVisible ? <p className={`bubble ${bubbleClass}`}>{entity.bubble}</p> : null}
           </article>
         );
       })}
