@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { buildPlacements } from "../lib/layout";
 import {
   buildTimelineLanes,
   buildTimelineIndex,
@@ -10,7 +9,7 @@ import {
   type TimelineLaneMode,
   type TimelineStatusFilter,
 } from "../lib/timeline";
-import type { OfficeEntity, OfficeEvent, OfficeRunGraph } from "../types/office";
+import type { OfficeEvent, OfficeRunGraph } from "../types/office";
 
 type LaneContext = {
   mode: TimelineLaneMode;
@@ -19,7 +18,7 @@ type LaneContext = {
 };
 
 type Props = {
-  entities: OfficeEntity[];
+  roomByAgentId: Map<string, string>;
   events: OfficeEvent[];
   runGraph: OfficeRunGraph;
   now: number;
@@ -71,7 +70,7 @@ function laneHighlightAgentId(lane: TimelineLane | null): string | null {
 }
 
 export function EventRail({
-  entities,
+  roomByAgentId,
   events,
   runGraph,
   now,
@@ -89,19 +88,6 @@ export function EventRail({
 
   const index = useMemo(() => buildTimelineIndex(events, runGraph), [events, runGraph]);
   const filteredDesc = useMemo(() => filterTimelineEvents(index, filters), [index, filters]);
-  const roomByAgentId = useMemo(() => {
-    const roomMap = new Map<string, string>();
-    const layoutState = buildPlacements({
-      entities,
-      generatedAt: now,
-    });
-    for (const placement of layoutState.placements) {
-      if (!roomMap.has(placement.entity.agentId)) {
-        roomMap.set(placement.entity.agentId, placement.roomId);
-      }
-    }
-    return roomMap;
-  }, [entities, now]);
   const lanes = useMemo(
     () =>
       buildTimelineLanes({

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import "./App.css";
 import { EntityDetailPanel } from "./components/EntityDetailPanel";
 import { EventRail } from "./components/EventRail";
@@ -39,6 +39,9 @@ function App() {
   const { snapshot, connected, liveSource, error } = useOfficeStream();
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
   const [activeEventId, setActiveEventId] = useState<string | null>(null);
+  const [timelineRoomByAgentId, setTimelineRoomByAgentId] = useState<Map<string, string>>(
+    () => new Map(),
+  );
   const [timelineLaneHighlightAgentId, setTimelineLaneHighlightAgentId] = useState<string | null>(
     null,
   );
@@ -149,6 +152,14 @@ function App() {
       window.clearTimeout(timer);
     };
   }, [toast]);
+
+  const handleLaneContextChange = useCallback((next: { highlightAgentId: string | null }) => {
+    setTimelineLaneHighlightAgentId(next.highlightAgentId);
+  }, []);
+
+  const handleRoomAssignmentsChange = useCallback((next: Map<string, string>) => {
+    setTimelineRoomByAgentId(next);
+  }, []);
 
   if (!snapshot) {
     return (
@@ -386,6 +397,7 @@ function App() {
           roomFilterId={opsFilters.roomId}
           focusMode={opsFilters.focusMode}
           onRoomOptionsChange={setRoomOptions}
+          onRoomAssignmentsChange={handleRoomAssignmentsChange}
           onFilterMatchCountChange={setMatchCount}
           onSelectEntity={(entityId) => {
             setSelectedEntityId((prev) => (prev === entityId ? null : entityId));
@@ -393,7 +405,7 @@ function App() {
         />
         <div className="workspace-side">
           <EventRail
-            entities={snapshot.entities}
+            roomByAgentId={timelineRoomByAgentId}
             events={snapshot.events}
             runGraph={snapshot.runGraph}
             now={snapshot.generatedAt}
@@ -401,9 +413,7 @@ function App() {
             onFiltersChange={setTimelineFilters}
             activeEventId={activeEventId}
             onActiveEventIdChange={setActiveEventId}
-            onLaneContextChange={(next) => {
-              setTimelineLaneHighlightAgentId(next.highlightAgentId);
-            }}
+            onLaneContextChange={handleLaneContextChange}
           />
           <EntityDetailPanel
             key={selectedEntityId ?? "detail-empty"}

@@ -19,6 +19,7 @@ type Props = {
   roomFilterId?: string;
   focusMode?: boolean;
   onRoomOptionsChange?: (roomIds: string[]) => void;
+  onRoomAssignmentsChange?: (roomByAgentId: Map<string, string>) => void;
   onFilterMatchCountChange?: (count: number) => void;
   onSelectEntity?: (entityId: string) => void;
 };
@@ -236,6 +237,7 @@ export function OfficeStage({
   roomFilterId = "all",
   focusMode = false,
   onRoomOptionsChange,
+  onRoomAssignmentsChange,
   onFilterMatchCountChange,
   onSelectEntity,
 }: Props) {
@@ -243,6 +245,7 @@ export function OfficeStage({
   const [zoneConfig, setZoneConfig] = useState<unknown>(null);
   const [roomBlueprint, setRoomBlueprint] = useState<unknown>(null);
   const previousRoomOptionsKeyRef = useRef("");
+  const previousRoomAssignmentsKeyRef = useRef("");
   const previousBlueprintDiagnosticKeyRef = useRef("");
 
   const layoutState = useMemo(
@@ -275,6 +278,26 @@ export function OfficeStage({
     previousRoomOptionsKeyRef.current = roomOptionsKey;
     onRoomOptionsChange(roomIds);
   }, [onRoomOptionsChange, rooms]);
+
+  useEffect(() => {
+    if (!onRoomAssignmentsChange) {
+      return;
+    }
+    const roomByAgentId = new Map<string, string>();
+    for (const placement of placements) {
+      if (!roomByAgentId.has(placement.entity.agentId)) {
+        roomByAgentId.set(placement.entity.agentId, placement.roomId);
+      }
+    }
+    const entries = [...roomByAgentId.entries()];
+    entries.sort((left, right) => left[0].localeCompare(right[0]));
+    const roomAssignmentsKey = entries.map(([agentId, roomId]) => `${agentId}:${roomId}`).join("|");
+    if (roomAssignmentsKey === previousRoomAssignmentsKeyRef.current) {
+      return;
+    }
+    previousRoomAssignmentsKeyRef.current = roomAssignmentsKey;
+    onRoomAssignmentsChange(new Map(entries));
+  }, [onRoomAssignmentsChange, placements]);
 
   const matchedEntityCount = useMemo(() => {
     let count = 0;

@@ -23,7 +23,7 @@ export type TimelineLane = {
   latestAt: number;
 };
 
-type BuildTimelineLanesParams = {
+export type BuildTimelineLanesParams = {
   events: OfficeEvent[];
   mode: TimelineLaneMode;
   resolveRoomId?: (agentId: string, event: OfficeEvent) => string | null | undefined;

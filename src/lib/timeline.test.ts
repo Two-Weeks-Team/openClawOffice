@@ -140,12 +140,13 @@ describe("timeline helpers", () => {
 
 describe("timeline lanes", () => {
   it("groups by room/agent/subagent with stable summary values", () => {
+    const baseAt = 1_700_000_000_000;
     const laneEvents: OfficeEvent[] = [
       {
         id: "a:spawn",
         type: "spawn",
         runId: "run-a",
-        at: 100,
+        at: baseAt,
         agentId: "child-a",
         parentAgentId: "parent-a",
         text: "spawn a",
@@ -154,7 +155,7 @@ describe("timeline lanes", () => {
         id: "a:start",
         type: "start",
         runId: "run-a",
-        at: 120,
+        at: baseAt + 60_000,
         agentId: "child-a",
         parentAgentId: "parent-a",
         text: "start a",
@@ -163,7 +164,7 @@ describe("timeline lanes", () => {
         id: "b:spawn",
         type: "spawn",
         runId: "run-b",
-        at: 130,
+        at: baseAt + 120_000,
         agentId: "child-b",
         parentAgentId: "parent-b",
         text: "spawn b",
@@ -172,7 +173,7 @@ describe("timeline lanes", () => {
         id: "b:error",
         type: "error",
         runId: "run-b",
-        at: 150,
+        at: baseAt + 180_000,
         agentId: "child-b",
         parentAgentId: "parent-b",
         text: "error b",
@@ -181,7 +182,7 @@ describe("timeline lanes", () => {
         id: "c:spawn",
         type: "spawn",
         runId: "run-c",
-        at: 170,
+        at: baseAt + 240_000,
         agentId: "child-c",
         parentAgentId: "parent-a",
         text: "spawn c",
@@ -203,7 +204,7 @@ describe("timeline lanes", () => {
       ["lounge", 1],
     ]);
     expect(roomLanes[0]?.runCount).toBe(2);
-    expect(roomLanes[0]?.densityPerMinute).toBeGreaterThan(0);
+    expect(roomLanes[0]?.densityPerMinute).toBeCloseTo(1.33, 2);
 
     const agentLanes = buildTimelineLanes({
       events: laneEvents,
