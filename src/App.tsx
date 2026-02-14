@@ -3,6 +3,7 @@ import "./App.css";
 import { CommandPalette, type CommandPaletteEntry } from "./components/CommandPalette";
 import { EntityDetailPanel } from "./components/EntityDetailPanel";
 import { EventRail } from "./components/EventRail";
+import { GlobalStatusBar } from "./components/GlobalStatusBar";
 import { OfficeStage } from "./components/OfficeStage";
 import { SummaryExporter } from "./components/SummaryExporter";
 import { ThroughputDashboard } from "./components/ThroughputDashboard";
@@ -176,15 +177,6 @@ function loadAlertRulePreferences(): AlertRulePreferences {
   } catch {
     return DEFAULT_ALERT_RULE_PREFERENCES;
   }
-}
-
-function StatCard(props: { label: string; value: number | string; accent?: string }) {
-  return (
-    <article className="stat-card" style={props.accent ? { borderColor: props.accent } : undefined}>
-      <span>{props.label}</span>
-      <strong>{props.value}</strong>
-    </article>
-  );
 }
 
 const WORKSPACE_PANEL_PLACEMENT_CLASS: Record<WorkspacePanelPlacement, string> = {
@@ -1410,22 +1402,24 @@ function App() {
 
   return (
     <main className="app-shell">
+      <GlobalStatusBar
+        connected={connected}
+        liveSource={liveSource}
+        agents={agents.length}
+        subagents={subagents.length}
+        running={running}
+        errors={failed}
+        events={snapshot.events.length}
+        alertCount={visibleAlertSignals.length}
+        updatedAt={snapshot.generatedAt}
+        stateDir={snapshot.source.stateDir}
+        onOpenAlerts={toggleAlertCenter}
+      />
+
       <section className="hero-bar">
         <div>
           <h1>openClawOffice</h1>
           <p>Zone-based visual HQ for OpenClaw agents and subagents.</p>
-        </div>
-
-        <div className="status-pill-row">
-          <span className={`status-pill ${connected ? "online" : "offline"}`}>
-            {connected ? "Live Stream" : "Polling"}
-          </span>
-          <span className={`status-pill ${liveSource ? "online" : "demo"}`}>
-            {liveSource ? "Live Runtime" : "Demo Snapshot"}
-          </span>
-          <span className={`status-pill alert-pill ${hasActiveAlerts ? "active" : ""}`}>
-            Alerts {visibleAlertSignals.length}
-          </span>
         </div>
       </section>
 
@@ -1435,14 +1429,6 @@ function App() {
           <p>{recoveryMessage}</p>
         </section>
       ) : null}
-
-      <section className="stats-bar">
-        <StatCard label="Agents" value={agents.length} accent="#81f0ff" />
-        <StatCard label="Subagents" value={subagents.length} accent="#8cffc0" />
-        <StatCard label="Running" value={running} accent="#ffd081" />
-        <StatCard label="Errors" value={failed} accent="#ff8686" />
-        <StatCard label="Events" value={snapshot.events.length} accent="#96b4ff" />
-      </section>
 
       <ThroughputDashboard snapshot={snapshot} />
 
@@ -1781,11 +1767,12 @@ function App() {
       ) : null}
 
       <footer className="footer-bar">
-        <span>State Dir: {snapshot.source.stateDir}</span>
         <span>
-          Updated: {new Date(snapshot.generatedAt).toLocaleTimeString()} | timeline
-          {" "}
-          {activeTimelineIndex >= 0 ? activeTimelineIndex + 1 : 0}/{timelinePlaybackEvents.length}
+          timeline {activeTimelineIndex >= 0 ? activeTimelineIndex + 1 : 0}/
+          {timelinePlaybackEvents.length}
+        </span>
+        <span>
+          selected {selectedCount} | match {(matchCount ?? filteredEntityIds.length).toString()}
         </span>
       </footer>
 

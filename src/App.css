@@ -44,6 +44,109 @@ body {
   padding: 10px;
 }
 
+.global-status-bar {
+  position: sticky;
+  top: 10px;
+  z-index: 1210;
+  border: 1px solid rgba(147, 228, 255, 0.4);
+  border-radius: 14px;
+  background: linear-gradient(150deg, rgba(10, 35, 51, 0.94), rgba(8, 46, 64, 0.92));
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.28);
+  padding: 10px 12px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  backdrop-filter: blur(4px);
+}
+
+.global-status-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.global-status-channel {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.global-status-chip {
+  border: 1px solid rgba(175, 235, 255, 0.35);
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  background: rgba(10, 39, 55, 0.9);
+}
+
+.global-status-chip.online {
+  border-color: rgba(138, 255, 203, 0.62);
+  color: #96ffd8;
+}
+
+.global-status-chip.offline {
+  border-color: rgba(255, 172, 172, 0.58);
+  color: #ffc3c3;
+}
+
+.global-status-chip.demo {
+  border-color: rgba(255, 213, 139, 0.58);
+  color: #ffdba8;
+}
+
+.global-status-meta {
+  display: grid;
+  gap: 2px;
+  color: #9fd6e4;
+  font-size: 0.69rem;
+  justify-items: end;
+}
+
+.global-status-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.global-status-metric,
+.global-status-alert-button {
+  border: 1px solid rgba(141, 223, 255, 0.32);
+  border-radius: 999px;
+  background: rgba(9, 37, 52, 0.82);
+  color: #d7f4ff;
+  font-size: 0.71rem;
+  padding: 6px 10px;
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.global-status-metric strong,
+.global-status-alert-button strong {
+  color: #f3feff;
+}
+
+.global-status-alert-button {
+  cursor: pointer;
+}
+
+.global-status-alert-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.global-status-alert-button.has-alerts {
+  border-color: rgba(255, 162, 162, 0.62);
+  color: #ffd2d2;
+}
+
 .hero-bar {
   display: flex;
   justify-content: space-between;
@@ -3612,6 +3715,14 @@ body {
 }
 
 @media (max-width: 1180px) {
+  .global-status-bar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .global-status-metrics {
+    justify-content: flex-start;
+  }
+
   .office-stage-wrap {
     --tile-scale: 1.35;
   }
@@ -3703,6 +3814,33 @@ body {
 }
 
 @media (max-width: 760px) {
+  .global-status-bar {
+    top: 6px;
+    padding: 8px;
+  }
+
+  .global-status-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .global-status-meta {
+    justify-items: start;
+  }
+
+  .global-status-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .global-status-metric,
+  .global-status-alert-button {
+    border-radius: 10px;
+    justify-content: space-between;
+  }
+
   .office-stage-wrap {
     --tile-scale: 1.16;
     --tile-opacity: 0.82;
