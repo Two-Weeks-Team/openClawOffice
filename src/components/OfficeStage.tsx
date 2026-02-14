@@ -1675,39 +1675,40 @@ export function OfficeStage({
         );
       })}
 
-      {clusterState.collapsedClusters.map((cluster) => (
-        <article
-          key={cluster.id}
-          className={`entity-cluster status-${cluster.statusBucket}`}
-          style={{
-            left: cluster.x,
-            top: cluster.y,
-            zIndex: ENTITY_Z_OFFSET + Math.round(cluster.y) + 540,
-          }}
-          role="button"
-          tabIndex={0}
-          aria-label={`Expand cluster with ${cluster.memberCount} entities`}
-          onClick={() => {
-            setExpandedClusterIds((prev) =>
-              prev.includes(cluster.id) ? prev : [...prev, cluster.id],
-            );
-          }}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" || event.key === " ") {
-              event.preventDefault();
-              setExpandedClusterIds((prev) =>
-                prev.includes(cluster.id) ? prev : [...prev, cluster.id],
-              );
-            }
-          }}
-        >
-          <div className="cluster-badge">{cluster.memberCount}</div>
-          <div className="cluster-meta">
-            <strong>{cluster.label}</strong>
-            <span>{cluster.summary}</span>
-          </div>
-        </article>
-      ))}
+      {clusterState.collapsedClusters.map((cluster) => {
+        const expandCluster = () => {
+          setExpandedClusterIds((prev) =>
+            prev.includes(cluster.id) ? prev : [...prev, cluster.id],
+          );
+        };
+        return (
+          <article
+            key={cluster.id}
+            className={`entity-cluster status-${cluster.statusBucket}`}
+            style={{
+              left: cluster.x,
+              top: cluster.y,
+              zIndex: ENTITY_Z_OFFSET + Math.round(cluster.y) + 540,
+            }}
+            role="button"
+            tabIndex={0}
+            aria-label={`Expand cluster with ${cluster.memberCount} entities`}
+            onClick={expandCluster}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                expandCluster();
+              }
+            }}
+          >
+            <div className="cluster-badge">{cluster.memberCount}</div>
+            <div className="cluster-meta">
+              <strong>{cluster.label}</strong>
+              <span>{cluster.summary}</span>
+            </div>
+          </article>
+        );
+      })}
 
       {entityRenderModels.map((model) => (
         <EntityTokenView key={model.id} model={model} onSelectEntity={onSelectEntity} />

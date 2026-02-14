@@ -102,7 +102,7 @@ export function buildEntityClusters(
       continue;
     }
     const [roomId, statusBucketRaw, relationKey] = groupKey.split("|");
-    const statusBucket = (statusBucketRaw as ClusterStatusBucket) ?? "normal";
+    const statusBucket = statusBucketRaw as ClusterStatusBucket;
     const clusterId = `cluster:${groupKey}`;
     const memberEntityIds = group.map((item) => item.entity.id);
     const centerX = group.reduce((sum, item) => sum + item.x, 0) / group.length;
@@ -110,15 +110,15 @@ export function buildEntityClusters(
 
     clusters.push({
       id: clusterId,
-      roomId: roomId ?? "unknown",
+      roomId,
       statusBucket,
-      relationKey: relationKey ?? "agent:unknown",
+      relationKey,
       memberEntityIds,
       memberCount: group.length,
       x: Math.round(centerX),
       y: Math.round(centerY),
       label: clusterLabel(statusBucket),
-      summary: `${group.length} entities - ${relationSummary(relationKey ?? "agent:unknown")}`,
+      summary: `${group.length} entities - ${relationSummary(relationKey)}`,
     });
     for (const entityId of memberEntityIds) {
       memberToClusterId.set(entityId, clusterId);
