@@ -140,8 +140,10 @@ pnpm ci:local
 - `benchmark:local50` smoke
 - production build
 - API + SSE e2e smoke (`scripts/e2e-smoke.mjs`)
-- workflow scenario suite command: `pnpm e2e:workflow` (`docs/e2e-workflow.md`)
 - quality gate reference: `docs/quality-gate.md`
+
+Additional workflow suite command:
+- `pnpm e2e:workflow` (`docs/e2e-workflow.md`)
 
 ## Local50 Benchmark
 

@@ -22,6 +22,7 @@ function makeScenario(seed: number, options?: Parameters<typeof createLocal50Sce
 }
 
 function appendEvents(snapshot: OfficeSnapshot, events: OfficeEvent[]): OfficeSnapshot {
+  // Reconnect tests only depend on lifecycle queue ordering; runGraph is unchanged on purpose.
   const latestAt = events.reduce((max, event) => Math.max(max, event.at), snapshot.generatedAt);
   return {
     ...snapshot,
