@@ -512,13 +512,14 @@ export function buildDetailPanelModelCached(
   snapshot: OfficeSnapshot,
   selectedEntityId: string | null,
 ): DetailPanelModel {
+  const normalizedSelection = selectedEntityId?.trim() || null;
   const cache = getDetailPanelModelCache(snapshot);
-  const cacheKey = cachedKeyForEntityId(selectedEntityId);
+  const cacheKey = cachedKeyForEntityId(normalizedSelection);
   const cached = cache.get(cacheKey);
   if (cached) {
     return cached;
   }
-  const model = buildDetailPanelModel(snapshot, selectedEntityId);
+  const model = buildDetailPanelModel(snapshot, normalizedSelection);
   cache.set(cacheKey, model);
   return model;
 }
