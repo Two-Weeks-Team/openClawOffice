@@ -1,3 +1,5 @@
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { buildEntitySearchIndex, searchEntityIds } from "../src/lib/entity-search";
 import { buildPlacements } from "../src/lib/layout";
@@ -13,6 +15,21 @@ type Metric = {
   averageMs: number;
   p95Ms: number;
   maxMs: number;
+};
+
+type BudgetCheck = {
+  metric: string;
+  budget: number;
+  actual: number;
+  unit: "ms" | "MB";
+  pass: boolean;
+};
+
+type Local50BenchmarkReport = {
+  generatedAt: string;
+  scenario: typeof LOCAL50_SCENARIO;
+  metrics: Metric[];
+  checks: BudgetCheck[];
 };
 
 function heapUsedMb(): number {
@@ -70,6 +87,56 @@ function runMetric(params: {
     p95Ms: percentile(samples, 0.95),
     maxMs: Math.max(...samples),
   };
+}
+
+function formatBudgetValue(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(2);
+}
+
+function toMarkdownReport(report: Local50BenchmarkReport): string {
+  const lines: string[] = [
+    `### Local50 Benchmark Report - ${report.generatedAt}`,
+    "",
+    "| Metric | Budget | Actual | Status |",
+    "| --- | --- | --- | --- |",
+  ];
+
+  for (const check of report.checks) {
+    lines.push(
+      `| ${check.metric} | <= ${formatBudgetValue(check.budget)}${check.unit} | ${formatBudgetValue(check.actual)}${check.unit} | ${check.pass ? "PASS" : "FAIL"} |`,
+    );
+  }
+
+  lines.push("", "| Sample | avg(ms) | p95(ms) | max(ms) |", "| --- | --- | --- | --- |");
+  for (const metric of report.metrics) {
+    lines.push(
+      `| ${metric.name} | ${metric.averageMs.toFixed(3)} | ${metric.p95Ms.toFixed(3)} | ${metric.maxMs.toFixed(3)} |`,
+    );
+  }
+
+  return `${lines.join("\n")}\n`;
+}
+
+function writeBenchmarkReport(report: Local50BenchmarkReport): void {
+  const reportDir = process.env.LOCAL50_REPORT_DIR;
+  if (!reportDir) {
+    return;
+  }
+
+  const stamp = report.generatedAt.replace(/[:.]/g, "-");
+  const json = JSON.stringify(report, null, 2);
+  const markdown = toMarkdownReport(report);
+  const latestJsonPath = join(reportDir, "local50-latest.json");
+  const latestMdPath = join(reportDir, "local50-latest.md");
+
+  mkdirSync(reportDir, { recursive: true });
+  writeFileSync(join(reportDir, `local50-${stamp}.json`), json);
+  writeFileSync(join(reportDir, `local50-${stamp}.md`), markdown);
+  writeFileSync(latestJsonPath, json);
+  writeFileSync(latestMdPath, markdown);
+
+  console.log(`local50 report json: ${latestJsonPath}`);
+  console.log(`local50 report md: ${latestMdPath}`);
 }
 
 describe("local50 benchmark smoke", () => {
@@ -173,14 +240,79 @@ describe("local50 benchmark smoke", () => {
     const memoryFootprintMb = heapUsedMb();
     console.log("local50 heapUsedMB", memoryFootprintMb.toFixed(2));
 
-    expect(parseSessionsMetric.p95Ms).toBeLessThanOrEqual(LOCAL50_PIPELINE_BUDGET.parseSessionsP95Ms);
-    expect(parseRunsMetric.p95Ms).toBeLessThanOrEqual(LOCAL50_PIPELINE_BUDGET.parseRunsP95Ms);
-    expect(layoutMetric.p95Ms).toBeLessThanOrEqual(LOCAL50_PIPELINE_BUDGET.layoutP95Ms);
-    expect(timelineMetric.p95Ms).toBeLessThanOrEqual(LOCAL50_PIPELINE_BUDGET.timelineIndexP95Ms);
-    expect(searchMetric.p95Ms).toBeLessThanOrEqual(LOCAL50_PIPELINE_BUDGET.entitySearchP95Ms);
-    expect(streamMergeMetric.p95Ms).toBeLessThanOrEqual(
-      LOCAL50_PIPELINE_BUDGET.streamMergeBatchP95Ms,
-    );
-    expect(memoryFootprintMb).toBeLessThanOrEqual(LOCAL50_UX_BUDGET.memoryFootprintMb);
+    const checks: BudgetCheck[] = [
+      {
+        metric: "parseSessions p95",
+        budget: LOCAL50_PIPELINE_BUDGET.parseSessionsP95Ms,
+        actual: parseSessionsMetric.p95Ms,
+        unit: "ms",
+        pass: parseSessionsMetric.p95Ms <= LOCAL50_PIPELINE_BUDGET.parseSessionsP95Ms,
+      },
+      {
+        metric: "parseRuns p95",
+        budget: LOCAL50_PIPELINE_BUDGET.parseRunsP95Ms,
+        actual: parseRunsMetric.p95Ms,
+        unit: "ms",
+        pass: parseRunsMetric.p95Ms <= LOCAL50_PIPELINE_BUDGET.parseRunsP95Ms,
+      },
+      {
+        metric: "buildPlacements p95",
+        budget: LOCAL50_PIPELINE_BUDGET.layoutP95Ms,
+        actual: layoutMetric.p95Ms,
+        unit: "ms",
+        pass: layoutMetric.p95Ms <= LOCAL50_PIPELINE_BUDGET.layoutP95Ms,
+      },
+      {
+        metric: "buildTimelineIndex p95",
+        budget: LOCAL50_PIPELINE_BUDGET.timelineIndexP95Ms,
+        actual: timelineMetric.p95Ms,
+        unit: "ms",
+        pass: timelineMetric.p95Ms <= LOCAL50_PIPELINE_BUDGET.timelineIndexP95Ms,
+      },
+      {
+        metric: "searchEntityIds p95",
+        budget: LOCAL50_PIPELINE_BUDGET.entitySearchP95Ms,
+        actual: searchMetric.p95Ms,
+        unit: "ms",
+        pass: searchMetric.p95Ms <= LOCAL50_PIPELINE_BUDGET.entitySearchP95Ms,
+      },
+      {
+        metric: "streamMergeBatch p95",
+        budget: LOCAL50_PIPELINE_BUDGET.streamMergeBatchP95Ms,
+        actual: streamMergeMetric.p95Ms,
+        unit: "ms",
+        pass: streamMergeMetric.p95Ms <= LOCAL50_PIPELINE_BUDGET.streamMergeBatchP95Ms,
+      },
+      {
+        metric: "heapUsed footprint",
+        budget: LOCAL50_UX_BUDGET.memoryFootprintMb,
+        actual: memoryFootprintMb,
+        unit: "MB",
+        pass: memoryFootprintMb <= LOCAL50_UX_BUDGET.memoryFootprintMb,
+      },
+    ];
+
+    const report: Local50BenchmarkReport = {
+      generatedAt: new Date().toISOString(),
+      scenario: LOCAL50_SCENARIO,
+      metrics: [
+        parseSessionsMetric,
+        parseRunsMetric,
+        layoutMetric,
+        timelineMetric,
+        searchMetric,
+        streamMergeMetric,
+        streamLegacyMetric,
+      ],
+      checks,
+    };
+    writeBenchmarkReport(report);
+
+    for (const check of checks) {
+      expect(
+        check.pass,
+        `${check.metric} exceeded budget (${formatBudgetValue(check.actual)}${check.unit} > ${formatBudgetValue(check.budget)}${check.unit})`,
+      ).toBe(true);
+    }
   });
 });
