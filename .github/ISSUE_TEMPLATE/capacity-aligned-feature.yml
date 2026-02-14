@@ -1,0 +1,55 @@
+name: Capacity-aligned feature
+description: Use this template for features that must align with the local 50-agent baseline.
+title: "[Feature] "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Baseline reference: `docs/capacity-baseline.md`
+  - type: dropdown
+    id: target_profile
+    attributes:
+      label: Target capacity profile
+      options:
+        - local10
+        - local25
+        - local50
+    validations:
+      required: true
+  - type: textarea
+    id: objective
+    attributes:
+      label: Goal
+      description: Describe what user/ops problem this issue solves.
+    validations:
+      required: true
+  - type: textarea
+    id: baseline_impact
+    attributes:
+      label: Baseline metrics impact
+      description: Which metrics in docs/capacity-baseline.md may change?
+      placeholder: "layout p95, stream merge p95, heapUsed MB ..."
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation plan
+      description: Include commands and expected pass criteria.
+      value: |
+        - [ ] pnpm benchmark:local50
+        - [ ] pnpm ci:local
+        - [ ] Manual probe (FPS / update latency) if UI behavior changes
+    validations:
+      required: true
+  - type: checkboxes
+    id: done
+    attributes:
+      label: Definition of Done
+      options:
+        - label: This issue explicitly references docs/capacity-baseline.md
+          required: true
+        - label: Capacity metrics are collected and attached in the PR
+          required: true
