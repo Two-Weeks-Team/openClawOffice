@@ -42,10 +42,15 @@ export function GlobalStatusBar({
   ];
 
   return (
-    <section className="global-status-bar" role="status" aria-live="polite">
+    <section className="global-status-bar" role="region" aria-label="Global status bar">
       <div className="global-status-head">
         <div className="global-status-channel">
-          <span className={`global-status-chip ${connected ? "online" : "offline"}`}>
+          <span
+            className={`global-status-chip ${connected ? "online" : "offline"}`}
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
             {connected ? "Live Stream" : "Polling"}
           </span>
           <span className={`global-status-chip ${liveSource ? "online" : "demo"}`}>
@@ -68,6 +73,7 @@ export function GlobalStatusBar({
           type="button"
           className={`global-status-alert-button ${alertCount > 0 ? "has-alerts" : ""}`}
           onClick={onOpenAlerts}
+          disabled={!onOpenAlerts}
         >
           Alerts <strong>{alertCount}</strong>
         </button>
