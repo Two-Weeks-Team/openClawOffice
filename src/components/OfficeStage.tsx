@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { buildBubbleLaneLayout, type BubbleLaneCandidate } from "../lib/bubble-lanes";
 import { buildPlacements, type PlacementMode } from "../lib/layout";
 import {
@@ -8,6 +8,10 @@ import {
 } from "../lib/room-blueprint";
 import { indexRunsById } from "../lib/run-graph";
 import { applySemanticRoomMappings, buildSemanticAssetRegistry } from "../lib/semantic-room-mapping";
+import {
+  buildStageEntityRenderModels,
+  type StageEntityRenderModel,
+} from "../lib/stage-render-batch";
 import type { OfficeEntity, OfficeRun, OfficeSnapshot } from "../types/office";
 
 type Props = {
@@ -139,30 +143,6 @@ type TouchPoint = {
   clientY: number;
 };
 
-function hashString(input: string): number {
-  let hash = 0;
-  for (let i = 0; i < input.length; i += 1) {
-    hash = (hash * 33 + input.charCodeAt(i)) >>> 0;
-  }
-  return hash;
-}
-
-function statusClass(entity: OfficeEntity) {
-  if (entity.status === "active") {
-    return "is-active";
-  }
-  if (entity.status === "idle") {
-    return "is-idle";
-  }
-  if (entity.status === "error") {
-    return "is-error";
-  }
-  if (entity.status === "ok") {
-    return "is-ok";
-  }
-  return "is-offline";
-}
-
 function runLineClass(run: OfficeRun) {
   if (run.status === "error") {
     return "run-error";
@@ -171,23 +151,6 @@ function runLineClass(run: OfficeRun) {
     return "run-ok";
   }
   return "run-active";
-}
-
-function spriteStyle(entityId: string) {
-  const framesPerRow = 54;
-  const frameSize = 16;
-  const spacing = 1;
-  const maxRows = 12;
-  const totalFrames = framesPerRow * maxRows;
-  const frame = hashString(entityId) % totalFrames;
-  const col = frame % framesPerRow;
-  const row = Math.floor(frame / framesPerRow);
-  const stride = frameSize + spacing;
-
-  return {
-    backgroundImage: 'url("/assets/kenney/characters/characters_spritesheet.png")',
-    backgroundPosition: `-${col * stride}px -${row * stride}px`,
-  };
 }
 
 function toFiniteNumber(value: unknown): number | undefined {
@@ -372,6 +335,43 @@ function bubbleAgeLabel(ageMs: number): string {
   }
   return `${Math.floor(ageMs / 3_600_000)}h`;
 }
+
+type EntityTokenViewProps = {
+  model: StageEntityRenderModel;
+  onSelectEntity?: (entityId: string, mode?: "single" | "toggle") => void;
+};
+
+const EntityTokenView = memo(function EntityTokenView({ model, onSelectEntity }: EntityTokenViewProps) {
+  return (
+    <article
+      className={model.className}
+      style={model.style}
+      role="button"
+      tabIndex={0}
+      aria-label={`Open detail panel for ${model.label}`}
+      aria-pressed={model.isSelected}
+      onClick={(event) => {
+        const multiToggle = event.metaKey || event.ctrlKey;
+        onSelectEntity?.(model.id, multiToggle ? "toggle" : "single");
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSelectEntity?.(model.id, "single");
+        }
+      }}
+    >
+      <div className="sprite-shell">
+        <div className="sprite" style={model.spriteStyle} />
+        <div className="sprite-fallback">{model.kind === "agent" ? "A" : "S"}</div>
+      </div>
+      <div className="token-meta">
+        <strong>{model.label}</strong>
+        <span>{model.statusLabel}</span>
+      </div>
+    </article>
+  );
+});
 
 export function OfficeStage({
   snapshot,
@@ -894,6 +894,51 @@ export function OfficeStage({
     [bubbleLaneCandidates],
   );
   const hasTimelineHighlight = Boolean(normalizedHighlightRunId || normalizedHighlightAgentId);
+  const entityRenderModels = useMemo(
+    () =>
+      buildStageEntityRenderModels({
+        placements: sortedPlacements,
+        occlusionByRoom: layerState.occlusionByRoom,
+        generatedAt: snapshot.generatedAt,
+        runById,
+        selectedEntityIdSet,
+        pinnedEntityIdSet,
+        watchedEntityIdSet,
+        filteredEntityIdSet,
+        hasEntityFilter,
+        normalizedRoomFilterId,
+        hasOpsFilter,
+        focusMode,
+        normalizedHighlightRunId,
+        normalizedHighlightAgentId,
+        highlightedRun,
+        hasTimelineHighlight,
+        entityZOffset: ENTITY_Z_OFFSET,
+        spawnPulseWindowMs: SPAWN_PULSE_WINDOW_MS,
+        startOrbitWindowMs: START_ORBIT_WINDOW_MS,
+        endSettleWindowMs: END_SETTLE_WINDOW_MS,
+        cleanupFadeWindowMs: CLEANUP_FADE_WINDOW_MS,
+        errorShakeWindowMs: ERROR_SHAKE_WINDOW_MS,
+      }),
+    [
+      filteredEntityIdSet,
+      focusMode,
+      hasEntityFilter,
+      hasOpsFilter,
+      hasTimelineHighlight,
+      highlightedRun,
+      layerState.occlusionByRoom,
+      normalizedHighlightAgentId,
+      normalizedHighlightRunId,
+      normalizedRoomFilterId,
+      pinnedEntityIdSet,
+      runById,
+      selectedEntityIdSet,
+      snapshot.generatedAt,
+      sortedPlacements,
+      watchedEntityIdSet,
+    ],
+  );
   const selectedPlacement = selectedEntityId ? placementById.get(selectedEntityId) : undefined;
   const shouldFollowSelected = camera.followSelected && Boolean(selectedPlacement);
 
@@ -1470,131 +1515,9 @@ export function OfficeStage({
         );
       })}
 
-      {sortedPlacements.map((placement) => {
-        const entity = placement.entity;
-        const occlusion = layerState.occlusionByRoom.get(placement.roomId);
-        const isSelected = selectedEntityIdSet.has(entity.id);
-        const isPinned = pinnedEntityIdSet.has(entity.id);
-        const isWatched = watchedEntityIdSet.has(entity.id);
-        const matchesEntityFilter = !hasEntityFilter || filteredEntityIdSet.has(entity.id);
-        const matchesRoomFilter =
-          !normalizedRoomFilterId || placement.roomId === normalizedRoomFilterId;
-        const matchesOpsFilter = matchesEntityFilter && matchesRoomFilter;
-        if (hasOpsFilter && !focusMode && !matchesOpsFilter && !isSelected && !isWatched) {
-          return null;
-        }
-        const runHighlightMatch = normalizedHighlightRunId
-          ? entity.kind === "subagent"
-            ? entity.runId === normalizedHighlightRunId
-            : highlightedRun
-              ? highlightedRun.parentAgentId === entity.agentId ||
-                highlightedRun.childAgentId === entity.agentId
-              : false
-          : false;
-        const agentHighlightMatch = normalizedHighlightAgentId
-          ? entity.agentId === normalizedHighlightAgentId ||
-            entity.parentAgentId === normalizedHighlightAgentId
-          : false;
-        const isLinked = runHighlightMatch || agentHighlightMatch;
-        const linkedRun =
-          entity.kind === "subagent" && entity.runId ? runById.get(entity.runId) : undefined;
-        const getAge = (timestamp?: number, fallback: number = Number.POSITIVE_INFINITY) =>
-          typeof timestamp === "number" ? Math.max(0, snapshot.generatedAt - timestamp) : fallback;
-        const entityAgeMs = getAge(entity.lastUpdatedAt);
-        const spawnAgeMs = getAge(linkedRun?.createdAt, entityAgeMs);
-        const runStartAt = linkedRun?.startedAt ?? linkedRun?.createdAt;
-        const startAgeMs = getAge(runStartAt, entityAgeMs);
-        const endAgeMs = getAge(linkedRun?.endedAt, entityAgeMs);
-        const cleanupAgeMs = getAge(linkedRun?.cleanupCompletedAt);
-        const showSpawnPulse =
-          entity.kind === "subagent" && entity.status === "active" && spawnAgeMs <= SPAWN_PULSE_WINDOW_MS;
-        const showStartOrbit =
-          entity.status === "active" &&
-          entity.kind === "subagent" &&
-          startAgeMs <= START_ORBIT_WINDOW_MS;
-        const showRunOrbit = entity.status === "active";
-        const showErrorMotion = entity.status === "error" && entityAgeMs <= ERROR_SHAKE_WINDOW_MS;
-        const showEndSettle = entity.kind === "subagent" && entity.status === "ok" && endAgeMs <= END_SETTLE_WINDOW_MS;
-        const showCleanupFade =
-          entity.kind === "subagent" &&
-          entity.status === "ok" &&
-          cleanupAgeMs <= CLEANUP_FADE_WINDOW_MS;
-        const isOccluded = occlusion
-          ? placement.x >= occlusion.left &&
-            placement.x <= occlusion.right &&
-            placement.y >= occlusion.top &&
-            placement.y <= occlusion.bottom
-          : false;
-        const motionClasses = [
-          showSpawnPulse ? "motion-spawn" : "",
-          showStartOrbit ? "motion-start" : "",
-          showRunOrbit ? "motion-run" : "",
-          showErrorMotion ? "motion-error" : "",
-          showEndSettle ? "motion-end" : "",
-          showCleanupFade ? "motion-cleanup" : "",
-          placement.overflowed ? "is-overflowed" : "",
-        ]
-          .filter(Boolean)
-          .join(" ");
-        const isMutedByTimeline = hasTimelineHighlight && !isLinked;
-        const isMutedByFocus = hasOpsFilter && focusMode && !matchesOpsFilter && !isWatched;
-        const renderPriorityBoost = isWatched ? 220 : isPinned ? 140 : 0;
-        const tokenClassName = [
-          "entity-token",
-          statusClass(entity),
-          entity.kind,
-          isOccluded ? "is-occluded" : "",
-          motionClasses,
-          isSelected ? "is-selected" : "",
-          isPinned ? "is-pinned" : "",
-          isWatched ? "is-watched" : "",
-          isLinked ? "is-linked" : "",
-          hasOpsFilter && matchesOpsFilter ? "is-filter-hit" : "",
-          isMutedByFocus ? "is-filtered-out" : "",
-          isMutedByTimeline || isMutedByFocus ? "is-muted" : "",
-        ]
-          .filter(Boolean)
-          .join(" ");
-
-        return (
-          <article
-            key={entity.id}
-            className={tokenClassName}
-            style={{
-              left: placement.x,
-              top: placement.y,
-              zIndex: ENTITY_Z_OFFSET + Math.round(placement.y) + renderPriorityBoost,
-            }}
-            role="button"
-            tabIndex={0}
-            aria-label={`Open detail panel for ${entity.label}`}
-            aria-pressed={isSelected}
-            onClick={(event) => {
-              const multiToggle = event.metaKey || event.ctrlKey;
-              onSelectEntity?.(entity.id, multiToggle ? "toggle" : "single");
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                onSelectEntity?.(entity.id, "single");
-              }
-            }}
-          >
-            <div className="sprite-shell">
-              <div className="sprite" style={spriteStyle(entity.id)} />
-              <div className="sprite-fallback">{entity.kind === "agent" ? "A" : "S"}</div>
-            </div>
-            <div className="token-meta">
-              <strong>{entity.label}</strong>
-              <span>
-                {entity.kind === "agent"
-                  ? `${entity.sessions} session${entity.sessions === 1 ? "" : "s"}`
-                  : entity.status}
-              </span>
-            </div>
-          </article>
-        );
-      })}
+      {entityRenderModels.map((model) => (
+        <EntityTokenView key={model.id} model={model} onSelectEntity={onSelectEntity} />
+      ))}
         </div>
       </div>
     </div>
