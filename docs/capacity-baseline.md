@@ -9,6 +9,7 @@
 All capacity measurements must use the shared synthetic scenario generator:
 - source: `src/lib/local50-scenario.ts`
 - profile constants: `src/lib/perf-budgets.ts` (`CAPACITY_BASELINE_PROFILES`)
+- option reference: `docs/synthetic-scenario-generator.md`
 
 | Profile | Agents | Runs | Events |
 | --- | --- | --- | --- |
