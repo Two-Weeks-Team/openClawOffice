@@ -58,6 +58,23 @@ export type BuildTimelineLaneItemsParams = {
   denseVisibleEventBudget?: number;
 };
 
+export type TimelineSegment = {
+  id: string;
+  startAt: number;
+  endAt: number;
+  label: string;
+  eventCount: number;
+  runCount: number;
+  latestAt: number;
+  oldestAt: number;
+  events: OfficeEvent[];
+};
+
+export type BuildTimelineSegmentsParams = {
+  events: OfficeEvent[];
+  segmentWindowMs?: number;
+};
+
 export type TimelineIndex = {
   ordered: OfficeEvent[];
   byRunId: Map<string, OfficeEvent[]>;
@@ -65,6 +82,8 @@ export type TimelineIndex = {
   byStatus: Map<OfficeEvent["type"], OfficeEvent[]>;
   agentIdsByEventId: Map<string, Set<string>>;
 };
+
+const DEFAULT_TIMELINE_SEGMENT_WINDOW_MS = 10 * 60_000;
 
 function normalizeFilterText(value: string): string {
   return value.trim();
@@ -280,6 +299,60 @@ function calculateDensityPerMinute(events: OfficeEvent[]): number {
 
   const spanMinutes = Math.max(1, (maxAt - minAt) / 60_000);
   return Number((events.length / spanMinutes).toFixed(2));
+}
+
+function timelineSegmentLabel(startAt: number, endAt: number): string {
+  const startLabel = new Date(startAt).toISOString().slice(11, 16);
+  const endLabel = new Date(endAt).toISOString().slice(11, 16);
+  return `${startLabel}-${endLabel}`;
+}
+
+export function buildTimelineSegments({
+  events,
+  segmentWindowMs = DEFAULT_TIMELINE_SEGMENT_WINDOW_MS,
+}: BuildTimelineSegmentsParams): TimelineSegment[] {
+  if (events.length === 0) {
+    return [];
+  }
+
+  const windowMs = Math.max(60_000, Math.floor(segmentWindowMs));
+  const sorted = [...events].sort((left, right) => {
+    if (left.at !== right.at) {
+      return right.at - left.at;
+    }
+    return left.id.localeCompare(right.id);
+  });
+  const bySegmentStart = new Map<number, OfficeEvent[]>();
+
+  for (const event of sorted) {
+    const startAt = Math.floor(event.at / windowMs) * windowMs;
+    const bucket = bySegmentStart.get(startAt);
+    if (bucket) {
+      bucket.push(event);
+    } else {
+      bySegmentStart.set(startAt, [event]);
+    }
+  }
+
+  return [...bySegmentStart.entries()]
+    .sort((left, right) => right[0] - left[0])
+    .map(([startAt, segmentEvents]) => {
+      const latestAt = segmentEvents[0]?.at ?? startAt;
+      const oldestAt = segmentEvents[segmentEvents.length - 1]?.at ?? latestAt;
+      const endAt = startAt + windowMs - 1;
+      const runCount = new Set(segmentEvents.map((event) => event.runId)).size;
+      return {
+        id: `segment:${startAt}`,
+        startAt,
+        endAt,
+        label: timelineSegmentLabel(startAt, endAt),
+        eventCount: segmentEvents.length,
+        runCount,
+        latestAt,
+        oldestAt,
+        events: segmentEvents,
+      } satisfies TimelineSegment;
+    });
 }
 
 export function buildTimelineLanes({
