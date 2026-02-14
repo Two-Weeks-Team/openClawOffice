@@ -2973,6 +2973,28 @@ body {
   gap: 4px;
 }
 
+.recovery-banner {
+  border: 1px solid rgba(255, 183, 119, 0.56);
+  border-radius: 12px;
+  background: rgba(61, 35, 19, 0.78);
+  color: #ffd9ad;
+  padding: 10px 12px;
+  display: grid;
+  gap: 4px;
+}
+
+.recovery-banner strong {
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.recovery-banner p {
+  margin: 0;
+  font-size: 0.73rem;
+  line-height: 1.4;
+}
+
 .footer-bar {
   display: flex;
   justify-content: space-between;
@@ -3557,6 +3579,10 @@ body {
 
 .error-text {
   color: #ffb9b9;
+}
+
+.recovery-text {
+  color: #ffd39f;
 }
 
 @media (prefers-reduced-motion: reduce) {
