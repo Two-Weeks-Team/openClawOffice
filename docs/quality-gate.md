@@ -8,6 +8,7 @@ Keep local operations reproducible while features continue to expand.
 pnpm ci:local
 pnpm e2e:smoke
 pnpm e2e:workflow
+pnpm readiness:gate
 ```
 
 `ci:local` runs:
@@ -18,6 +19,7 @@ pnpm e2e:workflow
 5. `pnpm e2e:smoke`
 
 Workflow scenario suite reference: `docs/e2e-workflow.md`
+Readiness gate reference: `docs/readiness-gate.md`
 
 ## API Error Classification
 The API returns structured errors under `error.code` with `requestId`.

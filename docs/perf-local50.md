@@ -22,6 +22,7 @@
 
 ## Commands
 ```bash
+pnpm benchmark:local25
 pnpm benchmark:local50
 pnpm ci:local
 ```

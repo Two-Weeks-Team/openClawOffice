@@ -45,8 +45,8 @@ Copy this block to issue bodies.
 Run before any release-readiness decision:
 
 1. `pnpm ci:local`
-2. `pnpm e2e:workflow`
-3. verify `.reports/perf/local50-latest.json` and `.reports/perf/local50-latest.md`
+2. `pnpm readiness:gate`
+3. verify `.reports/perf/local25-latest.json` and `.reports/perf/local50-latest.json`
 4. confirm unresolved blocking issues and explicit risk log
 
 ## Weekly Review Routine

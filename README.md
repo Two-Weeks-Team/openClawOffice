@@ -158,6 +158,17 @@ pnpm benchmark:local50
 - Auto report outputs: `.reports/perf/local50-latest.json`, `.reports/perf/local50-latest.md`
 - Capacity baseline profiles (10/25/50): `docs/capacity-baseline.md`
 
+## Readiness Gate
+
+```bash
+pnpm readiness:rehearsal
+pnpm readiness:gate
+```
+
+- Stage rehearsal: `local25 -> local50`
+- Gate policy and decision template: `docs/readiness-gate.md`
+- Gate output artifacts: `.reports/readiness/readiness-latest.json`, `.reports/readiness/readiness-latest.md`
+
 ## API endpoints (dev server)
 
 - `GET /api/office/snapshot`
