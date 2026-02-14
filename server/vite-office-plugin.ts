@@ -42,6 +42,9 @@ type StreamMetric = {
   lifecycleFramesSent: number;
   snapshotFramesSent: number;
   streamErrors: number;
+  backpressureActivations: number;
+  droppedUnseenEvents: number;
+  evictedBackfillEvents: number;
 };
 
 type StreamSubscriber = {
@@ -69,6 +72,9 @@ const streamMetrics: StreamMetric = {
   lifecycleFramesSent: 0,
   snapshotFramesSent: 0,
   streamErrors: 0,
+  backpressureActivations: 0,
+  droppedUnseenEvents: 0,
+  evictedBackfillEvents: 0,
 };
 
 function setJsonHeaders(res: ServerResponse, requestId?: string) {
@@ -312,6 +318,19 @@ async function pollStreamSnapshot() {
 
     const snapshot = await buildOfficeSnapshot();
     const frames = streamBridge.ingestSnapshot(snapshot);
+    const pressure = streamBridge.consumePressureStats();
+    streamMetrics.backpressureActivations += pressure.backpressureActivations;
+    streamMetrics.droppedUnseenEvents += pressure.droppedUnseenEvents;
+    streamMetrics.evictedBackfillEvents += pressure.evictedBackfillEvents;
+
+    if (pressure.backpressureActivations > 0) {
+      logStructuredEvent({
+        level: "warn",
+        event: "stream.backpressure",
+        details: "Lifecycle stream backpressure was applied",
+        extra: pressure,
+      });
+    }
 
     if (frames.length === 0) {
       return;

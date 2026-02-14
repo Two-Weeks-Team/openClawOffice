@@ -174,6 +174,7 @@ You can pass your own `x-correlation-id` request header to trace failures end-to
 - Reconnect/backfill:
   - client can resume with SSE `Last-Event-ID` or `?lastEventId=<seq>`
   - server keeps an in-memory lifecycle queue and replays missed frames after reconnect
+  - stream memory guard/backpressure counters are exposed via `GET /api/office/metrics`
 
 ## Kenney assets
 

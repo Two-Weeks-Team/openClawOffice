@@ -76,7 +76,7 @@ describe("OfficeStreamBridge", () => {
   });
 
   it("caps queue/backfill memory", () => {
-    const bridge = new OfficeStreamBridge({ maxQueue: 2, maxSeen: 4 });
+    const bridge = new OfficeStreamBridge({ maxQueue: 2, maxSeen: 4, maxEmitPerSnapshot: 10 });
 
     bridge.ingestSnapshot(makeSnapshot([makeEvent({ id: "seed:1", type: "spawn", runId: "seed", at: 1 })]));
     bridge.ingestSnapshot(makeSnapshot([makeEvent({ id: "ev:2", type: "spawn", runId: "x", at: 2 })]));
@@ -87,6 +87,60 @@ describe("OfficeStreamBridge", () => {
     expect(backfill).toHaveLength(2);
     expect(backfill[0]?.event.id).toBe("ev:3");
     expect(backfill[1]?.event.id).toBe("ev:4");
+    expect(bridge.consumePressureStats()).toEqual({
+      backpressureActivations: 1,
+      droppedUnseenEvents: 0,
+      evictedBackfillEvents: 1,
+    });
+  });
+
+  it("drops excess unseen events when burst exceeds backpressure budget", () => {
+    const bridge = new OfficeStreamBridge({ maxQueue: 20, maxSeen: 40, maxEmitPerSnapshot: 2 });
+
+    bridge.ingestSnapshot(makeSnapshot([makeEvent({ id: "seed:1", type: "spawn", runId: "seed", at: 1 })]));
+    bridge.consumePressureStats();
+
+    const frames = bridge.ingestSnapshot(
+      makeSnapshot([
+        makeEvent({ id: "seed:1", type: "spawn", runId: "seed", at: 1 }),
+        makeEvent({ id: "ev:2", type: "spawn", runId: "x", at: 2 }),
+        makeEvent({ id: "ev:3", type: "start", runId: "x", at: 3 }),
+        makeEvent({ id: "ev:4", type: "message", runId: "x", at: 4 }),
+        makeEvent({ id: "ev:5", type: "end", runId: "x", at: 5 }),
+      ]),
+    );
+
+    expect(frames.map((frame) => frame.event.id)).toEqual(["ev:4", "ev:5"]);
+    expect(bridge.consumePressureStats()).toEqual({
+      backpressureActivations: 1,
+      droppedUnseenEvents: 2,
+      evictedBackfillEvents: 0,
+    });
+  });
+
+  it("keeps backfill bounded during sustained snapshot ingest", () => {
+    const bridge = new OfficeStreamBridge({ maxQueue: 64, maxSeen: 320, maxEmitPerSnapshot: 16 });
+
+    bridge.ingestSnapshot(makeSnapshot([makeEvent({ id: "seed:1", type: "spawn", runId: "seed", at: 1 })]));
+    bridge.consumePressureStats();
+
+    let currentAt = 2;
+    for (let round = 0; round < 25; round += 1) {
+      const events: OfficeEvent[] = [];
+      for (let index = 0; index < 20; index += 1) {
+        const at = currentAt + index;
+        events.push(makeEvent({ id: `ev:${round}:${index}`, type: "message", runId: `run:${round}`, at }));
+      }
+      currentAt += 20;
+      bridge.ingestSnapshot(makeSnapshot(events));
+    }
+
+    const backfill = bridge.getBackfill(0);
+    expect(backfill).toHaveLength(64);
+    const pressure = bridge.consumePressureStats();
+    expect(pressure.backpressureActivations).toBeGreaterThan(0);
+    expect(pressure.droppedUnseenEvents).toBeGreaterThan(0);
+    expect(pressure.evictedBackfillEvents).toBeGreaterThan(0);
   });
 });
 

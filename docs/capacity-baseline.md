@@ -38,6 +38,12 @@ pnpm benchmark:local50
 pnpm ci:local
 ```
 
+## Soak Guard Signals
+During long-running stream checks, monitor `GET /api/office/metrics`:
+- `backpressureActivations`: how often burst throttling was applied
+- `droppedUnseenEvents`: lifecycle events intentionally dropped from incremental emission
+- `evictedBackfillEvents`: old backfill frames evicted to stay within queue budget
+
 ## Reporting Template
 ```md
 ### Capacity Baseline Report - YYYY-MM-DD
