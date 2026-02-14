@@ -142,6 +142,9 @@ pnpm ci:local
 - API + SSE e2e smoke (`scripts/e2e-smoke.mjs`)
 - quality gate reference: `docs/quality-gate.md`
 
+Additional workflow suite command:
+- `pnpm e2e:workflow` (`docs/e2e-workflow.md`)
+
 ## Local50 Benchmark
 
 ```bash
