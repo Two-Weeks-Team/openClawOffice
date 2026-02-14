@@ -152,6 +152,7 @@ pnpm benchmark:local50
 - Pipeline budget constants: `src/lib/perf-budgets.ts`
 - Synthetic generator options/presets: `docs/synthetic-scenario-generator.md`
 - Profiling report template: `docs/perf-local50.md`
+- Auto report outputs: `.reports/perf/local50-latest.json`, `.reports/perf/local50-latest.md`
 - Capacity baseline profiles (10/25/50): `docs/capacity-baseline.md`
 
 ## API endpoints (dev server)

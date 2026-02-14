@@ -29,6 +29,7 @@ pnpm ci:local
 `benchmark:local50` automatically collects:
 - parse/layout/timeline/search/stream p95 metrics
 - Node `heapUsed` memory footprint
+- report artifacts (`JSON`/`MD`): `.reports/perf/local50-latest.json`, `.reports/perf/local50-latest.md`
 
 ## Profiling Template
 Use this template when reporting a new measurement run.
