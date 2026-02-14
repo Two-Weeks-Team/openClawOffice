@@ -70,8 +70,9 @@ export type PlacementResult = {
 };
 
 const VALID_STATUSES: readonly OfficeEntityStatus[] = ["active", "idle", "offline", "ok", "error"];
-const VALID_PRIORITIES: readonly ZonePriorityKey[] = ["status", "role", "parent", "recent"];
+const VALID_ENTITY_KINDS: readonly OfficeEntity["kind"][] = ["agent", "subagent"];
 const DEFAULT_PRIORITY_ORDER: ZonePriorityKey[] = ["status", "role", "parent", "recent"];
+const VALID_PRIORITIES: readonly ZonePriorityKey[] = DEFAULT_PRIORITY_ORDER;
 
 const DEFAULT_ZONE_CONFIG: ZoneLayoutConfig = {
   version: 1,
@@ -282,7 +283,7 @@ function isValidStatus(value: unknown): value is OfficeEntityStatus {
 }
 
 function isValidEntityKind(value: unknown): value is OfficeEntity["kind"] {
-  return value === "agent" || value === "subagent";
+  return typeof value === "string" && (VALID_ENTITY_KINDS as readonly string[]).includes(value);
 }
 
 function isValidPriorityKey(value: unknown): value is ZonePriorityKey {
@@ -303,7 +304,7 @@ function normalizeKinds(
 function normalizePriorityOrder(value: unknown): ZonePriorityKey[] {
   const normalized = filterArrayByGuard(value, isValidPriorityKey);
   if (normalized.length === 0) {
-    return DEFAULT_PRIORITY_ORDER;
+    return [...DEFAULT_PRIORITY_ORDER];
   }
   return dedupeAndAppendDefaults(normalized, DEFAULT_PRIORITY_ORDER);
 }
