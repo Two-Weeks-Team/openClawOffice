@@ -233,17 +233,19 @@ function workspacePanelPlacementClass(
 }
 
 function workspaceTabForCommand(command: CommandEntry): WorkspaceTabId | null {
-  if (command.id.startsWith("timeline.") || command.section === "Timeline") {
+  if (command.id.startsWith("entity.jump:")) {
+    return "analysis";
+  }
+  if (command.id === "run.jump") {
     return "timeline";
   }
-  if (command.id.startsWith("alerts.")) {
-    return "alerts";
+  if (command.section === "Timeline" && !command.id.includes(".copy.")) {
+    return "timeline";
   }
-  if (
-    command.section === "Filters" ||
-    command.section === "Run Tools" ||
-    command.section === "Entities"
-  ) {
+  if (command.section === "Filters" && command.id !== "filters.focus.toggle") {
+    return "operations";
+  }
+  if (command.id === "selection.filtered") {
     return "operations";
   }
   return null;
@@ -805,13 +807,7 @@ function App() {
     setRebindingCommandId(null);
     setIsCommandPaletteOpen(false);
     setIsShortcutHelpOpen(false);
-    setIsAlertCenterOpen((prev) => {
-      const next = !prev;
-      if (next) {
-        setActiveWorkspaceTab("alerts");
-      }
-      return next;
-    });
+    setIsAlertCenterOpen((prev) => !prev);
   }, []);
 
   const closeAlertCenter = useCallback(() => {
