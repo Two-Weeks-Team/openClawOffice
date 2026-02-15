@@ -1737,10 +1737,11 @@ export function OfficeStage({
         const occupancyPercent = Math.round(occupancyRatio * 100);
         const occupancyHeatLevel =
           occupancyRatio >= 1 ? "high" : occupancyRatio >= 0.7 ? "medium" : "low";
+        const isEmpty = debug ? debug.assigned === 0 : true;
         return (
           <section
             key={room.id}
-            className={`office-room heat-${occupancyHeatLevel}`}
+            className={`office-room heat-${occupancyHeatLevel}${isEmpty ? " room-empty" : ""}`}
             style={{
               left: room.x,
               top: room.y,
@@ -1765,7 +1766,7 @@ export function OfficeStage({
                 </span>
                 <span>occ {debug.utilizationPct || occupancyPercent}%</span>
                 <span>target {debug.targeted}</span>
-                <span>{debug.saturation}</span>
+                <span className={`saturation-${debug.saturation}`}>{debug.saturation}</span>
                 {debug.collisionPairs > 0 ? <span>coll {debug.collisionPairs}</span> : null}
                 {debug.overflowOut > 0 ? <span>out +{debug.overflowOut}</span> : null}
                 {debug.overflowIn > 0 ? <span>in +{debug.overflowIn}</span> : null}
