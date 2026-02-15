@@ -1744,6 +1744,48 @@ body {
   opacity: 0.5;
 }
 
+.entity-token.agent {
+  width: 130px;
+  height: 32px;
+  border-width: 1.5px;
+  border-color: rgba(0, 243, 255, 0.25);
+  z-index: 20;
+}
+
+.entity-token.agent .chip-label {
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.entity-token.agent .chip-status {
+  font-size: 10px;
+}
+
+.entity-token.agent .chip-status-bar {
+  width: 4px;
+}
+
+.entity-token.subagent {
+  width: 105px;
+  height: 24px;
+  opacity: 0.88;
+  border-width: 1px;
+  z-index: 10;
+}
+
+.entity-token.subagent .chip-label {
+  font-weight: 500;
+  font-size: 10px;
+}
+
+.entity-token.subagent .chip-status {
+  font-size: 8px;
+}
+
+.entity-token.subagent .chip-status-bar {
+  width: 2px;
+}
+
 @keyframes chip-glitch {
   0%, 100% {
     border-color: rgba(255, 42, 109, 0.35);
@@ -1939,17 +1981,36 @@ body {
 }
 
 /* LOD responsive chip sizing */
-.office-stage-wrap.lod-distant .entity-token {
-  width: 80px;
-  height: 22px;
+.office-stage-wrap.lod-distant .entity-token.agent {
+  width: 90px;
+  height: 24px;
+}
+
+.office-stage-wrap.lod-distant .entity-token.subagent {
+  width: 70px;
+  height: 18px;
 }
 
 .office-stage-wrap.lod-distant .entity-token .chip-label {
   font-size: 9px;
 }
 
+.office-stage-wrap.lod-distant .entity-token.subagent .chip-label {
+  font-size: 8px;
+}
+
 .office-stage-wrap.lod-distant .entity-token .chip-status {
   display: none;
+}
+
+.office-stage-wrap.lod-mid .entity-token.agent {
+  width: 120px;
+  height: 30px;
+}
+
+.office-stage-wrap.lod-mid .entity-token.subagent {
+  width: 95px;
+  height: 22px;
 }
 
 .office-stage-wrap.lod-mid .entity-token .chip-status {
@@ -1958,6 +2019,10 @@ body {
 
 .office-stage-wrap.lod-mid .entity-token .chip-label {
   font-size: 10px;
+}
+
+.office-stage-wrap.lod-mid .entity-token.subagent .chip-label {
+  font-size: 9px;
 }
 
 .office-stage-wrap.lod-distant .bubble-lane-overlay {
