@@ -1756,6 +1756,123 @@ body {
   }
 }
 
+.entity-datapad {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 220px;
+  background: rgba(0, 0, 0, 0.95);
+  border: 1px solid #00f3ff;
+  backdrop-filter: blur(8px);
+  padding: 10px;
+  z-index: 9999;
+  clip-path: polygon(
+    0 0,
+    100% 0,
+    100% calc(100% - 8px),
+    calc(100% - 8px) 100%,
+    0 100%
+  );
+  animation: datapad-in 100ms ease-out;
+  pointer-events: none;
+}
+
+@keyframes datapad-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+}
+
+.datapad-header {
+  font-family: "JetBrains Mono", "Space Grotesk", monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: #00f3ff;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(0, 243, 255, 0.2);
+}
+
+.datapad-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px 0;
+  font-size: 11px;
+}
+
+.datapad-label {
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.datapad-value {
+  color: #e2e8f0;
+  font-family: "JetBrains Mono", monospace;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.datapad-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.datapad-status-active {
+  color: #00f3ff;
+}
+
+.datapad-status-idle {
+  color: #64748b;
+}
+
+.datapad-status-error {
+  color: #ff2a6d;
+}
+
+.datapad-status-ok {
+  color: #05d5fa;
+}
+
+.datapad-status-offline {
+  color: #475569;
+}
+
+.datapad-parent {
+  color: #94a3b8;
+  font-size: 10px;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.datapad-bubble {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(0, 243, 255, 0.15);
+  font-style: italic;
+  font-size: 10px;
+  color: #94a3b8;
+  line-height: 1.4;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
 .entity-cluster {
   position: absolute;
   transform: translate(-50%, -50%);
