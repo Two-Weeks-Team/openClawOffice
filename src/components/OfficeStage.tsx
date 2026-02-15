@@ -1,15 +1,9 @@
-import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { AlertSignal } from "../lib/alerts";
 import { buildBubbleLaneLayout, type BubbleLaneCandidate } from "../lib/bubble-lanes";
 import { buildEntityClusters } from "../lib/entity-clustering";
 import { buildPlacements, type PlacementMode } from "../lib/layout";
-import {
-  compileRoomBlueprintLayers,
-  type TileSprite,
-  type TileStageLayer,
-} from "../lib/room-blueprint";
 import { indexRunsById } from "../lib/run-graph";
-import { applySemanticRoomMappings, buildSemanticAssetRegistry } from "../lib/semantic-room-mapping";
 import {
   projectBubbleLaneLayoutForLod,
   resolveStageLodLevel,
@@ -42,69 +36,6 @@ type Props = {
   onFilterMatchCountChange?: (count: number) => void;
   onSelectEntity?: (entityId: string, mode?: "single" | "toggle") => void;
 };
-
-type ResolvedTile = TileSprite;
-
-type TileSourceSpec = {
-  atlas: string;
-  tileSize: number;
-  spacing: number;
-};
-
-type TileRef = {
-  id: string;
-  source: string;
-  col: number;
-  row: number;
-};
-
-type ManifestShape = {
-  sources?: Record<string, { tileSize?: unknown; spacing?: unknown }>;
-  tileset?: { tiles?: Array<{ id?: string; source?: string; col?: number; row?: number }> };
-};
-
-type LayerTile = {
-  id: string;
-  roomId: string;
-  layer: TileStageLayer;
-  x: number;
-  y: number;
-  z: number;
-  sprite: ResolvedTile;
-};
-
-const DEFAULT_SOURCES: Record<string, TileSourceSpec> = {
-  city: {
-    atlas: "/assets/kenney/tiles/city_tilemap.png",
-    tileSize: 16,
-    spacing: 0,
-  },
-  interior: {
-    atlas: "/assets/kenney/interior/interior_tilemap.png",
-    tileSize: 16,
-    spacing: 1,
-  },
-  urban: {
-    atlas: "/assets/kenney/urban/urban_tilemap.png",
-    tileSize: 16,
-    spacing: 0,
-  },
-};
-
-const FALLBACK_TILE_REFS: TileRef[] = [
-  { id: "floor_lobby", source: "city", col: 9, row: 1 },
-  { id: "floor_office", source: "city", col: 5, row: 1 },
-  { id: "floor_meeting", source: "city", col: 9, row: 2 },
-  { id: "floor_lounge", source: "city", col: 13, row: 1 },
-  { id: "floor_arcade", source: "city", col: 16, row: 19 },
-  { id: "wall_brick", source: "city", col: 1, row: 5 },
-  { id: "wall_stone", source: "city", col: 5, row: 5 },
-  { id: "wall_glass", source: "city", col: 17, row: 6 },
-  { id: "wall_indoor", source: "city", col: 21, row: 16 },
-  { id: "bench", source: "city", col: 11, row: 11 },
-  { id: "potted_plant", source: "city", col: 17, row: 1 },
-  { id: "streetlamp", source: "city", col: 1, row: 11 },
-];
 
 const ENTITY_Z_OFFSET = 320;
 
@@ -169,84 +100,6 @@ function runLineClass(run: OfficeRun) {
     return "run-ok";
   }
   return "run-active";
-}
-
-function toFiniteNumber(value: unknown): number | undefined {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-  if (typeof value === "string" && value.trim() !== "") {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) {
-      return parsed;
-    }
-  }
-  return undefined;
-}
-
-function buildTileCatalog(manifest: ManifestShape | null) {
-  const sourceSpecs = new Map<string, TileSourceSpec>();
-  for (const [source, spec] of Object.entries(DEFAULT_SOURCES)) {
-    const manifestSpec = manifest?.sources?.[source];
-    const manifestTileSize = toFiniteNumber(manifestSpec?.tileSize);
-    const manifestSpacing = toFiniteNumber(manifestSpec?.spacing);
-    sourceSpecs.set(source, {
-      atlas: spec.atlas,
-      tileSize: manifestTileSize ?? spec.tileSize,
-      spacing: manifestSpacing ?? spec.spacing,
-    });
-  }
-
-  const refs: TileRef[] = [];
-  const manifestTiles = manifest?.tileset?.tiles;
-  if (Array.isArray(manifestTiles)) {
-    for (const tile of manifestTiles) {
-      if (
-        typeof tile.id === "string" &&
-        typeof tile.source === "string" &&
-        typeof tile.col === "number" &&
-        typeof tile.row === "number"
-      ) {
-        refs.push({
-          id: tile.id,
-          source: tile.source,
-          col: tile.col,
-          row: tile.row,
-        });
-      }
-    }
-  }
-
-  for (const fallback of FALLBACK_TILE_REFS) {
-    if (!refs.some((ref) => ref.id === fallback.id)) {
-      refs.push(fallback);
-    }
-  }
-
-  const catalog = new Map<string, ResolvedTile>();
-  for (const ref of refs) {
-    const source = sourceSpecs.get(ref.source) ?? DEFAULT_SOURCES.city;
-    catalog.set(ref.id, {
-      atlas: source.atlas,
-      tileSize: source.tileSize,
-      spacing: source.spacing,
-      col: ref.col,
-      row: ref.row,
-    });
-  }
-
-  return catalog;
-}
-
-function tileStyle(tile: LayerTile): CSSProperties {
-  const stride = tile.sprite.tileSize + tile.sprite.spacing;
-  return {
-    left: tile.x,
-    top: tile.y,
-    zIndex: tile.z,
-    backgroundImage: `url("${tile.sprite.atlas}")`,
-    backgroundPosition: `-${tile.sprite.col * stride}px -${tile.sprite.row * stride}px`,
-  };
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -419,9 +272,7 @@ export function OfficeStage({
   onFilterMatchCountChange,
   onSelectEntity,
 }: Props) {
-  const [manifest, setManifest] = useState<ManifestShape | null>(null);
   const [zoneConfig, setZoneConfig] = useState<unknown>(null);
-  const [roomBlueprint, setRoomBlueprint] = useState<unknown>(null);
   const [viewportSize, setViewportSize] = useState({
     width: STAGE_WIDTH,
     height: STAGE_HEIGHT,
@@ -443,7 +294,6 @@ export function OfficeStage({
   );
   const previousRoomOptionsKeyRef = useRef("");
   const previousRoomAssignmentsKeyRef = useRef("");
-  const previousBlueprintDiagnosticKeyRef = useRef("");
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const mousePanGestureRef = useRef<{
     pointerId: number;
@@ -570,34 +420,6 @@ export function OfficeStage({
   useEffect(() => {
     let cancelled = false;
 
-    const loadManifest = async () => {
-      try {
-        const response = await fetch("/assets/kenney/kenney-curation.json", {
-          method: "GET",
-          headers: { Accept: "application/json" },
-        });
-        if (!response.ok) {
-          return;
-        }
-        const payload = (await response.json()) as ManifestShape;
-        if (!cancelled) {
-          setManifest(payload);
-        }
-      } catch (error) {
-        console.error("Failed to load Kenney manifest, using fallback tiles.", error);
-        // fallback tile catalog is used when manifest fetch fails
-      }
-    };
-
-    void loadManifest();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
     const loadZoneConfig = async () => {
       try {
         const response = await fetch("/assets/layout/zone-config.json", {
@@ -627,91 +449,6 @@ export function OfficeStage({
       window.clearInterval(intervalId);
     };
   }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadRoomBlueprint = async () => {
-      try {
-        const response = await fetch("/assets/layout/room-blueprint.json", {
-          method: "GET",
-          cache: "no-store",
-          headers: { Accept: "application/json" },
-        });
-        if (!response.ok) {
-          return;
-        }
-        const payload = (await response.json()) as unknown;
-        if (!cancelled) {
-          setRoomBlueprint(payload);
-        }
-      } catch (error) {
-        console.error("Failed to load room blueprint, using default room compiler blueprint.", error);
-      }
-    };
-
-    void loadRoomBlueprint();
-    const intervalId = window.setInterval(() => {
-      void loadRoomBlueprint();
-    }, 10_000);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(intervalId);
-    };
-  }, []);
-
-  const tileCatalog = useMemo(() => buildTileCatalog(manifest), [manifest]);
-  const semanticRegistry = useMemo(() => buildSemanticAssetRegistry(manifest), [manifest]);
-  const mappedBlueprint = useMemo(
-    () =>
-      applySemanticRoomMappings({
-        rawBlueprint: roomBlueprint,
-        registry: semanticRegistry,
-      }),
-    [roomBlueprint, semanticRegistry],
-  );
-
-  const layerState = useMemo(() => {
-    const compiled = compileRoomBlueprintLayers({
-      rawBlueprint: mappedBlueprint.blueprint,
-      rooms,
-      tileCatalog,
-    });
-    return {
-      ...compiled,
-      diagnostics: [...mappedBlueprint.diagnostics, ...compiled.diagnostics],
-    };
-  }, [mappedBlueprint, rooms, tileCatalog]);
-
-  useEffect(() => {
-    if (layerState.diagnostics.length === 0) {
-      previousBlueprintDiagnosticKeyRef.current = "";
-      return;
-    }
-
-    const signature = layerState.diagnostics
-      .map((item) => `${item.code}:${item.roomId ?? ""}:${item.anchorId ?? ""}:${item.message}`)
-      .join("|");
-    if (signature === previousBlueprintDiagnosticKeyRef.current) {
-      return;
-    }
-    previousBlueprintDiagnosticKeyRef.current = signature;
-    console.warn("Room blueprint diagnostics", layerState.diagnostics);
-  }, [layerState.diagnostics]);
-
-  const tilesByLayer = useMemo(() => {
-    // TileStageLayer covers only tile passes; entities and overlays are rendered later.
-    const grouped: Record<TileStageLayer, LayerTile[]> = {
-      floor: [],
-      wall: [],
-      object: [],
-    };
-    for (const tile of layerState.tiles) {
-      grouped[tile.layer].push(tile);
-    }
-    return grouped;
-  }, [layerState.tiles]);
 
   const placementById = useMemo(() => {
     const map = new Map<string, (typeof placements)[number]>();
@@ -1071,7 +808,6 @@ export function OfficeStage({
     () =>
       buildStageEntityRenderModels({
         placements: visiblePlacements,
-        occlusionByRoom: layerState.occlusionByRoom,
         generatedAt: snapshot.generatedAt,
         runById,
         selectedEntityIdSet,
@@ -1106,7 +842,6 @@ export function OfficeStage({
       hasOpsFilter,
       hasTimelineHighlight,
       highlightedRun,
-      layerState.occlusionByRoom,
       normalizedHighlightAgentId,
       normalizedHighlightRunId,
       normalizedRoomFilterId,
@@ -1619,24 +1354,6 @@ export function OfficeStage({
         ) : null}
         <div className="office-stage-camera" style={cameraStyle}>
           <div className="office-stage-grid" />
-
-      <div className="iso-layer layer-floor" aria-hidden="true">
-        {tilesByLayer.floor.map((tile) => (
-          <span key={tile.id} className="iso-tile layer-floor" style={tileStyle(tile)} />
-        ))}
-      </div>
-
-      <div className="iso-layer layer-wall" aria-hidden="true">
-        {tilesByLayer.wall.map((tile) => (
-          <span key={tile.id} className="iso-tile layer-wall" style={tileStyle(tile)} />
-        ))}
-      </div>
-
-      <div className="iso-layer layer-object" aria-hidden="true">
-        {tilesByLayer.object.map((tile) => (
-          <span key={tile.id} className="iso-tile layer-object" style={tileStyle(tile)} />
-        ))}
-      </div>
 
       <svg className="office-lines" viewBox="0 0 980 660" preserveAspectRatio="none" aria-hidden>
         {runLinks.map((link) => (

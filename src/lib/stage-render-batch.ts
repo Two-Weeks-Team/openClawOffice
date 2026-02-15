@@ -8,13 +8,6 @@ export type StagePlacement = {
   overflowed: boolean;
 };
 
-export type StageOcclusion = {
-  left: number;
-  right: number;
-  top: number;
-  bottom: number;
-};
-
 export type StagePriorityBand = "critical" | "high" | "normal";
 
 type StageAlertSeverity = "critical" | "warning" | null;
@@ -60,7 +53,6 @@ export type StageEntityRenderModel = {
 
 export type BuildStageEntityRenderModelsInput = {
   placements: StagePlacement[];
-  occlusionByRoom: Map<string, StageOcclusion>;
   generatedAt: number;
   runById: Map<string, OfficeRun>;
   selectedEntityIdSet: Set<string>;
@@ -323,14 +315,6 @@ export function buildStageEntityRenderModels(
       entity.status === "ok" &&
       cleanupAgeMs <= input.cleanupFadeWindowMs;
 
-    const occlusion = input.occlusionByRoom.get(placement.roomId);
-    const isOccluded = occlusion
-      ? placement.x >= occlusion.left &&
-        placement.x <= occlusion.right &&
-        placement.y >= occlusion.top &&
-        placement.y <= occlusion.bottom
-      : false;
-
     const motionClasses = [
       showSpawnPulse ? "motion-spawn" : "",
       showStartOrbit ? "motion-start" : "",
@@ -371,7 +355,6 @@ export function buildStageEntityRenderModels(
       entity.kind,
       `priority-${priority.band}`,
       priority.alertSeverity ? `alert-${priority.alertSeverity}` : "",
-      isOccluded ? "is-occluded" : "",
       motionClasses,
       isSelected ? "is-selected" : "",
       isPinned ? "is-pinned" : "",
