@@ -277,6 +277,7 @@ type EntityTokenViewProps = {
   run?: OfficeRun;
   generatedAt: number;
   isHovered: boolean;
+  densityMode: "standard" | "compact" | "dense";
   onSelectEntity?: (entityId: string, mode?: "single" | "toggle") => void;
   onHoverEntity?: (entityId: string | null) => void;
 };
@@ -288,14 +289,15 @@ const EntityTokenView = memo(function EntityTokenView({
   run,
   generatedAt,
   isHovered,
+  densityMode,
   onSelectEntity,
   onHoverEntity,
 }: EntityTokenViewProps) {
-  const showLabel = lodLevel !== "distant";
-  const showStatus = lodLevel === "detail";
+  const showLabel = lodLevel !== "distant" && densityMode !== "dense";
+  const showStatus = lodLevel === "detail" && densityMode === "standard";
   return (
     <article
-      className={`${model.className} lod-${lodLevel}`}
+      className={`${model.className} lod-${lodLevel} density-${densityMode}`}
       style={model.style}
       role="button"
       tabIndex={0}
@@ -412,6 +414,27 @@ export function OfficeStage({
   const placements = layoutState.placements;
   const collisionPairCount = layoutState.collisionPairs.length;
   const filteredEntityIdSet = useMemo(() => new Set(filterEntityIds), [filterEntityIds]);
+
+  const roomDensityMode = useMemo(() => {
+    const densityByRoom = new Map<string, "standard" | "compact" | "dense">();
+    for (const room of rooms) {
+      const debug = layoutState.roomDebug.get(room.id);
+      const count = debug?.assigned ?? 0;
+      if (count >= 26) {
+        densityByRoom.set(room.id, "dense");
+      } else if (count >= 10) {
+        densityByRoom.set(room.id, "compact");
+      } else {
+        densityByRoom.set(room.id, "standard");
+      }
+    }
+    return densityByRoom;
+  }, [rooms, layoutState.roomDebug]);
+
+  const placementByEntityId = useMemo(
+    () => new Map(placements.map((p) => [p.entity.id, p] as const)),
+    [placements],
+  );
   const normalizedRoomFilterId =
     roomFilterId.trim() !== "" && roomFilterId !== "all" ? roomFilterId : null;
   const hasRoomFilter = Boolean(normalizedRoomFilterId);
@@ -1608,7 +1631,9 @@ export function OfficeStage({
       {entityRenderModels.map((model) => {
         const entity = entityById.get(model.id);
         if (!entity) return null;
+        const placement = placementByEntityId.get(model.id);
         const run = entity.kind === "subagent" && entity.runId ? runById.get(entity.runId) : undefined;
+        const entityDensityMode = placement ? (roomDensityMode.get(placement.roomId) ?? "standard") : "standard";
         return (
           <EntityTokenView
             key={model.id}
@@ -1618,6 +1643,7 @@ export function OfficeStage({
             run={run}
             generatedAt={snapshot.generatedAt}
             isHovered={hoveredEntityId === model.id}
+            densityMode={entityDensityMode}
             onSelectEntity={onSelectEntity}
             onHoverEntity={setHoveredEntityId}
           />

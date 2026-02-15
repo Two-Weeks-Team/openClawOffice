@@ -1786,6 +1786,63 @@ body {
   width: 2px;
 }
 
+.entity-token.density-compact.subagent {
+  width: 85px;
+  height: 20px;
+}
+
+.entity-token.density-compact.subagent .chip-label {
+  font-size: 9px;
+}
+
+.entity-token.density-compact.subagent .chip-status {
+  display: none;
+}
+
+.entity-token.density-dense.subagent {
+  width: 50px;
+  height: 8px;
+  overflow: hidden;
+  transition:
+    width 150ms ease,
+    height 150ms ease,
+    z-index 0ms;
+}
+
+.entity-token.density-dense.subagent .chip-content {
+  display: none;
+}
+
+.entity-token.density-dense.subagent .chip-status-bar {
+  width: 100%;
+  border-radius: 2px;
+}
+
+.entity-token.density-dense.subagent:hover {
+  width: 100px;
+  height: 24px;
+  z-index: 100;
+}
+
+.entity-token.density-dense.subagent:hover .chip-content {
+  display: flex;
+}
+
+.entity-token.density-dense.subagent:hover .chip-status-bar {
+  width: 3px;
+  border-radius: 1px 0 0 1px;
+}
+
+.entity-token.density-compact.agent,
+.entity-token.density-dense.agent {
+  width: 110px;
+  height: 28px;
+}
+
+.entity-token.density-dense.agent .chip-status {
+  display: none;
+}
+
 @keyframes chip-glitch {
   0%, 100% {
     border-color: rgba(255, 42, 109, 0.35);
