@@ -121,6 +121,12 @@ const CLEANUP_FADE_WINDOW_MS = 30_000;
 const ERROR_SHAKE_WINDOW_MS = 18_000;
 const STAGE_WIDTH = 980;
 const STAGE_HEIGHT = 660;
+
+function calculateFitToViewZoom(viewportWidth: number, viewportHeight: number): number {
+  const zoomX = viewportWidth / STAGE_WIDTH;
+  const zoomY = viewportHeight / STAGE_HEIGHT;
+  return Math.min(zoomX, zoomY, 1);
+}
 const CAMERA_MIN_ZOOM = 0.72;
 const CAMERA_MAX_ZOOM = 2.4;
 const CAMERA_ZOOM_STEP = 0.16;
@@ -448,6 +454,7 @@ export function OfficeStage({
   } | null>(null);
   const touchPanGestureRef = useRef<TouchPanGesture | null>(null);
   const touchPinchGestureRef = useRef<TouchPinchGesture | null>(null);
+  const initialFitAppliedRef = useRef(false);
   const pinnedBubbleEntityIdSet = useMemo(
     () => new Set(pinnedBubbleEntityIds),
     [pinnedBubbleEntityIds],
@@ -1146,6 +1153,17 @@ export function OfficeStage({
     };
   }, []);
 
+  const fitCameraToView = () => {
+    const { width, height } = getViewportSize();
+    const fitZoom = calculateFitToViewZoom(width, height);
+    setCamera({
+      zoom: fitZoom,
+      panX: (width - STAGE_WIDTH * fitZoom) / 2,
+      panY: (height - STAGE_HEIGHT * fitZoom) / 2,
+      followSelected: false,
+    });
+  };
+
   const getViewportSize = () => {
     const node = viewportRef.current;
     return {
@@ -1153,6 +1171,28 @@ export function OfficeStage({
       height: node?.clientHeight ?? viewportSize.height,
     };
   };
+
+  useEffect(() => {
+    if (initialFitAppliedRef.current) {
+      return;
+    }
+    const node = viewportRef.current;
+    if (!node) {
+      return;
+    }
+    const vw = node.clientWidth;
+    const vh = node.clientHeight;
+    if (vw > 0 && vh > 0) {
+      initialFitAppliedRef.current = true;
+      const fitZoom = calculateFitToViewZoom(vw, vh);
+      setCamera({
+        zoom: fitZoom,
+        panX: (vw - STAGE_WIDTH * fitZoom) / 2,
+        panY: (vh - STAGE_HEIGHT * fitZoom) / 2,
+        followSelected: false,
+      });
+    }
+  }, [viewportSize]);
 
   const resolveCameraPan = (state: CameraState, viewportWidth: number, viewportHeight: number) => {
     if (state.followSelected && selectedPlacement) {
@@ -1293,6 +1333,9 @@ export function OfficeStage({
           }}
         >
           Reset
+        </button>
+        <button type="button" onClick={fitCameraToView}>
+          Fit
         </button>
         <button
           type="button"
