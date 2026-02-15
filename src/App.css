@@ -1262,6 +1262,36 @@ body {
   stroke-dasharray: 10 8;
 }
 
+.camera-minimap-toggle {
+  background: rgba(100, 200, 255, 0.15);
+  border: 1px solid rgba(150, 226, 255, 0.35);
+  border-radius: 4px;
+  color: #b5e3f2;
+  font-size: 0.8rem;
+  font-weight: bold;
+  width: 22px;
+  height: 22px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 150ms ease;
+}
+
+.camera-minimap-toggle:hover {
+  background: rgba(100, 200, 255, 0.3);
+}
+
+.camera-minimap.collapsed {
+  width: auto;
+  padding: 6px 8px;
+}
+
+.camera-minimap.collapsed header {
+  gap: 6px;
+}
+
 .focus-fog-layer {
   position: absolute;
   inset: 0;

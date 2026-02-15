@@ -427,6 +427,7 @@ export function OfficeStage({
     followSelected: false,
   });
   const [clusteringEnabled, setClusteringEnabled] = useState(true);
+  const [minimapCollapsed, setMinimapCollapsed] = useState(false);
   const [expandedClusterIds, setExpandedClusterIds] = useState<string[]>([]);
   const [pinnedBubbleEntityIds, setPinnedBubbleEntityIds] = useState<string[]>(() =>
     loadBubbleEntityIds(BUBBLE_PINNED_STORAGE_KEY),
@@ -1331,52 +1332,62 @@ export function OfficeStage({
         </span>
       </div>
 
-      <aside className="camera-minimap">
+      <aside className={`camera-minimap${minimapCollapsed ? " collapsed" : ""}`}>
         <header>
           <strong>Minimap</strong>
-          <span>Tap to center</span>
+          {!minimapCollapsed && <span>Tap to center</span>}
+          <button
+            type="button"
+            className="camera-minimap-toggle"
+            onClick={() => setMinimapCollapsed((prev) => !prev)}
+            aria-label={minimapCollapsed ? "Expand minimap" : "Collapse minimap"}
+          >
+            {minimapCollapsed ? "+" : "-"}
+          </button>
         </header>
-        <button
-          type="button"
-          className="camera-minimap-surface"
-          onClick={(event) => {
-            const bounds = event.currentTarget.getBoundingClientRect();
-            if (bounds.width <= 0 || bounds.height <= 0) {
-              return;
-            }
-            const normalizedX = clamp((event.clientX - bounds.left) / bounds.width, 0, 1);
-            const normalizedY = clamp((event.clientY - bounds.top) / bounds.height, 0, 1);
-            centerCameraOnPoint(normalizedX * STAGE_WIDTH, normalizedY * STAGE_HEIGHT);
-          }}
-        >
-          <svg viewBox={`0 0 ${STAGE_WIDTH} ${STAGE_HEIGHT}`} preserveAspectRatio="none" aria-hidden>
-            {rooms.map((room) => (
+        {!minimapCollapsed && (
+          <button
+            type="button"
+            className="camera-minimap-surface"
+            onClick={(event) => {
+              const bounds = event.currentTarget.getBoundingClientRect();
+              if (bounds.width <= 0 || bounds.height <= 0) {
+                return;
+              }
+              const normalizedX = clamp((event.clientX - bounds.left) / bounds.width, 0, 1);
+              const normalizedY = clamp((event.clientY - bounds.top) / bounds.height, 0, 1);
+              centerCameraOnPoint(normalizedX * STAGE_WIDTH, normalizedY * STAGE_HEIGHT);
+            }}
+          >
+            <svg viewBox={`0 0 ${STAGE_WIDTH} ${STAGE_HEIGHT}`} preserveAspectRatio="none" aria-hidden>
+              {rooms.map((room) => (
+                <rect
+                  key={`mini:${room.id}`}
+                  x={room.x}
+                  y={room.y}
+                  width={room.width}
+                  height={room.height}
+                  className="camera-minimap-room"
+                />
+              ))}
+              {selectedPlacement ? (
+                <circle
+                  cx={selectedPlacement.x}
+                  cy={selectedPlacement.y}
+                  r={12}
+                  className="camera-minimap-selected"
+                />
+              ) : null}
               <rect
-                key={`mini:${room.id}`}
-                x={room.x}
-                y={room.y}
-                width={room.width}
-                height={room.height}
-                className="camera-minimap-room"
+                x={viewportBox.x}
+                y={viewportBox.y}
+                width={viewportBox.width}
+                height={viewportBox.height}
+                className="camera-minimap-viewport"
               />
-            ))}
-            {selectedPlacement ? (
-              <circle
-                cx={selectedPlacement.x}
-                cy={selectedPlacement.y}
-                r={12}
-                className="camera-minimap-selected"
-              />
-            ) : null}
-            <rect
-              x={viewportBox.x}
-              y={viewportBox.y}
-              width={viewportBox.width}
-              height={viewportBox.height}
-              className="camera-minimap-viewport"
-            />
-          </svg>
-        </button>
+            </svg>
+          </button>
+        )}
       </aside>
 
       <div
