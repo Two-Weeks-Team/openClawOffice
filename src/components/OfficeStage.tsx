@@ -239,14 +239,11 @@ const EntityTokenView = memo(function EntityTokenView({
         }
       }}
     >
-      <div className="sprite-shell">
-        <div className="sprite" style={model.spriteStyle} />
-        <div className="sprite-fallback">{model.kind === "agent" ? "A" : "S"}</div>
-      </div>
+      <div className="chip-status-bar" />
       {showLabel ? (
-        <div className="token-meta">
-          <strong>{model.label}</strong>
-          {showStatus ? <span>{model.statusLabel}</span> : null}
+        <div className="chip-content">
+          <span className="chip-label">{model.label}</span>
+          {showStatus ? <span className="chip-status">{model.statusLabel}</span> : null}
         </div>
       ) : null}
     </article>

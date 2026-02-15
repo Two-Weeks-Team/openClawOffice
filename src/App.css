@@ -1346,21 +1346,24 @@ body {
   transform: translate(-50%, -51%) scale(1.05);
 }
 
-.office-stage-wrap.has-focus-selection .entity-token.is-selected .sprite-shell {
-  outline: 2px solid rgba(255, 245, 210, 0.95);
+.office-stage-wrap.has-focus-selection .entity-token.is-selected {
+  outline: 2px solid rgba(0, 243, 255, 0.9);
   outline-offset: 2px;
 }
 
-.office-stage-wrap.focus-status-error .entity-token.is-selected .sprite-shell {
-  box-shadow: 0 0 0 2px rgba(255, 190, 190, 0.88), 0 0 22px rgba(255, 126, 126, 0.58);
+.office-stage-wrap.focus-status-error .entity-token.is-selected {
+  border-color: rgba(255, 42, 109, 0.8);
+  box-shadow: 0 0 20px rgba(255, 42, 109, 0.45);
 }
 
-.office-stage-wrap.focus-status-active .entity-token.is-selected .sprite-shell {
-  box-shadow: 0 0 0 2px rgba(255, 233, 160, 0.88), 0 0 22px rgba(255, 206, 96, 0.58);
+.office-stage-wrap.focus-status-active .entity-token.is-selected {
+  border-color: rgba(0, 243, 255, 0.8);
+  box-shadow: 0 0 20px rgba(0, 243, 255, 0.45);
 }
 
-.office-stage-wrap.focus-status-ok .entity-token.is-selected .sprite-shell {
-  box-shadow: 0 0 0 2px rgba(190, 255, 220, 0.88), 0 0 22px rgba(126, 255, 186, 0.58);
+.office-stage-wrap.focus-status-ok .entity-token.is-selected {
+  border-color: rgba(110, 248, 186, 0.8);
+  box-shadow: 0 0 20px rgba(110, 248, 186, 0.45);
 }
 
 .office-stage-grid {
@@ -1654,16 +1657,103 @@ body {
 .entity-token {
   position: absolute;
   transform: translate(-50%, -50%);
-  min-width: 88px;
+  display: flex;
+  align-items: stretch;
+  width: 120px;
+  height: 28px;
   cursor: pointer;
-  border: 0;
+  border: 1px solid rgba(0, 243, 255, 0.15);
+  border-radius: 2px;
   padding: 0;
-  background: transparent;
-  color: inherit;
+  background: rgba(5, 10, 15, 0.9);
+  color: #e2e8f0;
   transition:
     opacity var(--motion-mid) ease,
     transform var(--motion-mid) ease,
-    filter var(--motion-mid) ease;
+    filter var(--motion-mid) ease,
+    border-color var(--motion-fast) ease,
+    box-shadow var(--motion-fast) ease;
+}
+
+.entity-token .chip-status-bar {
+  flex-shrink: 0;
+  width: 3px;
+  background: var(--chip-status-color, #64748b);
+  border-radius: 1px 0 0 1px;
+}
+
+.entity-token .chip-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 2px 8px;
+  gap: 1px;
+}
+
+.entity-token .chip-label {
+  font-family: "JetBrains Mono", "Space Grotesk", monospace;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  -webkit-mask-image: linear-gradient(to right, #000 85%, transparent 100%);
+  mask-image: linear-gradient(to right, #000 85%, transparent 100%);
+}
+
+.entity-token .chip-status {
+  font-family: "JetBrains Mono", "Space Grotesk", monospace;
+  font-size: 9px;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.entity-token:hover {
+  border-color: rgba(0, 243, 255, 0.35);
+  background: rgba(10, 20, 30, 0.95);
+}
+
+.entity-token.is-active {
+  --chip-status-color: #00f3ff;
+  box-shadow: 0 0 10px rgba(0, 243, 255, 0.15);
+}
+
+.entity-token.is-idle {
+  --chip-status-color: #64748b;
+  opacity: 0.8;
+}
+
+.entity-token.is-error {
+  --chip-status-color: #ff2a6d;
+  border-color: rgba(255, 42, 109, 0.35);
+  animation: chip-glitch 1.2s ease-in-out infinite;
+}
+
+.entity-token.is-ok {
+  --chip-status-color: #05d5fa;
+  box-shadow: 0 0 8px rgba(5, 213, 250, 0.12);
+}
+
+.entity-token.is-offline {
+  --chip-status-color: #475569;
+  opacity: 0.5;
+}
+
+@keyframes chip-glitch {
+  0%, 100% {
+    border-color: rgba(255, 42, 109, 0.35);
+  }
+  10%, 30% {
+    border-color: rgba(255, 42, 109, 0.6);
+  }
+  20% {
+    border-color: rgba(255, 42, 109, 0.2);
+  }
 }
 
 .entity-cluster {
@@ -1727,107 +1817,30 @@ body {
 }
 
 .entity-token:focus-visible {
-  outline: none;
-}
-
-.entity-token:focus-visible .sprite-shell {
-  outline: 2px solid rgba(182, 239, 255, 0.9);
+  outline: 2px solid rgba(0, 243, 255, 0.8);
   outline-offset: 2px;
 }
 
-.entity-token .sprite-shell {
-  position: relative;
-  width: 48px;
-  height: 48px;
-  margin: 0 auto;
-  border-radius: 14px;
-  border: 1px solid rgba(198, 240, 255, 0.4);
-  background: rgba(17, 49, 67, 0.92);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 7px 14px rgba(0, 0, 0, 0.3);
-}
-
-.entity-token .sprite-shell::before,
-.entity-token .sprite-shell::after {
-  content: "";
-  position: absolute;
-  pointer-events: none;
-  border-radius: 16px;
-  opacity: 0;
-}
-
-.entity-token .sprite {
-  position: absolute;
-  width: 16px;
-  height: 16px;
-  image-rendering: pixelated;
-  transform: scale(2.2);
-  opacity: 0.96;
-}
-
-.entity-token .sprite-fallback {
-  position: absolute;
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: rgba(211, 247, 255, 0.95);
-}
-
-.entity-token .token-meta {
-  margin-top: 6px;
-  text-align: center;
-}
-
-.entity-token .token-meta strong {
-  display: block;
-  font-size: 0.78rem;
-  line-height: 1.1;
-}
-
-.entity-token .token-meta span {
-  font-size: 0.67rem;
-  color: #b0dceb;
-}
-
-.office-stage-wrap .entity-token .sprite-shell,
-.office-stage-wrap .entity-token .token-meta,
-.office-stage-wrap .entity-token .sprite {
-  transition:
-    width var(--motion-mid) ease,
-    height var(--motion-mid) ease,
-    transform var(--motion-mid) ease,
-    opacity var(--motion-mid) ease;
-}
-
+/* LOD responsive chip sizing */
 .office-stage-wrap.lod-distant .entity-token {
-  min-width: 56px;
+  width: 80px;
+  height: 22px;
 }
 
-.office-stage-wrap.lod-distant .entity-token .sprite-shell {
-  width: 36px;
-  height: 36px;
-  border-radius: 11px;
+.office-stage-wrap.lod-distant .entity-token .chip-label {
+  font-size: 9px;
 }
 
-.office-stage-wrap.lod-distant .entity-token .sprite {
-  transform: scale(1.78);
-}
-
-.office-stage-wrap.lod-distant .entity-token .sprite-fallback {
-  font-size: 0.62rem;
-}
-
-.office-stage-wrap.lod-distant .entity-token .token-meta {
-  opacity: 0;
-}
-
-.office-stage-wrap.lod-mid .entity-token .token-meta span {
+.office-stage-wrap.lod-distant .entity-token .chip-status {
   display: none;
 }
 
-.office-stage-wrap.lod-mid .entity-token .token-meta strong {
-  font-size: 0.7rem;
+.office-stage-wrap.lod-mid .entity-token .chip-status {
+  display: none;
+}
+
+.office-stage-wrap.lod-mid .entity-token .chip-label {
+  font-size: 10px;
 }
 
 .office-stage-wrap.lod-distant .bubble-lane-overlay {
@@ -2025,80 +2038,71 @@ body {
   }
 }
 
-.entity-token.is-active .sprite-shell {
-  box-shadow: 0 0 0 2px rgba(255, 207, 117, 0.3), 0 7px 14px rgba(0, 0, 0, 0.3);
+.entity-token.priority-critical {
+  border-color: rgba(255, 42, 109, 0.6);
+  box-shadow: 0 0 12px rgba(255, 42, 109, 0.3);
 }
 
-.entity-token.is-idle .sprite-shell {
-  box-shadow: 0 0 0 2px rgba(111, 232, 255, 0.28), 0 7px 14px rgba(0, 0, 0, 0.3);
+.entity-token.priority-critical .chip-label {
+  color: #ffd2d2;
 }
 
-.entity-token.is-error .sprite-shell {
-  box-shadow: 0 0 0 2px rgba(255, 142, 142, 0.35), 0 7px 14px rgba(0, 0, 0, 0.3);
+.entity-token.priority-high {
+  border-color: rgba(255, 200, 112, 0.5);
+  box-shadow: 0 0 10px rgba(255, 200, 112, 0.2);
 }
 
-.entity-token.is-ok .sprite-shell {
-  box-shadow: 0 0 0 2px rgba(130, 255, 190, 0.3), 0 7px 14px rgba(0, 0, 0, 0.3);
-}
-
-.entity-token.priority-critical .sprite-shell {
-  box-shadow: 0 0 0 2px rgba(255, 166, 166, 0.6), 0 0 20px rgba(255, 124, 124, 0.45);
-}
-
-.entity-token.priority-critical .token-meta strong {
-  color: #ffe3e3;
-}
-
-.entity-token.priority-high .sprite-shell {
-  box-shadow: 0 0 0 2px rgba(255, 221, 156, 0.52), 0 0 15px rgba(255, 210, 126, 0.3);
-}
-
-.entity-token.priority-high .token-meta strong {
+.entity-token.priority-high .chip-label {
   color: #fff2cc;
 }
 
-.entity-token.alert-critical .token-meta span {
-  color: #ffd2d2;
+.entity-token.alert-critical .chip-status {
+  color: #ff8a8a;
 }
 
 .entity-token.is-occluded {
   opacity: 0.63;
 }
 
-.entity-token.is-selected .sprite-shell {
-  box-shadow: 0 0 0 2px rgba(255, 244, 171, 0.72), 0 0 16px rgba(255, 205, 111, 0.55);
+.entity-token.is-selected {
+  border-color: rgba(0, 243, 255, 0.8);
+  box-shadow: 0 0 16px rgba(0, 243, 255, 0.35);
 }
 
-.entity-token.is-selected .token-meta strong {
-  color: #fff7d2;
+.entity-token.is-selected .chip-label {
+  color: #fff;
 }
 
-.entity-token.is-pinned .sprite-shell {
-  box-shadow: 0 0 0 2px rgba(255, 206, 120, 0.74), 0 0 18px rgba(255, 188, 92, 0.5);
+.entity-token.is-pinned {
+  border-color: rgba(255, 200, 112, 0.7);
+  box-shadow: 0 0 14px rgba(255, 200, 112, 0.3);
 }
 
-.entity-token.is-pinned .token-meta strong {
+.entity-token.is-pinned .chip-label {
   color: #ffecbf;
 }
 
-.entity-token.is-watched .sprite-shell {
-  box-shadow: 0 0 0 2px rgba(146, 236, 255, 0.78), 0 0 20px rgba(122, 214, 255, 0.55);
+.entity-token.is-watched {
+  border-color: rgba(0, 243, 255, 0.6);
+  box-shadow: 0 0 14px rgba(0, 243, 255, 0.25);
 }
 
-.entity-token.is-watched .token-meta strong {
+.entity-token.is-watched .chip-label {
   color: #dff8ff;
 }
 
-.entity-token.is-linked .sprite-shell {
-  box-shadow: 0 0 0 2px rgba(166, 230, 255, 0.78), 0 0 18px rgba(125, 212, 255, 0.5);
+.entity-token.is-linked {
+  border-color: rgba(0, 243, 255, 0.5);
+  box-shadow: 0 0 12px rgba(0, 243, 255, 0.2);
 }
 
-.entity-token.is-linked .token-meta strong {
+.entity-token.is-linked .chip-label {
   color: #dff6ff;
 }
 
-.entity-token.is-filter-hit .sprite-shell {
-  box-shadow: 0 0 0 2px rgba(180, 248, 214, 0.72), 0 0 14px rgba(148, 255, 206, 0.45);
+.entity-token.is-filter-hit {
+  border-color: rgba(110, 248, 186, 0.6);
+  box-shadow: 0 0 10px rgba(110, 248, 186, 0.2);
 }
 
 .entity-token.is-filtered-out {
@@ -2123,50 +2127,39 @@ body {
   filter: saturate(0.84) brightness(0.92);
 }
 
-.entity-token.motion-spawn .sprite-shell::before {
-  inset: -8px;
-  border: 1px solid rgba(255, 219, 143, 0.78);
-  opacity: 0.95;
-  animation: spawn-pulse 900ms ease-out 2 forwards;
+.entity-token.motion-spawn {
+  animation: chip-spawn-pulse 900ms ease-out 2;
 }
 
-.entity-token.motion-run .sprite-shell::after {
-  inset: -8px;
-  border: 1px dashed rgba(255, 217, 128, 0.72);
-  opacity: 0.78;
-  animation: run-orbit 1.9s linear infinite;
+.entity-token.motion-run {
+  box-shadow: 0 0 12px rgba(0, 243, 255, 0.25);
 }
 
-.entity-token.motion-start .sprite-shell::after {
-  border-color: rgba(255, 237, 179, 0.94);
-  opacity: 1;
-  animation: run-orbit-start 720ms linear 3;
+.entity-token.motion-run .chip-status-bar {
+  animation: chip-run-glow 1.9s linear infinite;
 }
 
-.entity-token.motion-start .token-meta strong {
-  animation: start-pop 520ms ease-out;
+.entity-token.motion-start {
+  animation: chip-start-pop 520ms ease-out;
 }
 
-.entity-token.motion-error {
-  animation: error-shake 520ms ease-in-out infinite;
+.entity-token.motion-start .chip-status-bar {
+  animation: chip-run-glow 720ms linear 3;
 }
 
-.entity-token.motion-error .sprite-shell {
-  animation: error-glow 760ms ease-in-out infinite;
+.entity-token.motion-error .chip-status-bar {
+  animation: chip-error-glow 760ms ease-in-out infinite;
 }
 
 .entity-token.motion-error .bubble {
   border-color: rgba(255, 159, 159, 0.66);
 }
 
-.entity-token.motion-end .sprite-shell::before {
-  inset: -6px;
-  border: 1px solid rgba(146, 255, 194, 0.74);
-  opacity: 0.9;
-  animation: end-settle 820ms ease-out 2;
+.entity-token.motion-end {
+  animation: chip-end-settle 820ms ease-out 2;
 }
 
-.entity-token.motion-end .token-meta span {
+.entity-token.motion-end .chip-status {
   color: #caffe1;
 }
 
@@ -2177,6 +2170,54 @@ body {
 .entity-token.motion-cleanup .bubble {
   animation: bubble-fade-in 160ms ease-out;
   opacity: 0.64;
+}
+
+@keyframes chip-spawn-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 rgba(0, 243, 255, 0);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(0, 243, 255, 0.4);
+  }
+}
+
+@keyframes chip-run-glow {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+@keyframes chip-start-pop {
+  0% {
+    transform: translate(-50%, -50%) scale(0.95);
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.05);
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@keyframes chip-error-glow {
+  0%, 100% {
+    background: #ff2a6d;
+  }
+  50% {
+    background: #ff5a8d;
+  }
+}
+
+@keyframes chip-end-settle {
+  0%, 100% {
+    box-shadow: 0 0 0 rgba(110, 248, 186, 0);
+  }
+  50% {
+    box-shadow: 0 0 15px rgba(110, 248, 186, 0.35);
+  }
 }
 
 @keyframes spawn-pulse {
@@ -3937,9 +3978,7 @@ body {
   .hero-bar,
   .run-link,
   .entity-token,
-  .entity-token .sprite-shell,
-  .entity-token .sprite-shell::before,
-  .entity-token .sprite-shell::after,
+  .entity-token .chip-status-bar,
   .entity-token .bubble,
   .bubble-lane-card,
   .focus-fog-layer,
