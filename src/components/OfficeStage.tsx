@@ -207,16 +207,89 @@ function bubbleAgeLabel(ageMs: number): string {
   return `${Math.floor(ageMs / 3_600_000)}h`;
 }
 
+type EntityDatapadProps = {
+  entity: OfficeEntity;
+  run?: OfficeRun;
+  generatedAt: number;
+};
+
+const EntityDatapad = memo(function EntityDatapad({
+  entity,
+  run,
+  generatedAt,
+}: EntityDatapadProps) {
+  const durationText = useMemo(() => {
+    if (entity.kind === "subagent" && run) {
+      const startTime = run.startedAt ?? run.createdAt;
+      const endTime = run.endedAt ?? generatedAt;
+      const durationMs = endTime - startTime;
+      if (durationMs < 1000) return "<1s";
+      if (durationMs < 60_000) return `${Math.floor(durationMs / 1000)}s`;
+      if (durationMs < 3_600_000) return `${Math.floor(durationMs / 60_000)}m ${Math.floor((durationMs % 60_000) / 1000)}s`;
+      return `${Math.floor(durationMs / 3_600_000)}h ${Math.floor((durationMs % 3_600_000) / 60_000)}m`;
+    }
+    if (entity.lastUpdatedAt) {
+      const age = generatedAt - entity.lastUpdatedAt;
+      if (age < 60_000) return `${Math.max(1, Math.floor(age / 1000))}s ago`;
+      if (age < 3_600_000) return `${Math.floor(age / 60_000)}m ago`;
+      return `${Math.floor(age / 3_600_000)}h ago`;
+    }
+    return "—";
+  }, [entity, run, generatedAt]);
+
+  const statusLabel = entity.kind === "agent"
+    ? `${entity.sessions} session${entity.sessions === 1 ? "" : "s"}`
+    : entity.status;
+
+  return (
+    <div className="entity-datapad">
+      <div className="datapad-header">{entity.label}</div>
+      <div className="datapad-row">
+        <span className="datapad-label">Status</span>
+        <span className={`datapad-value datapad-status-${entity.status}`}>
+          <span className="datapad-status-dot" />
+          {statusLabel}
+        </span>
+      </div>
+      <div className="datapad-row">
+        <span className="datapad-label">{entity.kind === "subagent" ? "Duration" : "Last active"}</span>
+        <span className="datapad-value">{durationText}</span>
+      </div>
+      {entity.kind === "subagent" && entity.parentAgentId ? (
+        <div className="datapad-row">
+          <span className="datapad-label">Parent</span>
+          <span className="datapad-value datapad-parent">{entity.parentAgentId}</span>
+        </div>
+      ) : null}
+      {entity.bubble ? (
+        <div className="datapad-bubble">"{entity.bubble}"</div>
+      ) : entity.task ? (
+        <div className="datapad-bubble">"{entity.task}"</div>
+      ) : null}
+    </div>
+  );
+});
+
 type EntityTokenViewProps = {
   model: StageEntityRenderModel;
   lodLevel: StageLodLevel;
+  entity: OfficeEntity;
+  run?: OfficeRun;
+  generatedAt: number;
+  isHovered: boolean;
   onSelectEntity?: (entityId: string, mode?: "single" | "toggle") => void;
+  onHoverEntity?: (entityId: string | null) => void;
 };
 
 const EntityTokenView = memo(function EntityTokenView({
   model,
   lodLevel,
+  entity,
+  run,
+  generatedAt,
+  isHovered,
   onSelectEntity,
+  onHoverEntity,
 }: EntityTokenViewProps) {
   const showLabel = lodLevel !== "distant";
   const showStatus = lodLevel === "detail";
@@ -238,6 +311,8 @@ const EntityTokenView = memo(function EntityTokenView({
           onSelectEntity?.(model.id, "single");
         }
       }}
+      onMouseEnter={() => onHoverEntity?.(model.id)}
+      onMouseLeave={() => onHoverEntity?.(null)}
     >
       <div className="chip-status-bar" />
       {showLabel ? (
@@ -245,6 +320,9 @@ const EntityTokenView = memo(function EntityTokenView({
           <span className="chip-label">{model.label}</span>
           {showStatus ? <span className="chip-status">{model.statusLabel}</span> : null}
         </div>
+      ) : null}
+      {isHovered ? (
+        <EntityDatapad entity={entity} run={run} generatedAt={generatedAt} />
       ) : null}
     </article>
   );
@@ -282,6 +360,7 @@ export function OfficeStage({
   });
   const [clusteringEnabled, setClusteringEnabled] = useState(true);
   const [minimapCollapsed, setMinimapCollapsed] = useState(false);
+  const [hoveredEntityId, setHoveredEntityId] = useState<string | null>(null);
   const [expandedClusterIds, setExpandedClusterIds] = useState<string[]>([]);
   const [pinnedBubbleEntityIds, setPinnedBubbleEntityIds] = useState<string[]>(() =>
     loadBubbleEntityIds(BUBBLE_PINNED_STORAGE_KEY),
@@ -1526,14 +1605,24 @@ export function OfficeStage({
         );
       })}
 
-      {entityRenderModels.map((model) => (
-        <EntityTokenView
-          key={model.id}
-          model={model}
-          lodLevel={lodLevel}
-          onSelectEntity={onSelectEntity}
-        />
-      ))}
+      {entityRenderModels.map((model) => {
+        const entity = entityById.get(model.id);
+        if (!entity) return null;
+        const run = entity.kind === "subagent" && entity.runId ? runById.get(entity.runId) : undefined;
+        return (
+          <EntityTokenView
+            key={model.id}
+            model={model}
+            lodLevel={lodLevel}
+            entity={entity}
+            run={run}
+            generatedAt={snapshot.generatedAt}
+            isHovered={hoveredEntityId === model.id}
+            onSelectEntity={onSelectEntity}
+            onHoverEntity={setHoveredEntityId}
+          />
+        );
+      })}
         </div>
       </div>
     </div>
