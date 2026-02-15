@@ -26,7 +26,6 @@ describe("buildStageEntityRenderModels", () => {
 
     const models = buildStageEntityRenderModels({
       placements: layoutState.placements,
-      occlusionByRoom: new Map(),
       generatedAt: snapshot.generatedAt,
       runById: new Map(snapshot.runs.map((run) => [run.runId, run] as const)),
       selectedEntityIdSet: new Set([target?.entity.id ?? ""]),
@@ -106,7 +105,6 @@ describe("buildStageEntityRenderModels", () => {
 
     const models = buildStageEntityRenderModels({
       placements,
-      occlusionByRoom: new Map(),
       generatedAt: now,
       runById: new Map(),
       selectedEntityIdSet: new Set<string>(),
@@ -182,7 +180,6 @@ describe("buildStageEntityRenderModels", () => {
 
     const models = buildStageEntityRenderModels({
       placements,
-      occlusionByRoom: new Map(),
       generatedAt: now,
       runById: new Map(),
       selectedEntityIdSet: new Set<string>(),
@@ -225,7 +222,6 @@ describe("buildStageEntityRenderModels", () => {
     });
     const params = {
       placements: layoutState.placements,
-      occlusionByRoom: new Map(),
       generatedAt: snapshot.generatedAt,
       runById: new Map(snapshot.runs.map((run) => [run.runId, run] as const)),
       selectedEntityIdSet: new Set<string>(),
