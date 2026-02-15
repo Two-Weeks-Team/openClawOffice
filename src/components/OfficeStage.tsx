@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { AlertSignal } from "../lib/alerts";
 import { buildBubbleLaneLayout, type BubbleLaneCandidate } from "../lib/bubble-lanes";
 import { buildEntityClusters } from "../lib/entity-clustering";
