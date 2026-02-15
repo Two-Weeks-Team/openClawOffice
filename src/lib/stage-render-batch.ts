@@ -42,10 +42,6 @@ export type StageEntityRenderModel = {
     top: number;
     zIndex: number;
   };
-  spriteStyle: {
-    backgroundImage: string;
-    backgroundPosition: string;
-  };
   isSelected: boolean;
   priorityBand: StagePriorityBand;
   priorityScore: number;
@@ -80,8 +76,6 @@ export type BuildStageEntityRenderModelsInput = {
   errorShakeWindowMs: number;
 };
 
-const MAX_SPRITE_STYLE_CACHE_SIZE = 1_024;
-const SPRITE_STYLE_CACHE = new Map<string, { backgroundImage: string; backgroundPosition: string }>();
 const STATUS_PRIORITY_WEIGHT: Record<OfficeEntity["status"], number> = {
   active: 130,
   idle: 36,
@@ -89,49 +83,6 @@ const STATUS_PRIORITY_WEIGHT: Record<OfficeEntity["status"], number> = {
   ok: 65,
   error: 260,
 };
-
-function hashString(input: string): number {
-  let hash = 0;
-  for (let index = 0; index < input.length; index += 1) {
-    hash = (hash * 33 + input.charCodeAt(index)) >>> 0;
-  }
-  return hash;
-}
-
-export function spriteStyleForEntity(entityId: string): {
-  backgroundImage: string;
-  backgroundPosition: string;
-} {
-  const cached = SPRITE_STYLE_CACHE.get(entityId);
-  if (cached) {
-    return cached;
-  }
-
-  const framesPerRow = 54;
-  const frameSize = 16;
-  const spacing = 1;
-  const maxRows = 12;
-  const totalFrames = framesPerRow * maxRows;
-  const frame = hashString(entityId) % totalFrames;
-  const col = frame % framesPerRow;
-  const row = Math.floor(frame / framesPerRow);
-  const stride = frameSize + spacing;
-
-  const spriteStyle = {
-    backgroundImage: 'url("/assets/kenney/characters/characters_spritesheet.png")',
-    backgroundPosition: `-${col * stride}px -${row * stride}px`,
-  };
-
-  if (SPRITE_STYLE_CACHE.size >= MAX_SPRITE_STYLE_CACHE_SIZE) {
-    const oldestKey = SPRITE_STYLE_CACHE.keys().next().value;
-    if (typeof oldestKey === "string") {
-      SPRITE_STYLE_CACHE.delete(oldestKey);
-    }
-  }
-
-  SPRITE_STYLE_CACHE.set(entityId, spriteStyle);
-  return spriteStyle;
-}
 
 function statusClass(entity: OfficeEntity): string {
   if (entity.status === "active") {
@@ -382,7 +333,6 @@ export function buildStageEntityRenderModels(
         top: placement.y,
         zIndex: input.entityZOffset + Math.round(placement.y) + renderPriorityBoost,
       },
-      spriteStyle: spriteStyleForEntity(entity.id),
       isSelected,
       priorityBand: priority.band,
       priorityScore: priority.score,
