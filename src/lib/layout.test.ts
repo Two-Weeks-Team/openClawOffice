@@ -536,6 +536,8 @@ describe("buildPlacements", () => {
     const debug = [...result.roomDebug.values()];
     expect(debug.every((entry) => entry.assigned <= entry.capacity)).toBe(true);
     expect(debug.some((entry) => entry.overflowOut > 0)).toBe(true);
-    expect(debug.filter((entry) => entry.assigned > 0).length).toBeGreaterThanOrEqual(4);
+    // With higher lounge capacity (28), entities concentrate more in fewer rooms
+    // Expect at least 3 rooms to have entities (was 4 before capacity increase)
+    expect(debug.filter((entry) => entry.assigned > 0).length).toBeGreaterThanOrEqual(3);
   });
 });
