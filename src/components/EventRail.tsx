@@ -317,13 +317,15 @@ export function EventRail({
         <button
           type="button"
           className="section-toggle"
+          aria-expanded={!isFiltersCollapsed}
+          aria-controls="timeline-filters-content"
           onClick={() => setIsFiltersCollapsed((v) => !v)}
         >
           <span>Filters</span>
           <span>{isFiltersCollapsed ? "+" : "−"}</span>
         </button>
         {!isFiltersCollapsed && (
-          <div className="section-content">
+          <div id="timeline-filters-content" className="section-content">
             <label>
               Run
               <input
@@ -398,13 +400,15 @@ export function EventRail({
         <button
           type="button"
           className="section-toggle"
+          aria-expanded={!isControlsCollapsed}
+          aria-controls="timeline-controls-content"
           onClick={() => setIsControlsCollapsed((v) => !v)}
         >
           <span>Playback</span>
           <span>{isControlsCollapsed ? "+" : "−"}</span>
         </button>
         {!isControlsCollapsed && (
-          <div className="section-content">
+          <div id="timeline-controls-content" className="section-content">
             <div className="timeline-buttons">
               <button
                 type="button"
@@ -548,13 +552,15 @@ export function EventRail({
         <button
           type="button"
           className="section-toggle"
+          aria-expanded={!isLaneModeCollapsed}
+          aria-controls="timeline-lane-mode-content"
           onClick={() => setIsLaneModeCollapsed((v) => !v)}
         >
           <span>Lane Options</span>
           <span>{isLaneModeCollapsed ? "+" : "−"}</span>
         </button>
         {!isLaneModeCollapsed && (
-          <div className="section-content">
+          <div id="timeline-lane-mode-content" className="section-content">
             <label>
               Lane
               <select
@@ -603,13 +609,15 @@ export function EventRail({
         <button
           type="button"
           className="section-toggle"
+          aria-expanded={!isSegmentsCollapsed}
+          aria-controls="timeline-segments-content"
           onClick={() => setIsSegmentsCollapsed((v) => !v)}
         >
           <span>Segments ({loadedSegments.length}/{timelineSegments.length})</span>
           <span>{isSegmentsCollapsed ? "+" : "−"}</span>
         </button>
         {!isSegmentsCollapsed && (
-          <div className="section-content">
+          <div id="timeline-segments-content" className="section-content">
             {timelineSegments.length > 0 ? (
               <ol className="timeline-segment-list">
                 {timelineSegments.slice(0, 6).map((segment, index) => {
