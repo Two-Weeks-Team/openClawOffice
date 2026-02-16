@@ -99,7 +99,7 @@ const DEFAULT_ZONE_CONFIG: ZoneLayoutConfig = {
   version: 1,
   priorityOrder: DEFAULT_PRIORITY_ORDER,
   recentWindowMs: 5 * 60_000,
-  parentAffinityPx: 64,
+  parentAffinityPx: 0,
   defaultOverflowZoneId: "ops",
   rooms: [
     {
