@@ -1878,7 +1878,7 @@ function App() {
           className="workspace-tabpanel"
           hidden={activeWorkspaceTab !== "timeline"}
         >
-          <p className="workspace-tab-note">Timeline playback and filtering controls are isolated in this tab.</p>
+          <p className="workspace-tab-note">Timeline panel is always visible on the right. Use the collapsible sections for playback and filtering.</p>
         </section>
 
         <section
@@ -1961,8 +1961,8 @@ function App() {
           className={`workspace-panel timeline ${workspacePanelPlacementClass(
             workspaceLayout,
             "timeline",
-          )} ${activeWorkspaceTab === "timeline" ? "" : "is-hidden-by-tab"}`}
-          hidden={activeWorkspaceTab !== "timeline"}
+          )}`}
+          hidden={workspaceLayout.timeline === "hidden"}
         >
           <EventRail
             roomByAgentId={timelineRoomByAgentId}

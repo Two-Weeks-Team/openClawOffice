@@ -2582,9 +2582,48 @@ body {
   line-height: 1.4;
 }
 
-.timeline-filters {
+.event-rail .section-toggle {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: rgba(15, 50, 70, 0.6);
+  border: none;
+  border-bottom: 1px solid rgba(146, 226, 255, 0.15);
+  color: #a8dff0;
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.event-rail .section-toggle:hover {
+  background: rgba(20, 60, 85, 0.7);
+}
+
+.event-rail .section-content {
   padding: 8px 10px;
-  border-bottom: 1px solid rgba(146, 226, 255, 0.2);
+  border-bottom: 1px solid rgba(146, 226, 255, 0.15);
+}
+
+.timeline-filters.is-collapsed,
+.timeline-controls.is-collapsed,
+.timeline-lane-mode.is-collapsed,
+.timeline-segments.is-collapsed {
+  border-bottom: none;
+}
+
+.timeline-filters.is-collapsed .section-toggle,
+.timeline-controls.is-collapsed .section-toggle,
+.timeline-lane-mode.is-collapsed .section-toggle,
+.timeline-segments.is-collapsed .section-toggle {
+  border-bottom: 1px solid rgba(146, 226, 255, 0.1);
+}
+
+.timeline-filters .section-content {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
   gap: 6px;
@@ -2621,13 +2660,12 @@ body {
   cursor: pointer;
 }
 
-.timeline-controls {
-  padding: 8px 10px;
+.timeline-controls .section-content {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   gap: 8px;
-  border-bottom: 1px solid rgba(146, 226, 255, 0.16);
 }
 
 .timeline-buttons {
@@ -2710,10 +2748,9 @@ body {
   color: #8ec5d8;
 }
 
-.timeline-lane-mode {
-  padding: 8px 10px;
-  border-bottom: 1px solid rgba(146, 226, 255, 0.12);
+.timeline-lane-mode .section-content {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 8px;
   align-items: flex-end;
@@ -2767,20 +2804,9 @@ body {
   opacity: 0.45;
 }
 
-.timeline-segments {
-  padding: 8px 10px;
-  border-bottom: 1px solid rgba(146, 226, 255, 0.12);
+.timeline-segments .section-content {
   display: grid;
   gap: 7px;
-}
-
-.timeline-segments header {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.62rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: #93cadd;
 }
 
 .timeline-segment-list {

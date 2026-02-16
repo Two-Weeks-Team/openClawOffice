@@ -107,6 +107,10 @@ export function EventRail({
   const [compressionEnabled, setCompressionEnabled] = useState(true);
   const [expandedSummaryKeys, setExpandedSummaryKeys] = useState<string[]>([]);
   const [loadedSegmentCount, setLoadedSegmentCount] = useState(INITIAL_SEGMENT_LOAD_COUNT);
+  const [isFiltersCollapsed, setIsFiltersCollapsed] = useState(true);
+  const [isControlsCollapsed, setIsControlsCollapsed] = useState(true);
+  const [isLaneModeCollapsed, setIsLaneModeCollapsed] = useState(true);
+  const [isSegmentsCollapsed, setIsSegmentsCollapsed] = useState(true);
 
   const index = useMemo(() => buildTimelineIndex(events, runGraph), [events, runGraph]);
   const filteredDesc = useMemo(() => filterTimelineEvents(index, filters), [index, filters]);
@@ -306,192 +310,219 @@ export function EventRail({
   return (
     <aside className="event-rail">
       <header>
-        <h2>Lifecycle Timeline</h2>
-        <p>Multi-lane timeline with room/agent/subagent grouping, filters, and playback.</p>
+        <h2>Timeline</h2>
       </header>
 
-      <section className="timeline-filters">
-        <label>
-          Run
-          <input
-            type="text"
-            placeholder="runId"
-            list="timeline-run-options"
-            value={filters.runId}
-            onChange={(event) => {
-              onFiltersChange({ ...filters, runId: event.target.value });
-              resetLoadedSegments();
-            }}
-          />
-          <datalist id="timeline-run-options">
-            {replayRunOptions.map((runId) => (
-              <option key={runId} value={runId} />
-            ))}
-          </datalist>
-        </label>
-        <label>
-          Agent
-          <input
-            type="text"
-            placeholder="agentId"
-            value={filters.agentId}
-            onChange={(event) => {
-              onFiltersChange({ ...filters, agentId: event.target.value });
-              resetLoadedSegments();
-            }}
-          />
-        </label>
-        <label>
-          Status
-          <select
-            value={filters.status}
-            onChange={(event) => {
-              onFiltersChange({
-                ...filters,
-                status: event.target.value as TimelineStatusFilter,
-              });
-              resetLoadedSegments();
-            }}
-          >
-            <option value="all">ALL</option>
-            <option value="spawn">SPAWN</option>
-            <option value="start">START</option>
-            <option value="end">END</option>
-            <option value="error">ERROR</option>
-            <option value="cleanup">CLEANUP</option>
-          </select>
-        </label>
+      <section className={`timeline-filters ${isFiltersCollapsed ? "is-collapsed" : ""}`}>
         <button
           type="button"
-          className="timeline-clear"
-          onClick={() => {
-            onFiltersChange({ runId: "", agentId: "", status: "all" });
-            onActiveEventIdChange(null);
-            setManualLaneKey(null);
-            setReplayStatus("idle");
-            setLoopEnabled(false);
-            setLoopRange(null);
-            setExpandedSummaryKeys([]);
-            resetLoadedSegments();
-          }}
+          className="section-toggle"
+          aria-expanded={!isFiltersCollapsed}
+          aria-controls="timeline-filters-content"
+          onClick={() => setIsFiltersCollapsed((v) => !v)}
         >
-          Clear
+          <span>Filters</span>
+          <span>{isFiltersCollapsed ? "+" : "−"}</span>
         </button>
+        {!isFiltersCollapsed && (
+          <div id="timeline-filters-content" className="section-content">
+            <label>
+              Run
+              <input
+                type="text"
+                placeholder="runId"
+                list="timeline-run-options"
+                value={filters.runId}
+                onChange={(event) => {
+                  onFiltersChange({ ...filters, runId: event.target.value });
+                  resetLoadedSegments();
+                }}
+              />
+              <datalist id="timeline-run-options">
+                {replayRunOptions.map((runId) => (
+                  <option key={runId} value={runId} />
+                ))}
+              </datalist>
+            </label>
+            <label>
+              Agent
+              <input
+                type="text"
+                placeholder="agentId"
+                value={filters.agentId}
+                onChange={(event) => {
+                  onFiltersChange({ ...filters, agentId: event.target.value });
+                  resetLoadedSegments();
+                }}
+              />
+            </label>
+            <label>
+              Status
+              <select
+                value={filters.status}
+                onChange={(event) => {
+                  onFiltersChange({
+                    ...filters,
+                    status: event.target.value as TimelineStatusFilter,
+                  });
+                  resetLoadedSegments();
+                }}
+              >
+                <option value="all">ALL</option>
+                <option value="spawn">SPAWN</option>
+                <option value="start">START</option>
+                <option value="end">END</option>
+                <option value="error">ERROR</option>
+                <option value="cleanup">CLEANUP</option>
+              </select>
+            </label>
+            <button
+              type="button"
+              className="timeline-clear"
+              onClick={() => {
+                onFiltersChange({ runId: "", agentId: "", status: "all" });
+                onActiveEventIdChange(null);
+                setManualLaneKey(null);
+                setReplayStatus("idle");
+                setLoopEnabled(false);
+                setLoopRange(null);
+                setExpandedSummaryKeys([]);
+                resetLoadedSegments();
+              }}
+            >
+              Clear
+            </button>
+          </div>
+        )}
       </section>
 
-      <section className="timeline-controls">
-        <div className="timeline-buttons">
-          <button
-            type="button"
-            onClick={() => {
-              const prevId = nextPlaybackEventId(playbackEvents, activeEventId, -1);
-              if (prevId) {
-                onActiveEventIdChange(prevId);
-                setReplayStatus("paused");
-              }
-            }}
-            disabled={playbackEvents.length === 0 || activePlaybackIndex <= 0}
-          >
-            Prev
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setReplayStatus((value) => (value === "playing" ? "paused" : "playing"));
-            }}
-            disabled={playbackEvents.length === 0}
-          >
-            {isPlaying ? "Pause" : "Play"}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              const nextId = nextPlaybackEventId(playbackEvents, activeEventId, 1);
-              if (nextId) {
-                onActiveEventIdChange(nextId);
-                setReplayStatus("paused");
-              }
-            }}
-            disabled={playbackEvents.length === 0 || activePlaybackIndex >= playbackEvents.length - 1}
-          >
-            Next
-          </button>
-        </div>
-        <label className="timeline-speed">
-          Speed
-          <select
-            value={playbackMs}
-            onChange={(event) => {
-              setPlaybackMs(Number(event.target.value));
-            }}
-          >
-            <option value={1200}>0.8x</option>
-            <option value={800}>1x</option>
-            <option value={450}>2x</option>
-          </select>
-        </label>
-        <div className="timeline-loop-controls">
-          <button
-            type="button"
-            onClick={() => {
-              if (activePlaybackIndex < 0) {
-                return;
-              }
-              setLoopRange((prev) => ({
-                startIndex: activePlaybackIndex,
-                endIndex:
-                  prev && prev.endIndex >= activePlaybackIndex ? prev.endIndex : activePlaybackIndex,
-              }));
-            }}
-            disabled={activePlaybackIndex < 0}
-          >
-            Set A
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (activePlaybackIndex < 0) {
-                return;
-              }
-              setLoopRange((prev) => ({
-                startIndex:
-                  prev && prev.startIndex <= activePlaybackIndex ? prev.startIndex : activePlaybackIndex,
-                endIndex: activePlaybackIndex,
-              }));
-            }}
-            disabled={activePlaybackIndex < 0}
-          >
-            Set B
-          </button>
-          <label className="timeline-loop-toggle">
-            <input
-              type="checkbox"
-              checked={loopEnabled}
-              onChange={(event) => {
-                const checked = event.target.checked;
-                setLoopEnabled(checked);
-                if (checked && !normalizedLoopRange && activePlaybackIndex >= 0) {
-                  setLoopRange({
+      <section className={`timeline-controls ${isControlsCollapsed ? "is-collapsed" : ""}`}>
+        <button
+          type="button"
+          className="section-toggle"
+          aria-expanded={!isControlsCollapsed}
+          aria-controls="timeline-controls-content"
+          onClick={() => setIsControlsCollapsed((v) => !v)}
+        >
+          <span>Playback</span>
+          <span>{isControlsCollapsed ? "+" : "−"}</span>
+        </button>
+        {!isControlsCollapsed && (
+          <div id="timeline-controls-content" className="section-content">
+            <div className="timeline-buttons">
+              <button
+                type="button"
+                onClick={() => {
+                  const prevId = nextPlaybackEventId(playbackEvents, activeEventId, -1);
+                  if (prevId) {
+                    onActiveEventIdChange(prevId);
+                    setReplayStatus("paused");
+                  }
+                }}
+                disabled={playbackEvents.length === 0 || activePlaybackIndex <= 0}
+              >
+                Prev
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setReplayStatus((value) => (value === "playing" ? "paused" : "playing"));
+                }}
+                disabled={playbackEvents.length === 0}
+              >
+                {isPlaying ? "Pause" : "Play"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const nextId = nextPlaybackEventId(playbackEvents, activeEventId, 1);
+                  if (nextId) {
+                    onActiveEventIdChange(nextId);
+                    setReplayStatus("paused");
+                  }
+                }}
+                disabled={playbackEvents.length === 0 || activePlaybackIndex >= playbackEvents.length - 1}
+              >
+                Next
+              </button>
+            </div>
+            <label className="timeline-speed">
+              Speed
+              <select
+                value={playbackMs}
+                onChange={(event) => {
+                  setPlaybackMs(Number(event.target.value));
+                }}
+              >
+                <option value={1200}>0.8x</option>
+                <option value={800}>1x</option>
+                <option value={450}>2x</option>
+              </select>
+            </label>
+            <div className="timeline-loop-controls">
+              <button
+                type="button"
+                onClick={() => {
+                  if (activePlaybackIndex < 0) {
+                    return;
+                  }
+                  setLoopRange((prev) => ({
                     startIndex: activePlaybackIndex,
+                    endIndex:
+                      prev && prev.endIndex >= activePlaybackIndex ? prev.endIndex : activePlaybackIndex,
+                  }));
+                }}
+                disabled={activePlaybackIndex < 0}
+              >
+                Set A
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (activePlaybackIndex < 0) {
+                    return;
+                  }
+                  setLoopRange((prev) => ({
+                    startIndex:
+                      prev && prev.startIndex <= activePlaybackIndex ? prev.startIndex : activePlaybackIndex,
                     endIndex: activePlaybackIndex,
-                  });
-                }
-              }}
-              disabled={activePlaybackIndex < 0}
-            />
-            Loop
-          </label>
-          <button
-            type="button"
-            onClick={() => {
-              setLoopEnabled(false);
-              setLoopRange(null);
-            }}
-            disabled={!hasLoopRange}
-          >
-            Clear Loop
-          </button>
-        </div>
+                  }));
+                }}
+                disabled={activePlaybackIndex < 0}
+              >
+                Set B
+              </button>
+              <label className="timeline-loop-toggle">
+                <input
+                  type="checkbox"
+                  checked={loopEnabled}
+                  onChange={(event) => {
+                    const checked = event.target.checked;
+                    setLoopEnabled(checked);
+                    if (checked && !normalizedLoopRange && activePlaybackIndex >= 0) {
+                      setLoopRange({
+                        startIndex: activePlaybackIndex,
+                        endIndex: activePlaybackIndex,
+                      });
+                    }
+                  }}
+                  disabled={activePlaybackIndex < 0}
+                />
+                Loop
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  setLoopEnabled(false);
+                  setLoopRange(null);
+                }}
+                disabled={!hasLoopRange}
+              >
+                Clear Loop
+              </button>
+            </div>
+          </div>
+        )}
       </section>
 
       <section className="timeline-scrubber">
@@ -517,93 +548,115 @@ export function EventRail({
         </div>
       </section>
 
-      <section className="timeline-lane-mode">
-        <label>
-          Lane
-          <select
-            value={laneMode}
-            onChange={(event) => {
-              setLaneMode(event.target.value as TimelineLaneMode);
-              setManualLaneKey(null);
-              setCollapsedLaneKeys([]);
-              resetLoadedSegments();
-            }}
-          >
-            <option value="room">ROOM</option>
-            <option value="agent">AGENT</option>
-            <option value="subagent">SUBAGENT</option>
-          </select>
-        </label>
-        <label className="timeline-compression-toggle">
-          <input
-            type="checkbox"
-            checked={compressionEnabled}
-            onChange={(event) => {
-              setCompressionEnabled(event.target.checked);
-            }}
-          />
-          Compress dense lanes
-        </label>
+      <section className={`timeline-lane-mode ${isLaneModeCollapsed ? "is-collapsed" : ""}`}>
         <button
           type="button"
-          className="timeline-lane-action"
-          onClick={() => {
-            if (isEveryLaneCollapsed) {
-              setCollapsedLaneKeys([]);
-              return;
-            }
-            setCollapsedLaneKeys(lanes.map((lane) => lane.key));
-          }}
-          disabled={lanes.length === 0}
+          className="section-toggle"
+          aria-expanded={!isLaneModeCollapsed}
+          aria-controls="timeline-lane-mode-content"
+          onClick={() => setIsLaneModeCollapsed((v) => !v)}
         >
-          {isEveryLaneCollapsed ? "Expand all" : "Collapse all"}
+          <span>Lane Options</span>
+          <span>{isLaneModeCollapsed ? "+" : "−"}</span>
         </button>
+        {!isLaneModeCollapsed && (
+          <div id="timeline-lane-mode-content" className="section-content">
+            <label>
+              Lane
+              <select
+                value={laneMode}
+                onChange={(event) => {
+                  setLaneMode(event.target.value as TimelineLaneMode);
+                  setManualLaneKey(null);
+                  setCollapsedLaneKeys([]);
+                  resetLoadedSegments();
+                }}
+              >
+                <option value="room">ROOM</option>
+                <option value="agent">AGENT</option>
+                <option value="subagent">SUBAGENT</option>
+              </select>
+            </label>
+            <label className="timeline-compression-toggle">
+              <input
+                type="checkbox"
+                checked={compressionEnabled}
+                onChange={(event) => {
+                  setCompressionEnabled(event.target.checked);
+                }}
+              />
+              Compress dense lanes
+            </label>
+            <button
+              type="button"
+              className="timeline-lane-action"
+              onClick={() => {
+                if (isEveryLaneCollapsed) {
+                  setCollapsedLaneKeys([]);
+                  return;
+                }
+                setCollapsedLaneKeys(lanes.map((lane) => lane.key));
+              }}
+              disabled={lanes.length === 0}
+            >
+              {isEveryLaneCollapsed ? "Expand all" : "Collapse all"}
+            </button>
+          </div>
+        )}
       </section>
 
-      <section className="timeline-segments">
-        <header>
-          <strong>Segments</strong>
-          <span>
-            loaded {loadedSegments.length}/{timelineSegments.length}
-          </span>
-        </header>
-        {timelineSegments.length > 0 ? (
-          <ol className="timeline-segment-list">
-            {timelineSegments.slice(0, 6).map((segment, index) => {
-              const loaded = index < loadedSegments.length;
-              return (
-                <li key={segment.id} className={loaded ? "is-loaded" : ""}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setLoadedSegmentCount((prev) =>
-                        Math.max(prev, index + 1),
-                      );
-                    }}
-                  >
-                    <strong>{segment.label}</strong>
-                    <span>
-                      {segment.eventCount} events | {segment.runCount} runs
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ol>
-        ) : (
-          <p className="timeline-empty">No timeline segments to load.</p>
+      <section className={`timeline-segments ${isSegmentsCollapsed ? "is-collapsed" : ""}`}>
+        <button
+          type="button"
+          className="section-toggle"
+          aria-expanded={!isSegmentsCollapsed}
+          aria-controls="timeline-segments-content"
+          onClick={() => setIsSegmentsCollapsed((v) => !v)}
+        >
+          <span>Segments ({loadedSegments.length}/{timelineSegments.length})</span>
+          <span>{isSegmentsCollapsed ? "+" : "−"}</span>
+        </button>
+        {!isSegmentsCollapsed && (
+          <div id="timeline-segments-content" className="section-content">
+            {timelineSegments.length > 0 ? (
+              <ol className="timeline-segment-list">
+                {timelineSegments.slice(0, 6).map((segment, index) => {
+                  const loaded = index < loadedSegments.length;
+                  return (
+                    <li key={segment.id} className={loaded ? "is-loaded" : ""}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLoadedSegmentCount((prev) =>
+                            Math.max(prev, index + 1),
+                          );
+                        }}
+                      >
+                        <strong>{segment.label}</strong>
+                        <span>
+                          {segment.eventCount} events | {segment.runCount} runs
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ol>
+            ) : (
+              <p className="timeline-empty">No timeline segments to load.</p>
+            )}
+            {loadedSegments.length < timelineSegments.length ? (
+              <button
+                type="button"
+                className="timeline-segment-load"
+                onClick={() => {
+                  setLoadedSegmentCount((prev) => prev + 1);
+                }}
+              >
+                Load older segment
+              </button>
+            ) : null}
+          </div>
         )}
-        {loadedSegments.length < timelineSegments.length ? (
-          <button
-            type="button"
-            className="timeline-segment-load"
-            onClick={() => {
-              setLoadedSegmentCount((prev) => prev + 1);
-            }}
-          >
-            Load older segment
-          </button>
-        ) : null}
       </section>
 
       {lanes.length === 0 ? (

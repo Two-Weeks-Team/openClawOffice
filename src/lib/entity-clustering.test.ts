@@ -64,6 +64,7 @@ describe("buildEntityClusters", () => {
     const result = buildEntityClusters(placements, {
       cellSize: 80,
       minMembers: 3,
+      onlyInactive: false,
     });
 
     expect(result.clusters).toHaveLength(1);
@@ -132,7 +133,7 @@ describe("buildEntityClusters", () => {
 
     expect(result.clusters[0]?.x).toBe(220);
     expect(result.clusters[0]?.y).toBe(213);
-    expect(result.clusters[0]?.label).toContain("cluster");
+    expect(result.clusters[0]?.label).toBe("Inactive");
     expect(result.clusters[0]?.summary).toContain("3 entities");
   });
 });
