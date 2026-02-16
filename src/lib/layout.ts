@@ -15,6 +15,7 @@ type RoomRoutingSpec = {
 export type RoomSpec = {
   id: string;
   label: string;
+  description?: string;
   shape: RoomShape;
   role: EntityRole;
   x: number;
@@ -98,12 +99,13 @@ const DEFAULT_ZONE_CONFIG: ZoneLayoutConfig = {
   version: 1,
   priorityOrder: DEFAULT_PRIORITY_ORDER,
   recentWindowMs: 5 * 60_000,
-  parentAffinityPx: 64,
+  parentAffinityPx: 0,
   defaultOverflowZoneId: "ops",
   rooms: [
     {
       id: "strategy",
       label: "Strategy Room",
+      description: "Active agents executing primary tasks",
       shape: "ring",
       role: "strategy",
       x: 20,
@@ -126,16 +128,17 @@ const DEFAULT_ZONE_CONFIG: ZoneLayoutConfig = {
     {
       id: "ops",
       label: "Ops Floor",
+      description: "Standby agents ready for assignments",
       shape: "grid",
       role: "ops",
       x: 20,
       y: 240,
-      width: 360,
+      width: 720,
       height: 200,
       fill: "rgba(40, 88, 115, 0.85)",
       border: "#74d1f8",
-      capacity: 16,
-      spacing: { x: 64, y: 48 },
+      capacity: 24,
+      spacing: { x: 130, y: 48 },
       anchor: { x: 0.5, y: 0.5 },
       secondaryZoneId: "build",
       routing: {
@@ -146,35 +149,14 @@ const DEFAULT_ZONE_CONFIG: ZoneLayoutConfig = {
       },
     },
     {
-      id: "build",
-      label: "Build Pods",
-      shape: "line",
-      role: "build",
-      x: 400,
-      y: 240,
-      width: 340,
-      height: 200,
-      fill: "rgba(44, 125, 132, 0.84)",
-      border: "#8cf8dc",
-      capacity: 12,
-      spacing: { x: 56, y: 36 },
-      anchor: { x: 0.5, y: 0.52 },
-      secondaryZoneId: "ops",
-      routing: {
-        statuses: ["idle"],
-        kinds: ["agent"],
-        recentWeight: 0.1,
-        teamWeight: 0.2,
-      },
-    },
-    {
       id: "spawn",
       label: "Spawn Lab",
+      description: "Running subagents spawned by agents",
       shape: "cluster",
       role: "spawn",
-      x: 360,
+      x: 380,
       y: 50,
-      width: 320,
+      width: 360,
       height: 170,
       fill: "rgba(17, 82, 111, 0.82)",
       border: "#5ec6ff",
@@ -190,22 +172,46 @@ const DEFAULT_ZONE_CONFIG: ZoneLayoutConfig = {
       },
     },
     {
-      id: "lounge",
-      label: "Recovery Lounge",
-      shape: "cluster",
-      role: "recovery",
+      id: "build",
+      label: "Build Pods",
+      description: "Idle agents awaiting task queue",
+      shape: "grid",
+      role: "build",
       x: 20,
       y: 460,
-      width: 720,
+      width: 340,
+      height: 180,
+      fill: "rgba(44, 125, 132, 0.84)",
+      border: "#8cf8dc",
+      capacity: 12,
+      spacing: { x: 130, y: 48 },
+      anchor: { x: 0.5, y: 0.5 },
+      secondaryZoneId: "ops",
+      routing: {
+        statuses: ["idle"],
+        kinds: ["agent"],
+        recentWeight: 0.1,
+        teamWeight: 0.2,
+      },
+    },
+    {
+      id: "lounge",
+      label: "Recovery Lounge",
+      description: "Completed or errored runs awaiting review",
+      shape: "grid",
+      role: "recovery",
+      x: 380,
+      y: 460,
+      width: 360,
       height: 180,
       fill: "rgba(13, 97, 120, 0.82)",
       border: "#70f2ff",
-      capacity: 28,
-      spacing: { x: 56, y: 32 },
-      anchor: { x: 0.5, y: 0.52 },
+      capacity: 20,
+      spacing: { x: 110, y: 56 },
+      anchor: { x: 0.5, y: 0.5 },
       secondaryZoneId: "ops",
       routing: {
-        statuses: ["ok", "error", "offline"],
+        statuses: ["ok", "error"],
         kinds: ["agent", "subagent"],
         recentWeight: 0.25,
         teamWeight: 0.26,
@@ -332,6 +338,10 @@ function normalizeRoom(rawValue: unknown, fallback: RoomSpec): RoomSpec {
   const room: RoomSpec = {
     ...fallback,
     label: toString(raw.label, fallback.label),
+    description:
+      typeof raw.description === "string" && raw.description.trim().length > 0
+        ? raw.description.trim()
+        : fallback.description,
     shape: isRoomShape(raw.shape) ? raw.shape : fallback.shape,
     role: isEntityRole(raw.role) ? raw.role : fallback.role,
     x: toFiniteNumber(raw.x, fallback.x),
@@ -422,7 +432,7 @@ function compareEntities(a: OfficeEntity, b: OfficeEntity): number {
 
 function deriveRole(entity: OfficeEntity): EntityRole {
   if (entity.kind === "subagent") {
-    if (entity.status === "ok" || entity.status === "error" || entity.status === "offline") {
+    if (entity.status === "ok" || entity.status === "error") {
       return "recovery";
     }
     return "spawn";
@@ -433,7 +443,7 @@ function deriveRole(entity: OfficeEntity): EntityRole {
   if (entity.status === "idle") {
     return "build";
   }
-  if (entity.status === "error" || entity.status === "offline") {
+  if (entity.status === "error") {
     return "recovery";
   }
   return "ops";
