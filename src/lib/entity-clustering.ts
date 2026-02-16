@@ -25,6 +25,7 @@ export type EntityCluster = {
 export type BuildEntityClustersOptions = {
   cellSize?: number;
   minMembers?: number;
+  onlyInactive?: boolean;
 };
 
 const DEFAULT_CELL_SIZE = 88;
@@ -40,14 +41,14 @@ function statusBucketForEntity(entity: OfficeEntity): ClusterStatusBucket {
   return "normal";
 }
 
-function relationKeyForEntity(entity: OfficeEntity): string {
+function relationKeyForEntity(entity: OfficeEntity, roomId: string): string {
   if (entity.kind === "subagent" && entity.runId) {
     return `run:${entity.runId}`;
   }
   if (entity.kind === "subagent" && entity.parentAgentId) {
     return `parent:${entity.parentAgentId}`;
   }
-  return `agent:${entity.agentId}`;
+  return `room:${roomId}`;
 }
 
 function clusterLabel(statusBucket: ClusterStatusBucket): string {
@@ -57,7 +58,7 @@ function clusterLabel(statusBucket: ClusterStatusBucket): string {
   if (statusBucket === "active") {
     return "Active cluster";
   }
-  return "Dense cluster";
+  return "Inactive";
 }
 
 function relationSummary(relationKey: string): string {
@@ -67,7 +68,10 @@ function relationSummary(relationKey: string): string {
   if (relationKey.startsWith("parent:")) {
     return relationKey.replace(/^parent:/, "parent ");
   }
-  return relationKey.replace(/^agent:/, "agent ");
+  if (relationKey.startsWith("room:")) {
+    return relationKey.replace(/^room:/, "");
+  }
+  return relationKey;
 }
 
 export function buildEntityClusters(
@@ -79,13 +83,18 @@ export function buildEntityClusters(
 } {
   const cellSize = Math.max(32, options.cellSize ?? DEFAULT_CELL_SIZE);
   const minMembers = Math.max(2, options.minMembers ?? DEFAULT_MIN_MEMBERS);
+  const onlyInactive = options.onlyInactive ?? true;
 
   const grouped = new Map<string, ClusterPlacement[]>();
   for (const placement of placements) {
-    const gridX = Math.floor(placement.x / cellSize);
-    const gridY = Math.floor(placement.y / cellSize);
     const statusBucket = statusBucketForEntity(placement.entity);
-    const relationKey = relationKeyForEntity(placement.entity);
+    if (onlyInactive && (statusBucket === "active" || statusBucket === "error")) {
+      continue;
+    }
+    const relationKey = relationKeyForEntity(placement.entity, placement.roomId);
+    const isRoomBased = relationKey.startsWith("room:");
+    const gridX = isRoomBased ? 0 : Math.floor(placement.x / cellSize);
+    const gridY = isRoomBased ? 0 : Math.floor(placement.y / cellSize);
     const key = `${placement.roomId}|${statusBucket}|${relationKey}|${gridX}:${gridY}`;
     const bucket = grouped.get(key);
     if (bucket) {
