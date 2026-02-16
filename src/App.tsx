@@ -1961,8 +1961,8 @@ function App() {
           className={`workspace-panel timeline ${workspacePanelPlacementClass(
             workspaceLayout,
             "timeline",
-          )} ${activeWorkspaceTab === "timeline" ? "" : "is-hidden-by-tab"}`}
-          hidden={activeWorkspaceTab !== "timeline"}
+          )}`}
+          hidden={workspaceLayout.timeline === "hidden"}
         >
           <EventRail
             roomByAgentId={timelineRoomByAgentId}
