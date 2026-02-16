@@ -1,4 +1,5 @@
-import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import type { AlertSignal } from "../lib/alerts";
 import { buildBubbleLaneLayout, type BubbleLaneCandidate } from "../lib/bubble-lanes";
 import { buildEntityClusters } from "../lib/entity-clustering";
@@ -273,22 +274,14 @@ const EntityDatapad = memo(function EntityDatapad({
 type EntityTokenViewProps = {
   model: StageEntityRenderModel;
   lodLevel: StageLodLevel;
-  entity: OfficeEntity;
-  run?: OfficeRun;
-  generatedAt: number;
-  isHovered: boolean;
   densityMode: "standard" | "compact" | "dense";
   onSelectEntity?: (entityId: string, mode?: "single" | "toggle") => void;
-  onHoverEntity?: (entityId: string | null) => void;
+  onHoverEntity?: (entityId: string | null, rect: DOMRect | null) => void;
 };
 
 const EntityTokenView = memo(function EntityTokenView({
   model,
   lodLevel,
-  entity,
-  run,
-  generatedAt,
-  isHovered,
   densityMode,
   onSelectEntity,
   onHoverEntity,
@@ -313,8 +306,11 @@ const EntityTokenView = memo(function EntityTokenView({
           onSelectEntity?.(model.id, "single");
         }
       }}
-      onMouseEnter={() => onHoverEntity?.(model.id)}
-      onMouseLeave={() => onHoverEntity?.(null)}
+      onMouseEnter={(event) => {
+        const rect = event.currentTarget.getBoundingClientRect();
+        onHoverEntity?.(model.id, rect);
+      }}
+      onMouseLeave={() => onHoverEntity?.(null, null)}
     >
       <div className="chip-status-bar" />
       {showLabel ? (
@@ -322,9 +318,6 @@ const EntityTokenView = memo(function EntityTokenView({
           <span className="chip-label">{model.label}</span>
           {showStatus ? <span className="chip-status">{model.statusLabel}</span> : null}
         </div>
-      ) : null}
-      {isHovered ? (
-        <EntityDatapad entity={entity} run={run} generatedAt={generatedAt} />
       ) : null}
     </article>
   );
@@ -363,6 +356,15 @@ export function OfficeStage({
   const [clusteringEnabled, setClusteringEnabled] = useState(true);
   const [minimapCollapsed, setMinimapCollapsed] = useState(false);
   const [hoveredEntityId, setHoveredEntityId] = useState<string | null>(null);
+  const [datapadPosition, setDatapadPosition] = useState<{ x: number; y: number } | null>(null);
+  const handleHoverEntity = useCallback((entityId: string | null, rect: DOMRect | null) => {
+    setHoveredEntityId(entityId);
+    if (rect) {
+      setDatapadPosition({ x: rect.left + rect.width / 2, y: rect.top });
+    } else {
+      setDatapadPosition(null);
+    }
+  }, []);
   const [expandedClusterIds, setExpandedClusterIds] = useState<string[]>([]);
   const [pinnedBubbleEntityIds, setPinnedBubbleEntityIds] = useState<string[]>(() =>
     loadBubbleEntityIds(BUBBLE_PINNED_STORAGE_KEY),
@@ -1028,6 +1030,39 @@ export function OfficeStage({
     }
   }, [viewportSize]);
 
+  // Wheel zoom with non-passive listener to allow preventDefault
+  useEffect(() => {
+    const node = viewportRef.current;
+    if (!node) return;
+    const handleWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const bounds = node.getBoundingClientRect();
+      const anchorX = event.clientX - bounds.left;
+      const anchorY = event.clientY - bounds.top;
+      const direction = event.deltaY > 0 ? -1 : 1;
+      const width = node.clientWidth;
+      const height = node.clientHeight;
+      setCamera((prev) => {
+        const nextZoom = prev.zoom + direction * CAMERA_ZOOM_STEP;
+        const targetZoom = clamp(nextZoom, CAMERA_MIN_ZOOM, CAMERA_MAX_ZOOM);
+        const currentPan = clampCameraPan(prev.panX, prev.panY, prev.zoom, width, height);
+        const stageX = (anchorX - currentPan.panX) / prev.zoom;
+        const stageY = (anchorY - currentPan.panY) / prev.zoom;
+        const nextPanX = anchorX - stageX * targetZoom;
+        const nextPanY = anchorY - stageY * targetZoom;
+        const clampedPan = clampCameraPan(nextPanX, nextPanY, targetZoom, width, height);
+        return {
+          zoom: targetZoom,
+          panX: clampedPan.panX,
+          panY: clampedPan.panY,
+          followSelected: false,
+        };
+      });
+    };
+    node.addEventListener("wheel", handleWheel, { passive: false });
+    return () => node.removeEventListener("wheel", handleWheel);
+  }, []);
+
   const resolveCameraPan = (state: CameraState, viewportWidth: number, viewportHeight: number) => {
     if (state.followSelected && selectedPlacement) {
       const centeredPan = {
@@ -1270,14 +1305,6 @@ export function OfficeStage({
       <div
         ref={viewportRef}
         className="office-stage-camera-viewport"
-        onWheel={(event) => {
-          event.preventDefault();
-          const bounds = event.currentTarget.getBoundingClientRect();
-          const anchorX = event.clientX - bounds.left;
-          const anchorY = event.clientY - bounds.top;
-          const direction = event.deltaY > 0 ? -1 : 1;
-          applyZoomAtPoint(camera.zoom + direction * CAMERA_ZOOM_STEP, anchorX, anchorY);
-        }}
         onPointerDown={(event) => {
           if (event.pointerType === "touch") {
             return;
@@ -1568,7 +1595,10 @@ export function OfficeStage({
             }}
           >
             <div className={`occupancy-heat heat-${occupancyHeatLevel}`} aria-hidden="true" />
-            <header>{room.label}</header>
+            <header>
+              {room.label}
+              {room.description ? <small className="room-description">{room.description}</small> : null}
+            </header>
             <div className="shape-tag">{room.shape}</div>
             {debug ? (
               <div
@@ -1629,28 +1659,44 @@ export function OfficeStage({
       })}
 
       {entityRenderModels.map((model) => {
-        const entity = entityById.get(model.id);
-        if (!entity) return null;
         const placement = placementByEntityId.get(model.id);
-        const run = entity.kind === "subagent" && entity.runId ? runById.get(entity.runId) : undefined;
+        if (!entityById.has(model.id)) return null;
         const entityDensityMode = placement ? (roomDensityMode.get(placement.roomId) ?? "standard") : "standard";
         return (
           <EntityTokenView
             key={model.id}
             model={model}
             lodLevel={lodLevel}
-            entity={entity}
-            run={run}
-            generatedAt={snapshot.generatedAt}
-            isHovered={hoveredEntityId === model.id}
             densityMode={entityDensityMode}
             onSelectEntity={onSelectEntity}
-            onHoverEntity={setHoveredEntityId}
+            onHoverEntity={handleHoverEntity}
           />
         );
       })}
         </div>
       </div>
+
+      {hoveredEntityId && datapadPosition && (() => {
+        const entity = entityById.get(hoveredEntityId);
+        if (!entity) return null;
+        const run = entity.kind === "subagent" && entity.runId ? runById.get(entity.runId) : undefined;
+        return createPortal(
+          <div
+            className="entity-datapad-portal"
+            style={{
+              position: "fixed",
+              left: datapadPosition.x,
+              top: datapadPosition.y,
+              transform: "translate(-50%, calc(-100% - 8px))",
+              zIndex: 10000,
+              pointerEvents: "none",
+            }}
+          >
+            <EntityDatapad entity={entity} run={run} generatedAt={snapshot.generatedAt} />
+          </div>,
+          document.body
+        );
+      })()}
     </div>
   );
 }
