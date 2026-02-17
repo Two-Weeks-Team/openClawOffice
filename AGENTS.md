@@ -1,12 +1,22 @@
 # PROJECT KNOWLEDGE BASE
 
-**Generated:** 2026-02-15
-**Commit:** 0967c1e
+**Generated:** 2026-02-17
+**Commit:** ae00ad8
 **Branch:** main
 
 ## OVERVIEW
 
 Visual command center for OpenClaw agents. Renders agent/subagent state as isometric office with real-time SSE updates. React 19 + Vite 7 + TypeScript.
+
+### Recent Features (PR #137-141)
+- **Datapad tooltip**: Hover entity for quick details
+- **Visual hierarchy**: Distinct Agent vs Subagent styling
+- **Density mode**: Optimized layout for high-entity rooms
+- **Room descriptions**: Contextual room info in zone config
+- **Timeline always visible**: No tab switching required
+- **Collapsible sections**: Filters, Playback, Lane Options, Segments default collapsed
+- **Entity clustering**: Inactive agents clustered by room with count badge
+- **ARIA accessibility**: Proper aria-expanded/aria-controls on toggles
 
 ## STRUCTURE
 
@@ -43,6 +53,7 @@ openClawOffice/
 | `OfficeSnapshot` | type | src/types/office.ts | Primary data structure |
 | `useOfficeStream` | hook | src/hooks/useOfficeStream.ts | SSE consumer with polling fallback |
 | `buildPlacements` | function | src/lib/layout.ts | Places entities in rooms by shape |
+| `clusterEntities` | function | src/lib/entity-clustering.ts | Groups inactive entities by room |
 | `OfficeStage` | component | src/components/OfficeStage.tsx | Isometric renderer with SVG links |
 | `openClawOfficeApiPlugin` | function | server/vite-office-plugin.ts | Vite plugin factory |
 
@@ -119,8 +130,8 @@ Demo fallback (when no data) ─────────────────
 
 ## NOTES
 
-- **No tests**: Testing not configured. Recommend Vitest if adding
-- **No CI/CD**: Local dev tool, no deployment pipeline
+- **Tests**: Vitest configured with 27 test files (`pnpm test`)
+- **CI**: GitHub Actions `quality-gate` workflow (lint + test + build)
 - **Kenney assets required**: See `public/assets/kenney/kenney-curation.json` for manifest
 - **SSE polling fallback**: If EventSource fails, falls back to 4s fetch polling
 - **README alignment**: All issues must align with Purpose/Intent/Vision in README.md
