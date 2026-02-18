@@ -637,6 +637,7 @@ function App() {
       return;
     }
     setSelectedEntityIds((prev) => (prev.length === 1 && prev[0] === entityId ? [] : [entityId]));
+    setActiveWorkspaceTab("analysis");
   }, []);
 
   const clearSelectedEntities = useCallback(() => {
@@ -1570,31 +1571,29 @@ function App() {
           className="workspace-tabpanel"
           hidden={activeWorkspaceTab !== "status"}
         >
-          <section className="hero-bar">
-            <div>
+          <section className="unified-header" aria-label="Status overview">
+            <div className="unified-header-title">
               <h1>openClawOffice</h1>
-              <p>Stage-first mission control for live OpenClaw operations.</p>
+              <span className="unified-header-subtitle">Mission Control</span>
             </div>
-          </section>
-          <section className="status-kpi-strip" aria-label="Core status metrics">
-            <article className="status-kpi-card">
-              <span>Running</span>
-              <strong>{running}</strong>
-            </article>
-            <article className="status-kpi-card">
-              <span>Errors</span>
-              <strong>{failed}</strong>
-            </article>
-            <article className="status-kpi-card">
-              <span>Alerts</span>
-              <strong>{visibleAlertSignals.length}</strong>
-            </article>
-            <article className="status-kpi-card">
-              <span>Selection</span>
-              <strong>
-                {selectedCount}/{(matchCount ?? filteredEntityIds.length).toString()}
-              </strong>
-            </article>
+            <div className="unified-header-kpis">
+              <div className="unified-kpi">
+                <span>Running</span>
+                <strong>{running}</strong>
+              </div>
+              <div className="unified-kpi">
+                <span>Errors</span>
+                <strong className={failed > 0 ? "has-errors" : ""}>{failed}</strong>
+              </div>
+              <div className="unified-kpi">
+                <span>Alerts</span>
+                <strong className={visibleAlertSignals.length > 0 ? "has-alerts" : ""}>{visibleAlertSignals.length}</strong>
+              </div>
+              <div className="unified-kpi">
+                <span>Selection</span>
+                <strong>{selectedCount}/{(matchCount ?? filteredEntityIds.length).toString()}</strong>
+              </div>
+            </div>
           </section>
         </section>
 

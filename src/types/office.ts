@@ -14,6 +14,7 @@ export type OfficeEntity = {
   model?: string;
   bubble?: string;
   task?: string;
+  expiresAt?: number;
 };
 
 export type OfficeRunStatus = "active" | "ok" | "error";

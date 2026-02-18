@@ -57,7 +57,9 @@ const STAGE_HEIGHT = 660;
 function calculateFitToViewZoom(viewportWidth: number, viewportHeight: number): number {
   const zoomX = viewportWidth / STAGE_WIDTH;
   const zoomY = viewportHeight / STAGE_HEIGHT;
-  return Math.min(zoomX, zoomY, 1);
+  const fitZoom = Math.min(zoomX, zoomY);
+  const maxInitialZoom = viewportWidth >= 2560 ? 1.5 : viewportWidth >= 1920 ? 1.25 : 1;
+  return Math.min(fitZoom, maxInitialZoom);
 }
 const CAMERA_MIN_ZOOM = 0.72;
 const CAMERA_MAX_ZOOM = 2.4;
@@ -271,6 +273,16 @@ const EntityDatapad = memo(function EntityDatapad({
   );
 });
 
+function formatTimeRemaining(expiresAt: number): string {
+  const remaining = Math.max(0, expiresAt - Date.now());
+  const minutes = Math.floor(remaining / 60_000);
+  const seconds = Math.floor((remaining % 60_000) / 1000);
+  if (minutes > 0) {
+    return `${minutes}m`;
+  }
+  return `${seconds}s`;
+}
+
 type EntityTokenViewProps = {
   model: StageEntityRenderModel;
   lodLevel: StageLodLevel;
@@ -294,6 +306,7 @@ const EntityTokenView = memo(function EntityTokenView({
       style={model.style}
       role="button"
       tabIndex={0}
+      title={model.fullLabel}
       aria-label={`Open detail panel for ${model.label}`}
       aria-pressed={model.isSelected}
       onClick={(event) => {
@@ -315,8 +328,16 @@ const EntityTokenView = memo(function EntityTokenView({
       <div className="chip-status-bar" />
       {showLabel ? (
         <div className="chip-content">
-          <span className="chip-label">{model.label}</span>
+          <span className="chip-label">
+            {model.label}
+            {model.secondaryLabel ? <span className="chip-secondary">{model.secondaryLabel}</span> : null}
+          </span>
           {showStatus ? <span className="chip-status">{model.statusLabel}</span> : null}
+          {model.expiresAt ? (
+            <span className="chip-expires" title="Time until removal">
+              {formatTimeRemaining(model.expiresAt)}
+            </span>
+          ) : null}
         </div>
       ) : null}
     </article>
@@ -342,6 +363,8 @@ export function OfficeStage({
   onFilterMatchCountChange,
   onSelectEntity,
 }: Props) {
+  // TTL: Track current time to filter expired entities
+  const [now, setNow] = useState(() => Date.now());
   const [zoneConfig, setZoneConfig] = useState<unknown>(null);
   const [viewportSize, setViewportSize] = useState({
     width: STAGE_WIDTH,
@@ -401,15 +424,31 @@ export function OfficeStage({
     [expandedClusterIds],
   );
 
+  const hasExpiringEntities = useMemo(
+    () => snapshot.entities.some((e) => e.expiresAt && e.expiresAt > now),
+    [snapshot.entities, now],
+  );
+
+  useEffect(() => {
+    if (!hasExpiringEntities) return;
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [hasExpiringEntities]);
+
+  const activeEntities = useMemo(
+    () => snapshot.entities.filter((e) => !e.expiresAt || e.expiresAt > now),
+    [snapshot.entities, now],
+  );
+
   const layoutState = useMemo(
     () =>
       buildPlacements({
-        entities: snapshot.entities,
+        entities: activeEntities,
         generatedAt: snapshot.generatedAt,
         placementMode,
         zoneConfig,
       }),
-    [placementMode, snapshot.entities, snapshot.generatedAt, zoneConfig],
+    [placementMode, activeEntities, snapshot.generatedAt, zoneConfig],
   );
 
   const rooms = layoutState.rooms;
@@ -1171,79 +1210,6 @@ export function OfficeStage({
 
   return (
     <div className={stageClassName}>
-      <div className="camera-controls">
-        <button
-          type="button"
-          onClick={() => {
-            const { width, height } = getViewportSize();
-            applyZoomAtPoint(camera.zoom + CAMERA_ZOOM_STEP, width / 2, height / 2);
-          }}
-        >
-          Zoom +
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            const { width, height } = getViewportSize();
-            applyZoomAtPoint(camera.zoom - CAMERA_ZOOM_STEP, width / 2, height / 2);
-          }}
-        >
-          Zoom -
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setCamera({
-              zoom: 1,
-              panX: 0,
-              panY: 0,
-              followSelected: false,
-            });
-          }}
-        >
-          Reset
-        </button>
-        <button type="button" onClick={fitCameraToView}>
-          Fit
-        </button>
-        <button
-          type="button"
-          disabled={!selectedPlacement}
-          onClick={() => {
-            setCamera((prev) => ({
-              ...prev,
-              followSelected: !prev.followSelected,
-            }));
-          }}
-        >
-          {shouldFollowSelected ? "Follow on" : "Follow off"}
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setClusteringEnabled((prev) => !prev);
-          }}
-        >
-          {clusteringEnabled
-            ? `Clusters on (${clusterState.collapsedClusters.length}/${clusterState.clusters.length})`
-            : "Clusters off"}
-        </button>
-        {activeExpandedClusterCount > 0 ? (
-          <button
-            type="button"
-            onClick={() => {
-              setExpandedClusterIds([]);
-            }}
-          >
-            Collapse expanded ({activeExpandedClusterCount})
-          </button>
-        ) : null}
-        <span>{Math.round(camera.zoom * 100)}%</span>
-        <span className={"camera-overlap" + (collisionPairCount > 0 ? " has-collision" : "")}>
-          overlap {collisionPairCount}
-        </span>
-      </div>
-
       <aside className={`camera-minimap${minimapCollapsed ? " collapsed" : ""}`}>
         <header>
           <strong>Minimap</strong>
@@ -1258,47 +1224,133 @@ export function OfficeStage({
           </button>
         </header>
         {!minimapCollapsed && (
-          <button
-            type="button"
-            className="camera-minimap-surface"
-            onClick={(event) => {
-              const bounds = event.currentTarget.getBoundingClientRect();
-              if (bounds.width <= 0 || bounds.height <= 0) {
-                return;
-              }
-              const normalizedX = clamp((event.clientX - bounds.left) / bounds.width, 0, 1);
-              const normalizedY = clamp((event.clientY - bounds.top) / bounds.height, 0, 1);
-              centerCameraOnPoint(normalizedX * STAGE_WIDTH, normalizedY * STAGE_HEIGHT);
-            }}
-          >
-            <svg viewBox={`0 0 ${STAGE_WIDTH} ${STAGE_HEIGHT}`} preserveAspectRatio="none" aria-hidden>
-              {rooms.map((room) => (
+          <>
+            <button
+              type="button"
+              className="camera-minimap-surface"
+              onClick={(event) => {
+                const bounds = event.currentTarget.getBoundingClientRect();
+                if (bounds.width <= 0 || bounds.height <= 0) {
+                  return;
+                }
+                const normalizedX = clamp((event.clientX - bounds.left) / bounds.width, 0, 1);
+                const normalizedY = clamp((event.clientY - bounds.top) / bounds.height, 0, 1);
+                centerCameraOnPoint(normalizedX * STAGE_WIDTH, normalizedY * STAGE_HEIGHT);
+              }}
+            >
+              <svg viewBox={`0 0 ${STAGE_WIDTH} ${STAGE_HEIGHT}`} preserveAspectRatio="none" aria-hidden>
+                {rooms.map((room) => (
+                  <rect
+                    key={`mini:${room.id}`}
+                    x={room.x}
+                    y={room.y}
+                    width={room.width}
+                    height={room.height}
+                    className="camera-minimap-room"
+                  />
+                ))}
+                {selectedPlacement ? (
+                  <circle
+                    cx={selectedPlacement.x}
+                    cy={selectedPlacement.y}
+                    r={12}
+                    className="camera-minimap-selected"
+                  />
+                ) : null}
                 <rect
-                  key={`mini:${room.id}`}
-                  x={room.x}
-                  y={room.y}
-                  width={room.width}
-                  height={room.height}
-                  className="camera-minimap-room"
+                  x={viewportBox.x}
+                  y={viewportBox.y}
+                  width={viewportBox.width}
+                  height={viewportBox.height}
+                  className="camera-minimap-viewport"
                 />
-              ))}
-              {selectedPlacement ? (
-                <circle
-                  cx={selectedPlacement.x}
-                  cy={selectedPlacement.y}
-                  r={12}
-                  className="camera-minimap-selected"
-                />
+              </svg>
+            </button>
+            <div className="camera-toolbar">
+              <div className="camera-toolbar-row">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const { width, height } = getViewportSize();
+                    applyZoomAtPoint(camera.zoom + CAMERA_ZOOM_STEP, width / 2, height / 2);
+                  }}
+                  title="Zoom In"
+                >
+                  +
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const { width, height } = getViewportSize();
+                    applyZoomAtPoint(camera.zoom - CAMERA_ZOOM_STEP, width / 2, height / 2);
+                  }}
+                  title="Zoom Out"
+                >
+                  -
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCamera({
+                      zoom: 1,
+                      panX: 0,
+                      panY: 0,
+                      followSelected: false,
+                    });
+                  }}
+                  title="Reset View"
+                >
+                  1:1
+                </button>
+                <button type="button" onClick={fitCameraToView} title="Fit to Screen">
+                  Fit
+                </button>
+              </div>
+              <div className="camera-toolbar-row">
+                <button
+                  type="button"
+                  disabled={!selectedPlacement}
+                  className={shouldFollowSelected ? "is-active" : ""}
+                  onClick={() => {
+                    setCamera((prev) => ({
+                      ...prev,
+                      followSelected: !prev.followSelected,
+                    }));
+                  }}
+                >
+                  {shouldFollowSelected ? "Following" : "Follow"}
+                </button>
+                <button
+                  type="button"
+                  className={clusteringEnabled ? "is-active" : ""}
+                  onClick={() => {
+                    setClusteringEnabled((prev) => !prev);
+                  }}
+                >
+                  Clusters
+                </button>
+              </div>
+              {activeExpandedClusterCount > 0 ? (
+                <div className="camera-toolbar-row">
+                  <button
+                    type="button"
+                    className="full-width"
+                    onClick={() => {
+                      setExpandedClusterIds([]);
+                    }}
+                  >
+                    Collapse All ({activeExpandedClusterCount})
+                  </button>
+                </div>
               ) : null}
-              <rect
-                x={viewportBox.x}
-                y={viewportBox.y}
-                width={viewportBox.width}
-                height={viewportBox.height}
-                className="camera-minimap-viewport"
-              />
-            </svg>
-          </button>
+              <div className="camera-toolbar-info">
+                <span>{Math.round(camera.zoom * 100)}%</span>
+                <span className={"camera-overlap" + (collisionPairCount > 0 ? " has-collision" : "")}>
+                  {collisionPairCount} overlaps
+                </span>
+              </div>
+            </div>
+          </>
         )}
       </aside>
 

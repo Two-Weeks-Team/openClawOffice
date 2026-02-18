@@ -21,6 +21,7 @@ import type {
 const MAX_EVENTS = 220;
 const LIVE_IDLE_WINDOW_MS = 8 * 60_000;
 const LIVE_ACTIVE_WINDOW_MS = 2 * 60_000;
+const COMPLETED_RUN_TTL_MS = 5 * 60_000;
 
 type AgentSnapshot = {
   agentId: string;
@@ -57,6 +58,32 @@ function shortText(value: string | undefined, max = 120): string | undefined {
     return value;
   }
   return `${value.slice(0, max - 1)}...`;
+}
+
+function truncateMiddle(value: string, max = 16): string {
+  if (value.length <= max) {
+    return value;
+  }
+  const keep = Math.floor((max - 3) / 2);
+  return `${value.slice(0, keep)}...${value.slice(-keep)}`;
+}
+
+function extractMeaningfulLabel(name: string): string {
+  const segments = name.split("-");
+  const lastSegment = segments[segments.length - 1] || name;
+  
+  if (lastSegment.length >= 3 && lastSegment.length <= 12) {
+    return lastSegment;
+  }
+  
+  if (segments.length >= 2) {
+    const lastTwoSegments = segments.slice(-2).join("-");
+    if (lastTwoSegments.length <= 16) {
+      return lastTwoSegments;
+    }
+  }
+  
+  return truncateMiddle(name, 16);
 }
 
 async function readJsonFile(pathname: string): Promise<{ value: unknown; diagnostics: SnapshotDiagnostic[] }> {
@@ -394,7 +421,7 @@ function createDemoSnapshot(stateDir: string, diagnostics: SnapshotDiagnostic[] 
     ...demoRuns.map((run) => ({
       id: `subagent:${run.runId}`,
       kind: "subagent" as const,
-      label: run.label ?? run.runId.slice(0, 8),
+      label: run.label ?? truncateMiddle(run.childAgentId),
       agentId: run.childAgentId,
       parentAgentId: run.parentAgentId,
       runId: run.runId,
@@ -490,11 +517,19 @@ export async function buildOfficeSnapshot(): Promise<OfficeSnapshot> {
     });
   }
 
+  const now = Date.now();
   for (const run of runs) {
+    const isCompleted = run.status === "ok" || run.status === "error";
+    const expiresAt = run.endedAt ? run.endedAt + COMPLETED_RUN_TTL_MS : undefined;
+    
+    if (isCompleted && expiresAt && expiresAt < now) {
+      continue;
+    }
+    
     entities.push({
       id: `subagent:${run.runId}`,
       kind: "subagent",
-      label: run.label || run.runId.slice(0, 8),
+      label: extractMeaningfulLabel(run.label || run.childAgentId),
       agentId: run.childAgentId,
       parentAgentId: run.parentAgentId,
       runId: run.runId,
@@ -504,6 +539,7 @@ export async function buildOfficeSnapshot(): Promise<OfficeSnapshot> {
       lastUpdatedAt: run.endedAt ?? run.startedAt ?? run.createdAt,
       bubble: shortText(run.task, 95),
       task: run.task,
+      expiresAt: isCompleted ? expiresAt : undefined,
     });
   }
 
