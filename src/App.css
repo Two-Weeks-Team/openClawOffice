@@ -29,10 +29,16 @@ body {
     radial-gradient(circle at 84% 78%, rgba(127, 255, 214, 0.12), transparent 38%),
     linear-gradient(140deg, var(--bg-a), var(--bg-b) 54%, var(--bg-c));
   min-height: 100vh;
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
 }
 
 #root {
   min-height: 100vh;
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
 }
 
 .app-shell {
@@ -43,6 +49,7 @@ body {
   max-width: 100%;
   margin: 10px auto 16px;
   padding: 10px 16px;
+  overflow-x: hidden;
 }
 
 .global-status-bar {
@@ -1099,18 +1106,36 @@ body {
   gap: 12px;
   min-height: 700px;
   align-items: stretch;
+  overflow: hidden;
+  width: 100%;
+  max-width: 100%;
 }
 
 .workspace-stage-pane {
   min-width: 0;
+  max-width: 100%;
   min-height: 700px;
   grid-column: 1;
   grid-row: 1 / -1;
+  overflow: hidden;
 }
 
 .workspace-panel {
   min-width: 0;
+  max-width: 100%;
   min-height: 0;
+  flex-shrink: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.workspace-panel.timeline.is-docked,
+.workspace-panel.detail.is-docked {
+  width: 360px;
+  max-width: 360px;
+  min-width: 0;
+  flex-shrink: 0;
+  overflow: hidden;
 }
 
 .workspace.workspace-preset-two .workspace-panel.timeline.is-docked {
@@ -2629,7 +2654,11 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
   overflow: hidden;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .event-rail header {
@@ -4800,7 +4829,9 @@ body {
 
   .workspace-panel.timeline.is-docked,
   .workspace-panel.detail.is-docked {
-    min-width: 420px;
+    width: 360px;
+    max-width: 360px;
+    min-width: 0;
   }
 }
 
