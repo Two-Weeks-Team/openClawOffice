@@ -57,7 +57,9 @@ const STAGE_HEIGHT = 660;
 function calculateFitToViewZoom(viewportWidth: number, viewportHeight: number): number {
   const zoomX = viewportWidth / STAGE_WIDTH;
   const zoomY = viewportHeight / STAGE_HEIGHT;
-  return Math.min(zoomX, zoomY, 1);
+  const fitZoom = Math.min(zoomX, zoomY);
+  const maxInitialZoom = viewportWidth >= 2560 ? 1.5 : viewportWidth >= 1920 ? 1.25 : 1;
+  return Math.min(fitZoom, maxInitialZoom);
 }
 const CAMERA_MIN_ZOOM = 0.72;
 const CAMERA_MAX_ZOOM = 2.4;
