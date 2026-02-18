@@ -59,6 +59,32 @@ function shortText(value: string | undefined, max = 120): string | undefined {
   return `${value.slice(0, max - 1)}...`;
 }
 
+function truncateMiddle(value: string, max = 16): string {
+  if (value.length <= max) {
+    return value;
+  }
+  const keep = Math.floor((max - 3) / 2);
+  return `${value.slice(0, keep)}...${value.slice(-keep)}`;
+}
+
+function extractMeaningfulLabel(name: string): string {
+  const segments = name.split("-");
+  const lastSegment = segments[segments.length - 1] || name;
+  
+  if (lastSegment.length >= 3 && lastSegment.length <= 12) {
+    return lastSegment;
+  }
+  
+  if (segments.length >= 2) {
+    const lastTwoSegments = segments.slice(-2).join("-");
+    if (lastTwoSegments.length <= 16) {
+      return lastTwoSegments;
+    }
+  }
+  
+  return truncateMiddle(name, 16);
+}
+
 async function readJsonFile(pathname: string): Promise<{ value: unknown; diagnostics: SnapshotDiagnostic[] }> {
   try {
     const raw = await fs.readFile(pathname, "utf-8");
@@ -394,7 +420,7 @@ function createDemoSnapshot(stateDir: string, diagnostics: SnapshotDiagnostic[] 
     ...demoRuns.map((run) => ({
       id: `subagent:${run.runId}`,
       kind: "subagent" as const,
-      label: run.label ?? run.runId.slice(0, 8),
+      label: run.label ?? truncateMiddle(run.childAgentId),
       agentId: run.childAgentId,
       parentAgentId: run.parentAgentId,
       runId: run.runId,
@@ -494,7 +520,7 @@ export async function buildOfficeSnapshot(): Promise<OfficeSnapshot> {
     entities.push({
       id: `subagent:${run.runId}`,
       kind: "subagent",
-      label: run.label || `${run.childAgentId}#${run.runId.slice(-4)}`,
+      label: extractMeaningfulLabel(run.label || run.childAgentId),
       agentId: run.childAgentId,
       parentAgentId: run.parentAgentId,
       runId: run.runId,

@@ -35,6 +35,8 @@ export type StageEntityRenderModel = {
   id: string;
   kind: OfficeEntity["kind"];
   label: string;
+  fullLabel: string;
+  secondaryLabel?: string;
   statusLabel: string;
   className: string;
   style: {
@@ -319,10 +321,22 @@ export function buildStageEntityRenderModels(
       .filter(Boolean)
       .join(" ");
 
+    let fullLabel = entity.label;
+    let secondaryLabel: string | undefined;
+
+    if (entity.kind === "subagent" && entity.runId) {
+      fullLabel = `${entity.agentId}#${entity.runId.slice(-4)}`;
+      secondaryLabel = `#${entity.runId.slice(-4)}`;
+    } else if (entity.kind === "agent") {
+      fullLabel = entity.agentId;
+    }
+
     models.push({
       id: entity.id,
       kind: entity.kind,
       label: entity.label,
+      fullLabel,
+      secondaryLabel,
       statusLabel:
         entity.kind === "agent"
           ? `${entity.sessions} session${entity.sessions === 1 ? "" : "s"}`
