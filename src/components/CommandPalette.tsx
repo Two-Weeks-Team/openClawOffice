@@ -70,10 +70,11 @@ export function CommandPalette({
     orderedCommands.length === 0 ? 0 : Math.min(activeIndex, orderedCommands.length - 1);
 
   useEffect(() => {
-    window.setTimeout(() => {
+    const timer = window.setTimeout(() => {
       inputRef.current?.focus();
       inputRef.current?.select();
     }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   useEffect(() => {
