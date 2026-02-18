@@ -4724,3 +4724,149 @@ body {
     justify-content: flex-start;
   }
 }
+
+@media (min-width: 1920px) {
+  .unified-header-kpis {
+    gap: 20px;
+  }
+
+  .unified-kpi {
+    padding: 6px 14px;
+  }
+
+  .unified-kpi span {
+    font-size: 0.68rem;
+  }
+
+  .unified-kpi strong {
+    font-size: 1rem;
+  }
+
+  .workspace {
+    min-height: 800px;
+  }
+
+  .workspace-stage-pane {
+    min-height: 800px;
+  }
+
+  .office-stage-wrap {
+    min-height: 800px;
+  }
+}
+
+@media (min-width: 2560px) {
+  .app-shell {
+    padding: 12px 24px;
+  }
+
+  .unified-header {
+    padding: 12px 20px;
+  }
+
+  .unified-header-title h1 {
+    font-size: 1.4rem;
+  }
+
+  .unified-header-kpis {
+    gap: 24px;
+  }
+
+  .unified-kpi {
+    padding: 8px 18px;
+    gap: 8px;
+  }
+
+  .unified-kpi span {
+    font-size: 0.72rem;
+  }
+
+  .unified-kpi strong {
+    font-size: 1.1rem;
+  }
+
+  .workspace {
+    min-height: 900px;
+    gap: 16px;
+  }
+
+  .workspace-stage-pane {
+    min-height: 900px;
+  }
+
+  .office-stage-wrap {
+    min-height: 900px;
+  }
+
+  .workspace-panel.timeline.is-docked,
+  .workspace-panel.detail.is-docked {
+    min-width: 420px;
+  }
+}
+
+@media (min-width: 3200px) {
+  .app-shell {
+    padding: 16px 32px;
+  }
+
+  .unified-header {
+    padding: 14px 24px;
+  }
+
+  .unified-header-title h1 {
+    font-size: 1.6rem;
+  }
+
+  .unified-header-kpis {
+    gap: 32px;
+  }
+
+  .unified-kpi {
+    padding: 10px 22px;
+    gap: 10px;
+  }
+
+  .unified-kpi span {
+    font-size: 0.76rem;
+  }
+
+  .unified-kpi strong {
+    font-size: 1.2rem;
+  }
+
+  .workspace {
+    min-height: 1000px;
+    gap: 20px;
+  }
+
+  .workspace-stage-pane {
+    min-height: 1000px;
+  }
+
+  .office-stage-wrap {
+    min-height: 1000px;
+  }
+
+  .workspace-panel.timeline.is-docked,
+  .workspace-panel.detail.is-docked {
+    min-width: 480px;
+  }
+
+  .entity-token {
+    width: 140px;
+    height: 32px;
+  }
+
+  .entity-token .chip-label {
+    font-size: 12px;
+  }
+
+  .entity-token.agent {
+    width: 150px;
+    height: 36px;
+  }
+
+  .entity-token.agent .chip-label {
+    font-size: 13px;
+  }
+}
