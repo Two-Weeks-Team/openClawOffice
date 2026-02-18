@@ -494,7 +494,7 @@ export async function buildOfficeSnapshot(): Promise<OfficeSnapshot> {
     entities.push({
       id: `subagent:${run.runId}`,
       kind: "subagent",
-      label: run.label || run.runId.slice(0, 8),
+      label: run.label || `${run.childAgentId}#${run.runId.slice(-4)}`,
       agentId: run.childAgentId,
       parentAgentId: run.parentAgentId,
       runId: run.runId,
