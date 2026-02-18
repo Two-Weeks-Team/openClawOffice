@@ -1115,6 +1115,7 @@ body {
   min-width: 0;
   max-width: 100%;
   min-height: 700px;
+  max-height: calc(100vh - 112px);
   grid-column: 1;
   grid-row: 1 / -1;
   overflow: hidden;
@@ -1206,6 +1207,7 @@ body {
   --z-layer-object: 48;
   --z-room: 120;
   min-height: 700px;
+  max-height: calc(100vh - 112px);
   border-radius: 22px;
   border: 1px solid var(--line);
   background:
@@ -1838,8 +1840,8 @@ body {
 }
 
 .entity-token.is-ok {
-  --chip-status-color: #05d5fa;
-  box-shadow: 0 0 8px rgba(5, 213, 250, 0.12);
+  --chip-status-color: #10b981;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.12);
 }
 
 .entity-token.is-offline {

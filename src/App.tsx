@@ -637,6 +637,7 @@ function App() {
       return;
     }
     setSelectedEntityIds((prev) => (prev.length === 1 && prev[0] === entityId ? [] : [entityId]));
+    setActiveWorkspaceTab("analysis");
   }, []);
 
   const clearSelectedEntities = useCallback(() => {
