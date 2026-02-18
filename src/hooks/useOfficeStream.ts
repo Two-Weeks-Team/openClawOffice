@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
-import type { OfficeEvent, OfficeSnapshot } from "../types/office";
+import { isOfficeSnapshot, type OfficeEvent, type OfficeSnapshot } from "../types/office";
 import { mergeLifecycleEvent } from "../lib/lifecycle-merge";
 import {
   hasCorruptedSnapshotInput,
@@ -40,7 +40,11 @@ async function fetchSnapshot(signal: AbortSignal): Promise<OfficeSnapshot> {
   if (!response.ok) {
     throw new Error(`Snapshot fetch failed (${response.status})`);
   }
-  return (await response.json()) as OfficeSnapshot;
+  const parsed: unknown = await response.json();
+  if (!isOfficeSnapshot(parsed)) {
+    throw new Error("Invalid snapshot format from server");
+  }
+  return parsed;
 }
 
 function parseSseErrorMessage(event: Event): string | undefined {

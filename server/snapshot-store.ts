@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { gunzip, gzip } from "node:zlib";
-import type { OfficeSnapshot } from "./office-types";
+import { isOfficeSnapshot, type OfficeSnapshot } from "./office-types";
 
 const gzipAsync = promisify(gzip);
 const gunzipAsync = promisify(gunzip);
@@ -426,7 +426,11 @@ export class OfficeSnapshotStore {
   private async readSnapshotFile(fileName: string): Promise<OfficeSnapshot> {
     const compressed = await fs.readFile(path.join(this.rootDir, fileName));
     const payload = (await gunzipAsync(compressed)).toString("utf-8");
-    return JSON.parse(payload) as OfficeSnapshot;
+    const parsed: unknown = JSON.parse(payload);
+    if (!isOfficeSnapshot(parsed)) {
+      throw new Error(`Invalid snapshot format in ${fileName}`);
+    }
+    return parsed;
   }
 
   private syncMetricsFromIndex(index: SnapshotStoreIndexFile) {
