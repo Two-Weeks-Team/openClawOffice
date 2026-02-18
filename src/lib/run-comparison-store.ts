@@ -48,7 +48,10 @@ export function parseSavedRunComparisons(raw: string | null): SavedRunComparison
       .map((item) => normalizeSavedRunComparison(item))
       .filter((item): item is SavedRunComparison => item !== null)
       .sort((left, right) => right.createdAt - left.createdAt);
-  } catch {
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.warn("[run-comparison-store] parse error:", error);
+    }
     return [];
   }
 }
@@ -63,7 +66,10 @@ export function loadSavedRunComparisons(): SavedRunComparison[] {
   }
   try {
     return parseSavedRunComparisons(window.localStorage.getItem(RUN_COMPARISON_STORAGE_KEY));
-  } catch {
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.warn("[run-comparison-store] load error:", error);
+    }
     return [];
   }
 }
@@ -74,8 +80,10 @@ export function persistSavedRunComparisons(saved: SavedRunComparison[]) {
   }
   try {
     window.localStorage.setItem(RUN_COMPARISON_STORAGE_KEY, JSON.stringify(saved));
-  } catch {
-    // Ignore localStorage persistence errors in restricted browser modes.
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.warn("[run-comparison-store] persist error:", error);
+    }
   }
 }
 

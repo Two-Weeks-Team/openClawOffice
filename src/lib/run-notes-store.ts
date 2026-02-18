@@ -100,7 +100,10 @@ export function parseRunKnowledgeEntries(raw: string | null): RunKnowledgeEntry[
       }
     }
     return [...dedupedByRun.values()].sort((left, right) => right.updatedAt - left.updatedAt);
-  } catch {
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.warn("[run-notes-store] parse error:", error);
+    }
     return [];
   }
 }
@@ -111,7 +114,10 @@ export function loadRunKnowledgeEntries(): RunKnowledgeEntry[] {
   }
   try {
     return parseRunKnowledgeEntries(window.localStorage.getItem(RUN_KNOWLEDGE_STORAGE_KEY));
-  } catch {
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.warn("[run-notes-store] load error:", error);
+    }
     return [];
   }
 }
@@ -122,8 +128,10 @@ export function persistRunKnowledgeEntries(entries: RunKnowledgeEntry[]): void {
   }
   try {
     window.localStorage.setItem(RUN_KNOWLEDGE_STORAGE_KEY, JSON.stringify(entries));
-  } catch {
-    // Ignore localStorage persistence errors in restricted browser modes.
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.warn("[run-notes-store] persist error:", error);
+    }
   }
 }
 

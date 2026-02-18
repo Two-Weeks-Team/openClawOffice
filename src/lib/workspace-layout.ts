@@ -52,7 +52,10 @@ export function parseWorkspaceLayout(raw: string | null): WorkspaceLayoutState {
   try {
     const parsed: unknown = JSON.parse(raw);
     return normalizeWorkspaceLayout(parsed);
-  } catch {
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.warn("[workspace-layout] parse error:", error);
+    }
     return DEFAULT_WORKSPACE_LAYOUT_STATE;
   }
 }
@@ -63,7 +66,10 @@ export function loadWorkspaceLayoutState(): WorkspaceLayoutState {
   }
   try {
     return parseWorkspaceLayout(window.localStorage.getItem(WORKSPACE_LAYOUT_STATE_KEY));
-  } catch {
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.warn("[workspace-layout] load state error:", error);
+    }
     return DEFAULT_WORKSPACE_LAYOUT_STATE;
   }
 }
@@ -74,8 +80,10 @@ export function persistWorkspaceLayoutState(layout: WorkspaceLayoutState): void 
   }
   try {
     window.localStorage.setItem(WORKSPACE_LAYOUT_STATE_KEY, JSON.stringify(layout));
-  } catch {
-    // Ignore localStorage persistence errors in restricted browser modes.
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.warn("[workspace-layout] persist state error:", error);
+    }
   }
 }
 
@@ -89,7 +97,10 @@ export function loadWorkspaceLayoutSnapshot(): WorkspaceLayoutState | null {
       return null;
     }
     return parseWorkspaceLayout(raw);
-  } catch {
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.warn("[workspace-layout] load snapshot error:", error);
+    }
     return null;
   }
 }
@@ -100,8 +111,10 @@ export function persistWorkspaceLayoutSnapshot(layout: WorkspaceLayoutState): vo
   }
   try {
     window.localStorage.setItem(WORKSPACE_LAYOUT_SNAPSHOT_KEY, JSON.stringify(layout));
-  } catch {
-    // Ignore localStorage persistence errors in restricted browser modes.
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.warn("[workspace-layout] persist snapshot error:", error);
+    }
   }
 }
 

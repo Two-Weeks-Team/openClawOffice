@@ -177,6 +177,7 @@ function processTranscriptLine(line: string, seq: number, state: TranscriptTailS
   try {
     parsed = JSON.parse(line) as unknown;
   } catch {
+    // Skip malformed lines - expected during streaming or partial writes.
     return;
   }
 
