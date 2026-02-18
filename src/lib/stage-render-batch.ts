@@ -47,6 +47,7 @@ export type StageEntityRenderModel = {
   isSelected: boolean;
   priorityBand: StagePriorityBand;
   priorityScore: number;
+  expiresAt?: number;
 };
 
 export type BuildStageEntityRenderModelsInput = {
@@ -350,6 +351,7 @@ export function buildStageEntityRenderModels(
       isSelected,
       priorityBand: priority.band,
       priorityScore: priority.score,
+      expiresAt: entity.expiresAt,
     });
   }
 

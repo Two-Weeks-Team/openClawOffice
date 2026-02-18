@@ -1856,6 +1856,21 @@ body {
   letter-spacing: 0.03em;
 }
 
+.entity-token .chip-expires {
+  font-family: "JetBrains Mono", "Space Grotesk", monospace;
+  font-size: 9px;
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.15);
+  padding: 1px 4px;
+  border-radius: 3px;
+  margin-left: 4px;
+}
+
+.entity-token.is-error .chip-expires {
+  color: #fb7185;
+  background: rgba(251, 113, 133, 0.15);
+}
+
 .entity-token:hover {
   border-color: rgba(0, 243, 255, 0.35);
   background: rgba(10, 20, 30, 0.95);

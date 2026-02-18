@@ -21,6 +21,7 @@ import type {
 const MAX_EVENTS = 220;
 const LIVE_IDLE_WINDOW_MS = 8 * 60_000;
 const LIVE_ACTIVE_WINDOW_MS = 2 * 60_000;
+const COMPLETED_RUN_TTL_MS = 5 * 60_000;
 
 type AgentSnapshot = {
   agentId: string;
@@ -516,7 +517,15 @@ export async function buildOfficeSnapshot(): Promise<OfficeSnapshot> {
     });
   }
 
+  const now = Date.now();
   for (const run of runs) {
+    const isCompleted = run.status === "ok" || run.status === "error";
+    const expiresAt = run.endedAt ? run.endedAt + COMPLETED_RUN_TTL_MS : undefined;
+    
+    if (isCompleted && expiresAt && expiresAt < now) {
+      continue;
+    }
+    
     entities.push({
       id: `subagent:${run.runId}`,
       kind: "subagent",
@@ -530,6 +539,7 @@ export async function buildOfficeSnapshot(): Promise<OfficeSnapshot> {
       lastUpdatedAt: run.endedAt ?? run.startedAt ?? run.createdAt,
       bubble: shortText(run.task, 95),
       task: run.task,
+      expiresAt: isCompleted ? expiresAt : undefined,
     });
   }
 

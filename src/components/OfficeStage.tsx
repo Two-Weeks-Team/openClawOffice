@@ -273,6 +273,16 @@ const EntityDatapad = memo(function EntityDatapad({
   );
 });
 
+function formatTimeRemaining(expiresAt: number): string {
+  const remaining = Math.max(0, expiresAt - Date.now());
+  const minutes = Math.floor(remaining / 60_000);
+  const seconds = Math.floor((remaining % 60_000) / 1000);
+  if (minutes > 0) {
+    return `${minutes}m`;
+  }
+  return `${seconds}s`;
+}
+
 type EntityTokenViewProps = {
   model: StageEntityRenderModel;
   lodLevel: StageLodLevel;
@@ -323,6 +333,11 @@ const EntityTokenView = memo(function EntityTokenView({
             {model.secondaryLabel ? <span className="chip-secondary">{model.secondaryLabel}</span> : null}
           </span>
           {showStatus ? <span className="chip-status">{model.statusLabel}</span> : null}
+          {model.expiresAt ? (
+            <span className="chip-expires" title="Time until removal">
+              {formatTimeRemaining(model.expiresAt)}
+            </span>
+          ) : null}
         </div>
       ) : null}
     </article>
