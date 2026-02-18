@@ -126,3 +126,18 @@ export type OfficeSnapshot = {
   runGraph: OfficeRunGraph;
   events: OfficeEvent[];
 };
+
+export function isOfficeSnapshot(value: unknown): value is OfficeSnapshot {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const obj = value as Record<string, unknown>;
+  return (
+    typeof obj.generatedAt === "number" &&
+    typeof obj.source === "object" &&
+    obj.source !== null &&
+    Array.isArray(obj.entities) &&
+    Array.isArray(obj.runs) &&
+    Array.isArray(obj.events)
+  );
+}
