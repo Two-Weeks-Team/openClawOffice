@@ -10,6 +10,7 @@ import { indexRunsById, runIdsForAgent } from "./run-graph";
 const MAX_DETAIL_EVENTS = 14;
 const MAX_RECENT_RUNS = 6;
 const MAX_MAJOR_EVENTS = 6;
+const MAX_DETAIL_PANEL_CACHE_SIZE = 100;
 
 type DetailSnapshotIndex = {
   runById: Map<string, OfficeRun>;
@@ -79,6 +80,21 @@ function getDetailPanelModelCache(snapshot: OfficeSnapshot): Map<string, DetailP
   const cache = new Map<string, DetailPanelModel>();
   DETAIL_PANEL_MODEL_CACHE.set(snapshot, cache);
   return cache;
+}
+
+function setDetailPanelModelCache(
+  cache: Map<string, DetailPanelModel>,
+  key: string,
+  value: DetailPanelModel,
+): void {
+  // LRU-style eviction: remove oldest entry if at capacity
+  if (cache.size >= MAX_DETAIL_PANEL_CACHE_SIZE && !cache.has(key)) {
+    const oldestKey = cache.keys().next().value;
+    if (oldestKey !== undefined) {
+      cache.delete(oldestKey);
+    }
+  }
+  cache.set(key, value);
 }
 
 function trimTrailingSeparators(pathname: string): string {
@@ -520,7 +536,7 @@ export function buildDetailPanelModelCached(
     return cached;
   }
   const model = buildDetailPanelModel(snapshot, normalizedSelection);
-  cache.set(cacheKey, model);
+  setDetailPanelModelCache(cache, cacheKey, model);
   return model;
 }
 
@@ -538,6 +554,6 @@ export function prefetchDetailPanelModels(snapshot: OfficeSnapshot, selectedEnti
     if (cache.has(key)) {
       continue;
     }
-    cache.set(key, buildDetailPanelModel(snapshot, normalized));
+    setDetailPanelModelCache(cache, key, buildDetailPanelModel(snapshot, normalized));
   }
 }
