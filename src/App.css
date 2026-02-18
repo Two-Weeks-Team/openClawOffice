@@ -4955,3 +4955,41 @@ body {
     font-size: 13px;
   }
 }
+
+.error-boundary-fallback {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 40px;
+  text-align: center;
+  background: var(--bg-a);
+}
+
+.error-boundary-fallback h2 {
+  margin: 0 0 16px;
+  font-size: 1.5rem;
+  color: var(--bad);
+}
+
+.error-boundary-fallback p {
+  margin: 0 0 24px;
+  color: var(--muted);
+  max-width: 400px;
+}
+
+.error-boundary-fallback button {
+  padding: 10px 24px;
+  font-size: 1rem;
+  color: var(--text);
+  background: var(--bg-c);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background var(--motion-fast);
+}
+
+.error-boundary-fallback button:hover {
+  background: var(--bg-b);
+}
