@@ -53,7 +53,7 @@ openClawOffice/
 | `OfficeSnapshot` | type | src/types/office.ts | Primary data structure |
 | `useOfficeStream` | hook | src/hooks/useOfficeStream.ts | SSE consumer with polling fallback |
 | `buildPlacements` | function | src/lib/layout.ts | Places entities in rooms by shape |
-| `clusterEntities` | function | src/lib/entity-clustering.ts | Groups inactive entities by room |
+| `buildEntityClusters` | function | src/lib/entity-clustering.ts | Groups inactive entities by room |
 | `OfficeStage` | component | src/components/OfficeStage.tsx | Isometric renderer with SVG links |
 | `openClawOfficeApiPlugin` | function | server/vite-office-plugin.ts | Vite plugin factory |
 
@@ -131,7 +131,7 @@ Demo fallback (when no data) ─────────────────
 ## NOTES
 
 - **Tests**: Vitest configured with 27 test files (`pnpm test`)
-- **CI**: GitHub Actions `quality-gate` workflow (lint + test + build)
+- **CI**: GitHub Actions `ci` workflow (lint + test + build)
 - **Kenney assets required**: See `public/assets/kenney/kenney-curation.json` for manifest
 - **SSE polling fallback**: If EventSource fails, falls back to 4s fetch polling
 - **README alignment**: All issues must align with Purpose/Intent/Vision in README.md
