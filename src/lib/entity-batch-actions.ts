@@ -61,7 +61,10 @@ export function loadBatchActionState(): BatchActionState {
       return createEmptyBatchActionState();
     }
     return normalizeBatchActionState(JSON.parse(raw));
-  } catch {
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.warn("[entity-batch-actions] load error:", error);
+    }
     return createEmptyBatchActionState();
   }
 }
@@ -72,8 +75,10 @@ export function persistBatchActionState(state: BatchActionState) {
   }
   try {
     window.localStorage.setItem(ENTITY_BATCH_ACTIONS_STORAGE_KEY, JSON.stringify(state));
-  } catch {
-    // Ignore localStorage persistence errors in restricted browser modes.
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.warn("[entity-batch-actions] persist error:", error);
+    }
   }
 }
 

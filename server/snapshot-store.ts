@@ -3,6 +3,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { gunzip, gzip } from "node:zlib";
 import { isOfficeSnapshot, type OfficeSnapshot } from "./office-types";
+import { logStructuredEvent } from "./api-observability";
 
 const gzipAsync = promisify(gzip);
 const gunzipAsync = promisify(gunzip);
@@ -375,6 +376,7 @@ export class OfficeSnapshotStore {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         this.indexCache = normalizeIndexFile(null);
       } else {
+        logStructuredEvent({ level: "warn", event: "snapshot-store.index.read.error", extra: { path: this.indexPath, error: String(error) } });
         this.indexCache = normalizeIndexFile(null);
       }
     }

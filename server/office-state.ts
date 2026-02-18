@@ -9,6 +9,7 @@ import {
 } from "./runtime-parser";
 import { buildRunGraph } from "../src/lib/run-graph";
 import { buildTranscriptBubble } from "./transcript-tailer";
+import { logStructuredEvent } from "./api-observability";
 import type {
   OfficeEntity,
   OfficeEntityStatus,
@@ -130,7 +131,8 @@ async function readLatestBubble(agentDir: string): Promise<string | undefined> {
   let files: Dirent[] = [];
   try {
     files = await fs.readdir(sessionsDir, { withFileTypes: true });
-  } catch {
+  } catch (error) {
+    logStructuredEvent({ level: "info", event: "fs.readdir.skip", extra: { sessionsDir, error: String(error) } });
     return undefined;
   }
 
@@ -145,7 +147,8 @@ async function readLatestBubble(agentDir: string): Promise<string | undefined> {
       try {
         const stat = await fs.stat(full);
         return { full, mtimeMs: stat.mtimeMs };
-      } catch {
+      } catch (error) {
+        logStructuredEvent({ level: "info", event: "fs.stat.skip", extra: { path: full, error: String(error) } });
         return undefined;
       }
     }),
@@ -162,7 +165,8 @@ async function readLatestBubble(agentDir: string): Promise<string | undefined> {
   let raw = "";
   try {
     raw = await fs.readFile(latest.full, "utf-8");
-  } catch {
+  } catch (error) {
+    logStructuredEvent({ level: "info", event: "fs.readFile.skip", extra: { path: latest.full, error: String(error) } });
     return undefined;
   }
   return buildTranscriptBubble(raw, { maxChars: 110 });
