@@ -363,6 +363,8 @@ export function OfficeStage({
   onFilterMatchCountChange,
   onSelectEntity,
 }: Props) {
+  // TTL: Track current time to filter expired entities
+  const [now, setNow] = useState(() => Date.now());
   const [zoneConfig, setZoneConfig] = useState<unknown>(null);
   const [viewportSize, setViewportSize] = useState({
     width: STAGE_WIDTH,
@@ -422,15 +424,31 @@ export function OfficeStage({
     [expandedClusterIds],
   );
 
+  const hasExpiringEntities = useMemo(
+    () => snapshot.entities.some((e) => e.expiresAt && e.expiresAt > now),
+    [snapshot.entities, now],
+  );
+
+  useEffect(() => {
+    if (!hasExpiringEntities) return;
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [hasExpiringEntities]);
+
+  const activeEntities = useMemo(
+    () => snapshot.entities.filter((e) => !e.expiresAt || e.expiresAt > now),
+    [snapshot.entities, now],
+  );
+
   const layoutState = useMemo(
     () =>
       buildPlacements({
-        entities: snapshot.entities,
+        entities: activeEntities,
         generatedAt: snapshot.generatedAt,
         placementMode,
         zoneConfig,
       }),
-    [placementMode, snapshot.entities, snapshot.generatedAt, zoneConfig],
+    [placementMode, activeEntities, snapshot.generatedAt, zoneConfig],
   );
 
   const rooms = layoutState.rooms;
