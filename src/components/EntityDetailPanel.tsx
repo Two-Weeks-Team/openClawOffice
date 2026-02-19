@@ -571,6 +571,29 @@ export function EntityDetailPanel({
                         : "-"}
                     </dd>
                   </div>
+                  {readyModel.entity.worldPosition ? (
+                    <>
+                      <div>
+                        <dt>World Position</dt>
+                        <dd>
+                          ({readyModel.entity.worldPosition.x.toFixed(0)},{" "}
+                          {readyModel.entity.worldPosition.y.toFixed(0)})
+                        </dd>
+                      </div>
+                      {readyModel.entity.worldPosition.zone ? (
+                        <div>
+                          <dt>World Zone</dt>
+                          <dd>{readyModel.entity.worldPosition.zone}</dd>
+                        </div>
+                      ) : null}
+                      {readyModel.entity.worldPosition.facing ? (
+                        <div>
+                          <dt>Facing</dt>
+                          <dd>{readyModel.entity.worldPosition.facing}</dd>
+                        </div>
+                      ) : null}
+                    </>
+                  ) : null}
                 </dl>
                 {readyModel.entity.task || readyModel.linkedRun?.task ? (
                   <p className="detail-task">{readyModel.entity.task ?? readyModel.linkedRun?.task}</p>

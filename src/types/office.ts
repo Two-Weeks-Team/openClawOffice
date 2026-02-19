@@ -21,6 +21,12 @@ export type OfficeEntity = {
     inputTokens: number;
     outputTokens: number;
   };
+  worldPosition?: {
+    x: number;
+    y: number;
+    zone?: string;
+    facing?: string;
+  };
 };
 
 export type OfficeRunStatus = "active" | "ok" | "error";
