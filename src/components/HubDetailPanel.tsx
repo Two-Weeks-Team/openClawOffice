@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { parseMarkdownToSections, type MarkdownSection } from "../lib/openclaw-hub";
 import type { OpenClawChangelogEntry, OpenClawChannelInfo, OpenClawSkillInfo } from "../../server/openclaw-hub-types";
 
@@ -20,6 +20,7 @@ export function HubDetailPanel({ target, onClose }: Props) {
   const [docSections, setDocSections] = useState<MarkdownSection[]>([]);
   const [docLoading, setDocLoading] = useState(false);
   const [docError, setDocError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (!target) return;
@@ -34,24 +35,34 @@ export function HubDetailPanel({ target, onClose }: Props) {
   }, [target, onClose]);
 
   const loadDoc = useCallback(async (docPath: string) => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     setDocLoading(true);
     setDocError(null);
     try {
       const response = await fetch(
         `/api/office/openclaw-hub/doc?path=${encodeURIComponent(docPath)}`,
+        { signal: controller.signal },
       );
       if (!response.ok) {
         throw new Error(`Failed to load document (${response.status})`);
       }
       const data = (await response.json()) as { content: string };
-      setDocContent(data.content);
-      setDocSections(parseMarkdownToSections(data.content));
+      if (!controller.signal.aborted) {
+        setDocContent(data.content);
+        setDocSections(parseMarkdownToSections(data.content));
+      }
     } catch (err) {
+      if (controller.signal.aborted) return;
       setDocError(err instanceof Error ? err.message : String(err));
       setDocContent(null);
       setDocSections([]);
     } finally {
-      setDocLoading(false);
+      if (!controller.signal.aborted) {
+        setDocLoading(false);
+      }
     }
   }, []);
 
@@ -62,6 +73,7 @@ export function HubDetailPanel({ target, onClose }: Props) {
       setDocContent(null);
       setDocSections([]);
     }
+    return () => abortRef.current?.abort();
   }, [target, loadDoc]);
 
   if (!target) return null;

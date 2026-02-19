@@ -115,7 +115,7 @@ async function checkGatewayHealth(port: number): Promise<OpenClawGatewayStatus> 
     return cachedGateway.result;
   }
 
-  const url = `http://localhost:${port}`;
+  const url = `http://127.0.0.1:${port}`;
   const healthUrl = `${url}/health`;
   const start = Date.now();
 
