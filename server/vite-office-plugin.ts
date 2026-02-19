@@ -10,6 +10,7 @@ import {
 } from "./api-observability";
 import { buildOfficeSnapshot } from "./office-state";
 import type { OfficeSnapshot } from "./office-types";
+import { buildOpenClawHubSnapshot, loadFullDocument, resolveOpenClawProjectDir } from "./openclaw-status";
 import { OfficeSnapshotStore } from "./snapshot-store";
 import {
   OfficeStreamBridge,
@@ -20,7 +21,7 @@ import {
 const STREAM_POLL_INTERVAL_MS = 400;
 const STREAM_PING_INTERVAL_MS = 15_000;
 
-type ApiRoute = "snapshot" | "stream" | "metrics" | "replayIndex" | "replaySnapshot";
+type ApiRoute = "snapshot" | "stream" | "metrics" | "replayIndex" | "replaySnapshot" | "openclawHub" | "openclawHubDoc";
 
 type ApiRequestContext = {
   requestId: string;
@@ -83,6 +84,8 @@ const routeMetrics: Record<ApiRoute, RouteMetric> = {
   metrics: { requests: 0, success: 0, failure: 0, totalDurationMs: 0, maxDurationMs: 0 },
   replayIndex: { requests: 0, success: 0, failure: 0, totalDurationMs: 0, maxDurationMs: 0 },
   replaySnapshot: { requests: 0, success: 0, failure: 0, totalDurationMs: 0, maxDurationMs: 0 },
+  openclawHub: { requests: 0, success: 0, failure: 0, totalDurationMs: 0, maxDurationMs: 0 },
+  openclawHubDoc: { requests: 0, success: 0, failure: 0, totalDurationMs: 0, maxDurationMs: 0 },
 };
 
 const streamMetrics: StreamMetric = {
@@ -851,6 +854,115 @@ function handleStream(req: IncomingMessage, res: ServerResponse, context: ApiReq
   req.on("close", onClose);
 }
 
+async function handleOpenClawHub(res: ServerResponse, context: ApiRequestContext) {
+  try {
+    const snapshot = await buildOpenClawHubSnapshot();
+    setJsonHeaders(res, context.requestId);
+    res.statusCode = 200;
+    res.end(JSON.stringify(snapshot));
+    const durationMs = durationFrom(context.startedAt);
+    recordRouteMetric("openclawHub", true, durationMs);
+    logRouteResult({
+      context,
+      event: "openclaw-hub.ok",
+      level: "info",
+      statusCode: 200,
+      durationMs,
+      extra: {
+        channels: snapshot.channels.length,
+        skills: snapshot.skills.length,
+        docs: snapshot.docs.length,
+      },
+    });
+  } catch (err) {
+    const details = asErrorDetails(err);
+    const durationMs = durationFrom(context.startedAt);
+    setJsonHeaders(res, context.requestId);
+    res.statusCode = 500;
+    res.end(
+      JSON.stringify(
+        toApiErrorBody({
+          code: "OPENCLAW_HUB_BUILD_FAILED" as ApiErrorCode,
+          message: "Failed to build OpenClaw hub snapshot",
+          requestId: context.requestId,
+          details,
+        }),
+      ),
+    );
+    recordRouteMetric("openclawHub", false, durationMs);
+    logRouteResult({
+      context,
+      event: "openclaw-hub.error",
+      level: "error",
+      statusCode: 500,
+      durationMs,
+      details,
+    });
+  }
+}
+
+async function handleOpenClawHubDoc(req: IncomingMessage, res: ServerResponse, context: ApiRequestContext) {
+  try {
+    const parsedUrl = new URL(req.url ?? "", "http://127.0.0.1");
+    const docPath = parsedUrl.searchParams.get("path")?.trim();
+    if (!docPath) {
+      setJsonHeaders(res, context.requestId);
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: { message: "Missing 'path' query parameter" } }));
+      recordRouteMetric("openclawHubDoc", false, durationFrom(context.startedAt));
+      return;
+    }
+
+    const projectDir = resolveOpenClawProjectDir();
+    const content = await loadFullDocument(projectDir, docPath);
+    if (content === null) {
+      setJsonHeaders(res, context.requestId);
+      res.statusCode = 404;
+      res.end(JSON.stringify({ error: { message: "Document not found" } }));
+      recordRouteMetric("openclawHubDoc", false, durationFrom(context.startedAt));
+      return;
+    }
+
+    setJsonHeaders(res, context.requestId);
+    res.statusCode = 200;
+    res.end(JSON.stringify({ path: docPath, content }));
+    const durationMs = durationFrom(context.startedAt);
+    recordRouteMetric("openclawHubDoc", true, durationMs);
+    logRouteResult({
+      context,
+      event: "openclaw-hub-doc.ok",
+      level: "info",
+      statusCode: 200,
+      durationMs,
+      extra: { path: docPath, size: content.length },
+    });
+  } catch (err) {
+    const details = asErrorDetails(err);
+    const durationMs = durationFrom(context.startedAt);
+    setJsonHeaders(res, context.requestId);
+    res.statusCode = 500;
+    res.end(
+      JSON.stringify(
+        toApiErrorBody({
+          code: "OPENCLAW_HUB_DOC_FAILED" as ApiErrorCode,
+          message: "Failed to load document",
+          requestId: context.requestId,
+          details,
+        }),
+      ),
+    );
+    recordRouteMetric("openclawHubDoc", false, durationMs);
+    logRouteResult({
+      context,
+      event: "openclaw-hub-doc.error",
+      level: "error",
+      statusCode: 500,
+      durationMs,
+      details,
+    });
+  }
+}
+
 function attachOfficeRoutes(server: ViteDevServer | PreviewServer) {
   server.middlewares.use((req, res, next) => {
     const method = req.method?.toUpperCase();
@@ -883,6 +995,18 @@ function attachOfficeRoutes(server: ViteDevServer | PreviewServer) {
     if (method === "GET" && pathname === "/api/office/replay/snapshot") {
       const context = buildRequestContext(req, pathname);
       void handleReplaySnapshot(req, res, context);
+      return;
+    }
+
+    if (method === "GET" && pathname === "/api/office/openclaw-hub") {
+      const context = buildRequestContext(req, pathname);
+      void handleOpenClawHub(res, context);
+      return;
+    }
+
+    if (method === "GET" && pathname === "/api/office/openclaw-hub/doc") {
+      const context = buildRequestContext(req, pathname);
+      void handleOpenClawHubDoc(req, res, context);
       return;
     }
 
