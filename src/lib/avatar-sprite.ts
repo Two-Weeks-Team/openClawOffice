@@ -30,14 +30,14 @@ export function getAvatarStyle(
     col = 0;
   }
 
-  const bgX = -(col * STEP);
-  const bgY = -(row * STEP);
+  // Agent avatars are scaled to 20px via CSS background-size,
+  // so backgroundPosition must use the same scale factor.
+  const scale = kind === "agent" ? 20 / TILE_SIZE : 1;
+  const bgX = -(col * STEP * scale);
+  const bgY = -(row * STEP * scale);
 
   return {
     backgroundImage: `url(${SPRITE_PATH})`,
     backgroundPosition: `${bgX}px ${bgY}px`,
-    width: TILE_SIZE,
-    height: TILE_SIZE,
-    imageRendering: "pixelated" as const,
   };
 }
