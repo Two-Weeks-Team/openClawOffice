@@ -8,7 +8,7 @@ import {
   type SessionSummary,
 } from "./runtime-parser";
 import { buildRunGraph } from "../src/lib/run-graph";
-import { buildTranscriptBubble } from "./transcript-tailer";
+import { buildTranscriptBubble, buildTranscriptMeta } from "./transcript-tailer";
 import { logStructuredEvent } from "./api-observability";
 import type {
   OfficeEntity,
@@ -30,6 +30,10 @@ type AgentSnapshot = {
   lastUpdatedAt?: number;
   model?: string;
   bubble?: string;
+  lastTool?: string;
+  toolCount?: number;
+  inputTokens?: number;
+  outputTokens?: number;
 };
 
 type AgentLoadResult = {
@@ -126,7 +130,15 @@ async function readJsonFile(pathname: string): Promise<{ value: unknown; diagnos
   }
 }
 
-async function readLatestBubble(agentDir: string): Promise<string | undefined> {
+type TranscriptInfo = {
+  bubble?: string;
+  lastTool?: string;
+  toolCount: number;
+  inputTokens: number;
+  outputTokens: number;
+};
+
+async function readLatestTranscriptInfo(agentDir: string): Promise<TranscriptInfo | undefined> {
   const sessionsDir = path.join(agentDir, "sessions");
   let files: Dirent[] = [];
   try {
@@ -169,7 +181,17 @@ async function readLatestBubble(agentDir: string): Promise<string | undefined> {
     logStructuredEvent({ level: "info", event: "fs.readFile.skip", extra: { path: latest.full, error: String(error) } });
     return undefined;
   }
-  return buildTranscriptBubble(raw, { maxChars: 110 });
+
+  const bubble = buildTranscriptBubble(raw, { maxChars: 110 });
+  const meta = buildTranscriptMeta(raw);
+
+  return {
+    bubble,
+    lastTool: meta.lastToolName,
+    toolCount: meta.toolCount,
+    inputTokens: meta.inputTokens,
+    outputTokens: meta.outputTokens,
+  };
 }
 
 function latestSessionMetadata(sessions: SessionSummary[]): { lastUpdatedAt?: number; model?: string } {
@@ -229,9 +251,19 @@ async function loadAgentSnapshots(stateDir: string): Promise<AgentLoadResult> {
 
     const sessions = parsed.value.length;
     const { lastUpdatedAt, model } = latestSessionMetadata(parsed.value);
-    const bubble = await readLatestBubble(agentDir);
+    const transcriptInfo = await readLatestTranscriptInfo(agentDir);
 
-    out.set(agentId, { agentId, sessions, lastUpdatedAt, model, bubble });
+    out.set(agentId, {
+      agentId,
+      sessions,
+      lastUpdatedAt,
+      model,
+      bubble: transcriptInfo?.bubble,
+      lastTool: transcriptInfo?.lastTool,
+      toolCount: transcriptInfo?.toolCount,
+      inputTokens: transcriptInfo?.inputTokens,
+      outputTokens: transcriptInfo?.outputTokens,
+    });
   }
 
   return { agentMap: out, diagnostics };
@@ -397,6 +429,9 @@ function createDemoSnapshot(stateDir: string, diagnostics: SnapshotDiagnostic[] 
       lastUpdatedAt: now - 40_000,
       model: "openai/gpt-5",
       bubble: "OpenClawOffice layout render is running.",
+      lastTool: "Read",
+      toolCount: 12,
+      tokenUsage: { inputTokens: 45000, outputTokens: 12000 },
     },
     {
       id: "agent:research",
@@ -409,6 +444,9 @@ function createDemoSnapshot(stateDir: string, diagnostics: SnapshotDiagnostic[] 
       lastUpdatedAt: now - 6 * 60_000,
       model: "anthropic/claude-sonnet",
       bubble: "Kenney tilemap candidates were ranked.",
+      lastTool: "Bash",
+      toolCount: 8,
+      tokenUsage: { inputTokens: 32000, outputTokens: 9500 },
     },
     {
       id: "agent:ops",
@@ -421,6 +459,9 @@ function createDemoSnapshot(stateDir: string, diagnostics: SnapshotDiagnostic[] 
       lastUpdatedAt: now - 9 * 60_000,
       model: "openai/gpt-4.1",
       bubble: "Gateway probe hit a timeout on status scan.",
+      lastTool: "Grep",
+      toolCount: 5,
+      tokenUsage: { inputTokens: 18000, outputTokens: 4200 },
     },
     ...demoRuns.map((run) => ({
       id: `subagent:${run.runId}`,
@@ -518,6 +559,12 @@ export async function buildOfficeSnapshot(): Promise<OfficeSnapshot> {
       lastUpdatedAt: agent.lastUpdatedAt,
       model: agent.model,
       bubble: agent.bubble,
+      lastTool: agent.lastTool,
+      toolCount: agent.toolCount,
+      tokenUsage:
+        agent.inputTokens || agent.outputTokens
+          ? { inputTokens: agent.inputTokens ?? 0, outputTokens: agent.outputTokens ?? 0 }
+          : undefined,
     });
   }
 
