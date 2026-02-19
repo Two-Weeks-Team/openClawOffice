@@ -22,7 +22,24 @@ import type {
 const MAX_EVENTS = 220;
 const LIVE_IDLE_WINDOW_MS = 8 * 60_000;
 const LIVE_ACTIVE_WINDOW_MS = 2 * 60_000;
-const COMPLETED_RUN_TTL_MS = 5 * 60_000;
+const DEFAULT_RUN_TTL_MS = 5 * 60_000;
+const DEFAULT_MAX_COMPLETED_RUNS = 200;
+
+function resolveRunTtlMs(): number {
+  const raw = process.env.OPENCLAW_RUN_TTL_MS?.trim();
+  if (!raw) return DEFAULT_RUN_TTL_MS;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 0) return DEFAULT_RUN_TTL_MS;
+  return parsed;
+}
+
+function resolveMaxCompletedRuns(): number {
+  const raw = process.env.OPENCLAW_MAX_COMPLETED_RUNS?.trim();
+  if (!raw) return DEFAULT_MAX_COMPLETED_RUNS;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 1) return DEFAULT_MAX_COMPLETED_RUNS;
+  return parsed;
+}
 
 type AgentSnapshot = {
   agentId: string;
@@ -522,15 +539,19 @@ export async function buildOfficeSnapshot(): Promise<OfficeSnapshot> {
   }
 
   const now = Date.now();
+  const runTtlMs = resolveRunTtlMs();
+  const maxCompletedRuns = resolveMaxCompletedRuns();
+  const completedEntities: OfficeEntity[] = [];
+
   for (const run of runs) {
     const isCompleted = run.status === "ok" || run.status === "error";
-    const expiresAt = run.endedAt ? run.endedAt + COMPLETED_RUN_TTL_MS : undefined;
-    
-    if (isCompleted && expiresAt && expiresAt < now) {
+    const expiresAt = runTtlMs > 0 && run.endedAt ? run.endedAt + runTtlMs : undefined;
+
+    if (isCompleted && runTtlMs > 0 && expiresAt && expiresAt < now) {
       continue;
     }
-    
-    entities.push({
+
+    const entity: OfficeEntity = {
       id: `subagent:${run.runId}`,
       kind: "subagent",
       label: extractMeaningfulLabel(run.label || run.childAgentId),
@@ -544,7 +565,22 @@ export async function buildOfficeSnapshot(): Promise<OfficeSnapshot> {
       bubble: shortText(run.task, 95),
       task: run.task,
       expiresAt: isCompleted ? expiresAt : undefined,
-    });
+    };
+
+    if (isCompleted) {
+      completedEntities.push(entity);
+    } else {
+      entities.push(entity);
+    }
+  }
+
+  if (completedEntities.length > maxCompletedRuns) {
+    completedEntities.sort(
+      (a, b) => (b.lastUpdatedAt ?? 0) - (a.lastUpdatedAt ?? 0),
+    );
+    entities.push(...completedEntities.slice(0, maxCompletedRuns));
+  } else {
+    entities.push(...completedEntities);
   }
 
   entities.sort((a, b) => {
