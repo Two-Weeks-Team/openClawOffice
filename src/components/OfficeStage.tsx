@@ -265,9 +265,15 @@ const EntityDatapad = memo(function EntityDatapad({
         </div>
       ) : null}
       {entity.bubble ? (
-        <div className="datapad-bubble">"{entity.bubble}"</div>
+        <div className="datapad-bubble-section">
+          <div className="datapad-bubble-label">Latest message</div>
+          <div className="datapad-bubble">{entity.bubble}</div>
+        </div>
       ) : entity.task ? (
-        <div className="datapad-bubble">"{entity.task}"</div>
+        <div className="datapad-bubble-section">
+          <div className="datapad-bubble-label">Task</div>
+          <div className="datapad-bubble">{entity.task}</div>
+        </div>
       ) : null}
     </div>
   );
