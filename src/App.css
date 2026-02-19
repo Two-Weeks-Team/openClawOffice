@@ -41,6 +41,28 @@ body {
   overflow-x: clip;
 }
 
+.skip-link {
+  position: fixed;
+  top: -100%;
+  left: 16px;
+  z-index: 10000;
+  padding: 10px 18px;
+  background: var(--bg-a);
+  color: var(--text);
+  border: 2px solid var(--good);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: top var(--motion-fast);
+}
+
+.skip-link:focus {
+  top: 16px;
+  outline: 2px solid var(--good);
+  outline-offset: 2px;
+}
+
 .app-shell {
   display: flex;
   flex-direction: column;
