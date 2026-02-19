@@ -31,6 +31,7 @@ let cachedSnapshot: OpenClawHubSnapshot | null = null;
 let cachedAt = 0;
 let cachedGateway: { result: OpenClawGatewayStatus; at: number } | null = null;
 
+/** Resolve the openclaw project root. Uses `OPENCLAW_PROJECT_DIR` env var or defaults to `../openclaw`. */
 export function resolveOpenClawProjectDir(): string {
   const fromEnv = process.env.OPENCLAW_PROJECT_DIR?.trim();
   if (fromEnv && !fromEnv.includes("\0")) {
@@ -371,6 +372,12 @@ async function loadChangelog(dir: string): Promise<OpenClawChangelogEntry[]> {
   }
 }
 
+/**
+ * Build a comprehensive snapshot of the openclaw project state.
+ * Collects git status, project metadata, gateway health, channels, skills,
+ * memory, cron, docker, docs, and changelog in parallel. Results are cached
+ * for {@link CACHE_TTL_MS} (30 s).
+ */
 export async function buildOpenClawHubSnapshot(): Promise<OpenClawHubSnapshot> {
   const now = Date.now();
   if (cachedSnapshot && now - cachedAt < CACHE_TTL_MS) {
@@ -456,6 +463,10 @@ export async function buildOpenClawHubSnapshot(): Promise<OpenClawHubSnapshot> {
   return snapshot;
 }
 
+/**
+ * Load the full content of a document within the project directory.
+ * Returns `null` if the path attempts traversal outside the project root.
+ */
 export async function loadFullDocument(dir: string, docPath: string): Promise<string | null> {
   // Security: prevent path traversal
   const normalized = path.normalize(docPath);
