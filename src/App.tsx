@@ -5,6 +5,7 @@ import { CommandPalette, type CommandPaletteEntry } from "./components/CommandPa
 import { EntityDetailPanel } from "./components/EntityDetailPanel";
 import { EventRail } from "./components/EventRail";
 import { GlobalStatusBar } from "./components/GlobalStatusBar";
+import { OpenClawHub } from "./components/OpenClawHub";
 import { OfficeStage } from "./components/OfficeStage";
 import { SummaryExporter } from "./components/SummaryExporter";
 import { ThroughputDashboard } from "./components/ThroughputDashboard";
@@ -78,7 +79,7 @@ type OpsFilters = {
   focusMode: boolean;
 };
 
-type WorkspaceTabId = "status" | "operations" | "timeline" | "analysis" | "alerts";
+type WorkspaceTabId = "status" | "operations" | "timeline" | "analysis" | "alerts" | "hub";
 
 type ToastState = {
   kind: "success" | "error" | "info";
@@ -148,6 +149,11 @@ const WORKSPACE_TABS: WorkspaceTabSpec[] = [
     id: "alerts",
     label: "Alerts",
     description: "Signal list and rule controls",
+  },
+  {
+    id: "hub",
+    label: "Hub",
+    description: "OpenClaw project status hub",
   },
 ];
 
@@ -302,6 +308,7 @@ function App() {
     timeline: null,
     analysis: null,
     alerts: null,
+    hub: null,
   });
   const shortcutPlatform = useMemo(() => detectShortcutPlatform(), []);
   const alertCenterTrapRef = useFocusTrap<HTMLDivElement>(isAlertCenterOpen);
@@ -924,6 +931,17 @@ function App() {
         allowWhenOverlayOpen: true,
         keywords: ["alerts", "center", "rules", "mute", "snooze"],
         run: toggleAlertCenter,
+      },
+      {
+        id: "hub.toggle",
+        label: "Toggle Hub",
+        description: "Switch to the OpenClaw project hub tab.",
+        section: "Global",
+        defaultShortcut: "mod+h",
+        keywords: ["hub", "openclaw", "project", "status"],
+        run: () => {
+          setActiveWorkspaceTab((prev) => (prev === "hub" ? "status" : "hub"));
+        },
       },
       {
         id: "filters.clear",
@@ -1953,14 +1971,24 @@ function App() {
             />
           </section>
         </section>
+
+        <section
+          id="workspace-tabpanel-hub"
+          role="tabpanel"
+          aria-labelledby="workspace-tab-hub"
+          className="workspace-tabpanel"
+          hidden={activeWorkspaceTab !== "hub"}
+        >
+          <OpenClawHub />
+        </section>
       </section>
 
       <section
         className={`workspace ${workspacePresetClass} ${workspaceDockedClass} ${
-          activeWorkspaceTab === "alerts" ? "is-hidden-by-tab" : ""
+          activeWorkspaceTab === "alerts" || activeWorkspaceTab === "hub" ? "is-hidden-by-tab" : ""
         }`}
         style={workspaceGridStyle}
-        hidden={activeWorkspaceTab === "alerts"}
+        hidden={activeWorkspaceTab === "alerts" || activeWorkspaceTab === "hub"}
       >
         <div className="workspace-stage-pane">
           <OfficeStage
