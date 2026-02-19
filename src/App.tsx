@@ -1447,6 +1447,7 @@ function App() {
   const running = subagents.filter((entity) => entity.status === "active").length;
   const failed = subagents.filter((entity) => entity.status === "error").length;
   const diagnostics = snapshot.diagnostics.slice(0, 2);
+  const isEmptyOffice = agents.length === 0 && subagents.length === 0;
   const highlightRunId = activeEvent?.runId ?? (timelineFilters.runId.trim() || null);
   const timelineFilterAgentId = timelineFilters.agentId.trim();
   const highlightAgentId =
@@ -1492,6 +1493,19 @@ function App() {
         <section className="recovery-banner" role="status" aria-live="polite">
           <strong>Recovery Mode</strong>
           <p>{recoveryMessage}</p>
+        </section>
+      ) : null}
+
+      {isEmptyOffice ? (
+        <section className="empty-state" role="status">
+          <h2>No agents detected</h2>
+          <p>
+            openClawOffice monitors agents from your OpenClaw runtime directory.
+            Start an agent session or verify that <code>{snapshot.source.stateDir}</code> contains agent data.
+          </p>
+          <p className="empty-state-hint">
+            See <code>README.md</code> &rarr; Troubleshooting for setup instructions.
+          </p>
         </section>
       ) : null}
 
