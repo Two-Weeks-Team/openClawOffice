@@ -261,25 +261,35 @@ export function buildTranscriptMeta(rawJsonl: string): TranscriptToolSummary {
       continue;
     }
 
-    // Extract tool_use from content array
-    const content = parsed.content;
-    if (Array.isArray(content)) {
-      for (const block of content) {
-        if (isRecord(block) && block.type === "tool_use" && typeof block.name === "string") {
-          toolCount++;
-          lastToolName = block.name;
-        }
+    // Unwrap potential envelope wrappers (message, payload) used by some transcript formats
+    const candidates: Record<string, unknown>[] = [parsed];
+    for (const key of ["message", "payload"]) {
+      if (isRecord(parsed[key])) {
+        candidates.push(parsed[key] as Record<string, unknown>);
       }
     }
 
-    // Extract usage info
-    const usage = parsed.usage;
-    if (isRecord(usage)) {
-      if (typeof usage.input_tokens === "number") {
-        inputTokens += usage.input_tokens;
+    for (const row of candidates) {
+      // Extract tool_use from content array
+      const content = row.content;
+      if (Array.isArray(content)) {
+        for (const block of content) {
+          if (isRecord(block) && block.type === "tool_use" && typeof block.name === "string") {
+            toolCount++;
+            lastToolName = block.name;
+          }
+        }
       }
-      if (typeof usage.output_tokens === "number") {
-        outputTokens += usage.output_tokens;
+
+      // Extract usage info
+      const usage = row.usage;
+      if (isRecord(usage)) {
+        if (typeof usage.input_tokens === "number") {
+          inputTokens += usage.input_tokens;
+        }
+        if (typeof usage.output_tokens === "number") {
+          outputTokens += usage.output_tokens;
+        }
       }
     }
   }
