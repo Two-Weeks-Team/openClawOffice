@@ -13,6 +13,7 @@ Web-based visual command center for OpenClaw agents and subagents.
 - Timeline debugger with playback and filtering
 - Command palette with keyboard shortcuts
 - Alert rules engine with notification controls
+- **OpenClaw Hub**: comprehensive project status dashboard with progressive disclosure
 
 ## Quick Start
 
@@ -65,6 +66,7 @@ Zone layout is configured via `public/assets/layout/zone-config.json`. Changes a
 | Shortcut | Action |
 |----------|--------|
 | `⌘/Ctrl + K` | Open command palette |
+| `⌘/Ctrl + H` | Toggle OpenClaw Hub |
 | `⌘/Ctrl + Shift + A` | Open alert center |
 | `Escape` | Close panel / Clear selection |
 | `+` / `-` | Zoom in / out |
@@ -95,6 +97,8 @@ All endpoints are available on the dev server (`127.0.0.1:5179`):
 | `/api/office/snapshot` | GET | Full office state snapshot |
 | `/api/office/stream` | GET | SSE stream for real-time updates |
 | `/api/office/metrics` | GET | Server metrics and diagnostics |
+| `/api/office/openclaw-hub` | GET | OpenClaw project status snapshot |
+| `/api/office/openclaw-hub/doc` | GET | Full document content (`?path=`) |
 
 ### SSE Stream Protocol
 
@@ -141,6 +145,8 @@ Customize room positions, sizes, and routing rules:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `OPENCLAW_STATE_DIR` | `~/.openclaw` | OpenClaw state directory |
+| `OPENCLAW_PROJECT_DIR` | `../openclaw` | OpenClaw project root for Hub dashboard |
+| `OPENCLAW_GATEWAY_PORT` | `18789` | OpenClaw gateway port for health checks |
 | `PORT` | `5179` | Dev server port |
 
 ## Development
@@ -203,6 +209,7 @@ openClawOffice/
 - [Operator Playbook](docs/operator-playbook.md)
 - [Quality Gate](docs/quality-gate.md)
 - [Room Blueprint](docs/room-blueprint.md)
+- [OpenClaw Hub](docs/openclaw-hub.md)
 
 ## License
 

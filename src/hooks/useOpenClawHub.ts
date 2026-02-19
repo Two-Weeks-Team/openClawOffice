@@ -1,3 +1,8 @@
+/**
+ * Polling hook for the OpenClaw Hub API.
+ * Fetches `/api/office/openclaw-hub` every 30 s and exposes snapshot/loading/error state.
+ * Requests are aborted on unmount or rapid re-fetch to prevent stale updates.
+ */
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { OpenClawHubSnapshot } from "../../server/openclaw-hub-types";
 

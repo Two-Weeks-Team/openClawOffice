@@ -1,3 +1,8 @@
+/**
+ * Frontend utilities for the OpenClaw Hub dashboard.
+ * Provides severity resolution, formatting helpers, and markdown parsing.
+ * @module openclaw-hub
+ */
 import type { OpenClawHubSnapshot } from "../../server/openclaw-hub-types";
 
 export type HubCardSeverity = "good" | "warn" | "bad" | "neutral";
@@ -12,6 +17,7 @@ export type HubCardId =
   | "docs"
   | "changelog";
 
+/** Map a hub card to its severity level based on current snapshot data. */
 export function resolveCardSeverity(
   snapshot: OpenClawHubSnapshot,
   cardId: HubCardId,
@@ -43,11 +49,13 @@ export function resolveCardSeverity(
   }
 }
 
+/** Format a "commits behind" count into a human-readable string. */
 export function formatCommitsBehind(n: number): string {
   if (n === 0) return "up to date";
   return `${n} commit${n === 1 ? "" : "s"} behind`;
 }
 
+/** Format a latency value (ms) for display, returning "-" when null. */
 export function formatLatencyMs(ms: number | null): string {
   if (ms === null) return "-";
   return `${ms}ms`;
@@ -58,6 +66,7 @@ export type MarkdownSection = {
   body: string;
 };
 
+/** Split markdown content into heading/body sections for structured rendering. */
 export function parseMarkdownToSections(content: string): MarkdownSection[] {
   const sections: MarkdownSection[] = [];
   const lines = content.split("\n");

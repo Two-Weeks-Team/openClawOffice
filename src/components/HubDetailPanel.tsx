@@ -1,7 +1,13 @@
+/**
+ * Slide-in detail panel for the Hub dashboard (L3 progressive disclosure).
+ * Supports deep-dive into docs, changelog, channels, and skills.
+ * Fetches full document content on demand with AbortController for race-safety.
+ */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { parseMarkdownToSections, type MarkdownSection } from "../lib/openclaw-hub";
 import type { OpenClawChangelogEntry, OpenClawChannelInfo, OpenClawSkillInfo } from "../../server/openclaw-hub-types";
 
+/** Discriminated union for the four detail panel content types. */
 type DetailTarget =
   | { kind: "doc"; path: string; title: string }
   | { kind: "changelog"; entry: OpenClawChangelogEntry }

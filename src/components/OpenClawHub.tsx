@@ -1,3 +1,15 @@
+/**
+ * OpenClaw Status Hub — main dashboard component.
+ *
+ * Renders 8 severity-colored cards (Project, Gateway, Channels, Skills,
+ * Memory, Cron, Docs, Changelog) with 4-level progressive disclosure:
+ * - L0 (Glance): card grid with severity dot + one-line summary
+ * - L1 (Hover): CSS tooltip with 3-5 detail lines
+ * - L2 (Click): card expands to show full metrics/lists
+ * - L3 (Panel): slide-in detail panel for docs/changelog deep-dive
+ *
+ * Accessible via the "Hub" tab or `mod+h` shortcut.
+ */
 import { useCallback, useMemo, useState } from "react";
 import type { OpenClawHubSnapshot } from "../../server/openclaw-hub-types";
 import { useOpenClawHub } from "../hooks/useOpenClawHub";
