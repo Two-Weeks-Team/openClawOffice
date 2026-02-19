@@ -545,6 +545,19 @@ export function EntityDetailPanel({
                     <dd>{readyModel.models.join(", ") || "unknown"}</dd>
                   </div>
                   <div>
+                    <dt>Last Tool</dt>
+                    <dd>{readyModel.entity.lastTool ?? "-"}</dd>
+                  </div>
+                  {readyModel.entity.tokenUsage ? (
+                    <div>
+                      <dt>Token Usage</dt>
+                      <dd>
+                        {readyModel.entity.tokenUsage.inputTokens.toLocaleString()} in /{" "}
+                        {readyModel.entity.tokenUsage.outputTokens.toLocaleString()} out
+                      </dd>
+                    </div>
+                  ) : null}
+                  <div>
                     <dt>Last Updated</dt>
                     <dd>{formatAt(readyModel.entity.lastUpdatedAt)}</dd>
                   </div>
@@ -614,6 +627,10 @@ export function EntityDetailPanel({
                   <article>
                     <span>Token Est.</span>
                     <strong>{readyModel.metrics.tokenEstimate}</strong>
+                  </article>
+                  <article>
+                    <span>Tools Used</span>
+                    <strong>{readyModel.entity.toolCount ?? 0}</strong>
                   </article>
                 </div>
                 <dl className="detail-kv detail-kv-compact">

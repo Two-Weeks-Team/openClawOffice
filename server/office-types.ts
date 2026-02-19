@@ -15,6 +15,12 @@ export type OfficeEntity = {
   bubble?: string;
   task?: string;
   expiresAt?: number;
+  lastTool?: string;
+  toolCount?: number;
+  tokenUsage?: {
+    inputTokens: number;
+    outputTokens: number;
+  };
 };
 
 export type OfficeRunStatus = "active" | "ok" | "error";

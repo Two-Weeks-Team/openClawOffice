@@ -232,6 +232,71 @@ function processTranscriptLine(line: string, seq: number, state: TranscriptTailS
   }
 }
 
+export type TranscriptToolSummary = {
+  lastToolName?: string;
+  toolCount: number;
+  inputTokens: number;
+  outputTokens: number;
+};
+
+export function buildTranscriptMeta(rawJsonl: string): TranscriptToolSummary {
+  let toolCount = 0;
+  let lastToolName: string | undefined;
+  let inputTokens = 0;
+  let outputTokens = 0;
+
+  const lines = rawJsonl
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  for (const line of lines) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line) as unknown;
+    } catch {
+      continue;
+    }
+    if (!isRecord(parsed)) {
+      continue;
+    }
+
+    // Unwrap potential envelope wrappers (message, payload) used by some transcript formats
+    const candidates: Record<string, unknown>[] = [parsed];
+    for (const key of ["message", "payload"]) {
+      if (isRecord(parsed[key])) {
+        candidates.push(parsed[key] as Record<string, unknown>);
+      }
+    }
+
+    for (const row of candidates) {
+      // Extract tool_use from content array
+      const content = row.content;
+      if (Array.isArray(content)) {
+        for (const block of content) {
+          if (isRecord(block) && block.type === "tool_use" && typeof block.name === "string") {
+            toolCount++;
+            lastToolName = block.name;
+          }
+        }
+      }
+
+      // Extract usage info
+      const usage = row.usage;
+      if (isRecord(usage)) {
+        if (typeof usage.input_tokens === "number") {
+          inputTokens += usage.input_tokens;
+        }
+        if (typeof usage.output_tokens === "number") {
+          outputTokens += usage.output_tokens;
+        }
+      }
+    }
+  }
+
+  return { lastToolName, toolCount, inputTokens, outputTokens };
+}
+
 export function buildTranscriptBubble(
   rawJsonl: string,
   options?: { lookback?: number; maxChars?: number },
