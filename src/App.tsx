@@ -8,6 +8,7 @@ import { GlobalStatusBar } from "./components/GlobalStatusBar";
 import { OfficeStage } from "./components/OfficeStage";
 import { SummaryExporter } from "./components/SummaryExporter";
 import { ThroughputDashboard } from "./components/ThroughputDashboard";
+import { useFocusTrap } from "./hooks/useFocusTrap";
 import { useOfficeStream } from "./hooks/useOfficeStream";
 import {
   DEFAULT_ALERT_RULE_PREFERENCES,
@@ -303,6 +304,8 @@ function App() {
     alerts: null,
   });
   const shortcutPlatform = useMemo(() => detectShortcutPlatform(), []);
+  const alertCenterTrapRef = useFocusTrap<HTMLDivElement>(isAlertCenterOpen);
+  const shortcutHelpTrapRef = useFocusTrap<HTMLDivElement>(isShortcutHelpOpen);
 
   const showToast = useCallback((kind: NonNullable<ToastState>["kind"], message: string) => {
     setToast({ kind, message });
@@ -2026,6 +2029,7 @@ function App() {
 
       {isAlertCenterOpen ? (
         <div
+          ref={alertCenterTrapRef}
           className="alert-center-overlay"
           role="presentation"
           onMouseDown={(event) => {
@@ -2074,6 +2078,7 @@ function App() {
 
       {isShortcutHelpOpen ? (
         <div
+          ref={shortcutHelpTrapRef}
           className="shortcut-help-overlay"
           role="presentation"
           onMouseDown={(event) => {

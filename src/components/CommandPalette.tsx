@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { filterCommandIds } from "../lib/command-palette";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 
 export type CommandPaletteEntry = {
   id: string;
@@ -29,6 +30,7 @@ export function CommandPalette({
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const focusTrapRef = useFocusTrap<HTMLDivElement>(true);
 
   const commandById = useMemo(
     () => new Map(commands.map((command) => [command.id, command])),
@@ -125,6 +127,7 @@ export function CommandPalette({
 
   return (
     <div
+      ref={focusTrapRef}
       className="command-palette-overlay"
       role="presentation"
       onMouseDown={(event) => {
