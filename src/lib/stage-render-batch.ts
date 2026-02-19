@@ -1,4 +1,6 @@
+import type { CSSProperties } from "react";
 import type { OfficeEntity, OfficeRun } from "../types/office";
+import { getAvatarStyle } from "./avatar-sprite";
 
 export type StagePlacement = {
   entity: OfficeEntity;
@@ -48,6 +50,7 @@ export type StageEntityRenderModel = {
   priorityBand: StagePriorityBand;
   priorityScore: number;
   expiresAt?: number;
+  avatarStyle?: CSSProperties;
 };
 
 export type BuildStageEntityRenderModelsInput = {
@@ -352,6 +355,7 @@ export function buildStageEntityRenderModels(
       priorityBand: priority.band,
       priorityScore: priority.score,
       expiresAt: entity.expiresAt,
+      avatarStyle: getAvatarStyle(entity.agentId, entity.kind),
     });
   }
 

@@ -326,6 +326,7 @@ const EntityTokenView = memo(function EntityTokenView({
       onMouseLeave={() => onHoverEntity?.(null, null)}
     >
       <div className="chip-status-bar" />
+      {model.avatarStyle ? <div className="chip-avatar" style={model.avatarStyle} /> : null}
       {showLabel ? (
         <div className="chip-content">
           <span className="chip-label">
