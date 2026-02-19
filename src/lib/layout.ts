@@ -1,4 +1,5 @@
 import type { OfficeEntity, OfficeEntityStatus } from "../types/office";
+import { hashString } from "./hash";
 
 export type RoomShape = "grid" | "ring" | "line" | "cluster";
 export type ZonePriorityKey = "status" | "team" | "role" | "parent" | "recent";
@@ -230,14 +231,6 @@ type AssignmentMeta = {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
-}
-
-function hashString(input: string): number {
-  let hash = 0;
-  for (let i = 0; i < input.length; i += 1) {
-    hash = (hash * 31 + input.charCodeAt(i)) >>> 0;
-  }
-  return hash;
 }
 
 function toFiniteNumber(value: unknown, fallback: number): number {

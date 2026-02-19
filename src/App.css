@@ -1815,6 +1815,31 @@ body {
   border-radius: 1px 0 0 1px;
 }
 
+.chip-avatar {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  background-size: 918px 203px;
+  align-self: center;
+  margin: 0 2px;
+}
+
+.entity-token.agent .chip-avatar {
+  width: 20px;
+  height: 20px;
+  background-size: calc(918px * 20 / 16) calc(203px * 20 / 16);
+}
+
+.density-dense .chip-avatar {
+  display: none;
+}
+
+.lod-distant .chip-avatar {
+  display: none;
+}
+
 .entity-token .chip-content {
   flex: 1;
   min-width: 0;
