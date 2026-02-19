@@ -89,6 +89,9 @@ export async function fetchWorldPositions(): Promise<WorldSnapshot | null> {
 
     if (!response.ok) {
       consecutiveFailures++;
+      console.warn(
+        `[world-client] observe returned ${response.status} ${response.statusText}`,
+      );
       return cachedWorldSnapshot;
     }
 
@@ -121,8 +124,12 @@ export async function fetchWorldPositions(): Promise<WorldSnapshot | null> {
     };
 
     return cachedWorldSnapshot;
-  } catch {
+  } catch (err: unknown) {
     consecutiveFailures++;
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(
+      `[world-client] fetch failed (attempt ${consecutiveFailures}): ${message}`,
+    );
     return cachedWorldSnapshot;
   }
 }
@@ -142,6 +149,7 @@ function parseEntityPosition(
   if (!pos || typeof pos.x !== "number" || typeof pos.y !== "number") return;
 
   const facing = typeof entity.facing === "string" ? entity.facing : undefined;
+  const zone = typeof entity.zone === "string" ? entity.zone : undefined;
 
   // Use name as the key since it matches OpenClaw agent names.
   const agentId = name || id;
@@ -151,6 +159,7 @@ function parseEntityPosition(
     agentId,
     x: pos.x,
     y: pos.y,
+    zone,
     facing,
   });
 }
