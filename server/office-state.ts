@@ -37,7 +37,7 @@ function resolveMaxCompletedRuns(): number {
   const raw = process.env.OPENCLAW_MAX_COMPLETED_RUNS?.trim();
   if (!raw) return DEFAULT_MAX_COMPLETED_RUNS;
   const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed < 1) return DEFAULT_MAX_COMPLETED_RUNS;
+  if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < 0) return DEFAULT_MAX_COMPLETED_RUNS;
   return parsed;
 }
 
@@ -574,7 +574,9 @@ export async function buildOfficeSnapshot(): Promise<OfficeSnapshot> {
     }
   }
 
-  if (completedEntities.length > maxCompletedRuns) {
+  // Only cap completed runs when TTL is disabled (0) to prevent unbounded growth.
+  // When TTL is active, all within-TTL runs are shown without cap.
+  if (runTtlMs === 0 && completedEntities.length > maxCompletedRuns) {
     completedEntities.sort(
       (a, b) => (b.lastUpdatedAt ?? 0) - (a.lastUpdatedAt ?? 0),
     );
