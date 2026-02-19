@@ -18,6 +18,7 @@ import type {
   OfficeSnapshot,
   SnapshotDiagnostic,
 } from "./office-types";
+import { fetchWorldPositions, isWorldIntegrationEnabled } from "./world-client";
 
 const MAX_EVENTS = 220;
 const LIVE_IDLE_WINDOW_MS = 8 * 60_000;
@@ -449,6 +450,7 @@ function createDemoSnapshot(stateDir: string, diagnostics: SnapshotDiagnostic[] 
       lastTool: "Read",
       toolCount: 12,
       tokenUsage: { inputTokens: 45000, outputTokens: 12000 },
+      worldPosition: { x: 1280, y: 720, zone: "plaza", facing: "down" },
     },
     {
       id: "agent:research",
@@ -464,6 +466,7 @@ function createDemoSnapshot(stateDir: string, diagnostics: SnapshotDiagnostic[] 
       lastTool: "Bash",
       toolCount: 8,
       tokenUsage: { inputTokens: 32000, outputTokens: 9500 },
+      worldPosition: { x: 640, y: 480, zone: "library", facing: "right" },
     },
     {
       id: "agent:ops",
@@ -638,6 +641,28 @@ export async function buildOfficeSnapshot(): Promise<OfficeSnapshot> {
     }
     return a.kind === "agent" ? -1 : 1;
   });
+
+  // Optional: enrich entities with world position data.
+  if (isWorldIntegrationEnabled()) {
+    try {
+      const worldData = await fetchWorldPositions();
+      if (worldData) {
+        for (const entity of entities) {
+          const worldPos = worldData.positions.get(entity.agentId);
+          if (worldPos) {
+            entity.worldPosition = {
+              x: worldPos.x,
+              y: worldPos.y,
+              zone: worldPos.zone,
+              facing: worldPos.facing,
+            };
+          }
+        }
+      }
+    } catch {
+      // Non-blocking: world integration failure must not break the dashboard.
+    }
+  }
 
   return {
     generatedAt: Date.now(),
