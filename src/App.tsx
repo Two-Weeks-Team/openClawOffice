@@ -1431,8 +1431,9 @@ function App() {
   if (!snapshot) {
     return (
       <main className="app-shell">
-        <div className="loading-view">
+        <div className="loading-view" role="status" aria-busy="true" aria-live="polite">
           <h1>openClawOffice</h1>
+          <div className="loading-spinner" aria-hidden="true" />
           <p>Loading office state stream...</p>
           {error ? <p className="error-text">{error}</p> : null}
           {recoveryMessage ? <p className="recovery-text">{recoveryMessage}</p> : null}
