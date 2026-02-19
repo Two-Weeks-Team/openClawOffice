@@ -1430,15 +1430,20 @@ function App() {
 
   if (!snapshot) {
     return (
-      <main className="app-shell">
-        <div className="loading-view" role="status" aria-busy="true" aria-live="polite">
-          <h1>openClawOffice</h1>
-          <div className="loading-spinner" aria-hidden="true" />
-          <p>Loading office state stream...</p>
-          {error ? <p className="error-text">{error}</p> : null}
-          {recoveryMessage ? <p className="recovery-text">{recoveryMessage}</p> : null}
-        </div>
-      </main>
+      <>
+        <a href="#main-content" className="skip-link">
+          Skip to main content
+        </a>
+        <main className="app-shell" id="main-content">
+          <div className="loading-view" role="status" aria-busy="true" aria-live="polite">
+            <h1>openClawOffice</h1>
+            <div className="loading-spinner" aria-hidden="true" />
+            <p>Loading office state stream...</p>
+            {error ? <p className="error-text">{error}</p> : null}
+            {recoveryMessage ? <p className="recovery-text">{recoveryMessage}</p> : null}
+          </div>
+        </main>
+      </>
     );
   }
 
@@ -1474,9 +1479,13 @@ function App() {
         : "has-double-docked";
 
   return (
-    <main className="app-shell">
-      <GlobalStatusBar
-        connected={connected}
+    <>
+      <a href="#main-content" className="skip-link">
+        Skip to main content
+      </a>
+      <main className="app-shell" id="main-content">
+        <GlobalStatusBar
+          connected={connected}
         liveSource={liveSource}
         agents={agents.length}
         subagents={subagents.length}
@@ -2184,6 +2193,7 @@ function App() {
         </div>
       ) : null}
     </main>
+    </>
   );
 }
 
