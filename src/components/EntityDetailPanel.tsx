@@ -548,6 +548,15 @@ export function EntityDetailPanel({
                     <dt>Last Tool</dt>
                     <dd>{readyModel.entity.lastTool ?? "-"}</dd>
                   </div>
+                  {readyModel.entity.tokenUsage ? (
+                    <div>
+                      <dt>Token Usage</dt>
+                      <dd>
+                        {readyModel.entity.tokenUsage.inputTokens.toLocaleString()} in /{" "}
+                        {readyModel.entity.tokenUsage.outputTokens.toLocaleString()} out
+                      </dd>
+                    </div>
+                  ) : null}
                   <div>
                     <dt>Last Updated</dt>
                     <dd>{formatAt(readyModel.entity.lastUpdatedAt)}</dd>
