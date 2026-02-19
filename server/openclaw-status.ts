@@ -62,11 +62,11 @@ async function loadGitStatus(dir: string): Promise<OpenClawGitStatus | null> {
     const [branch, behindStr, logLine, statusOut] = await Promise.all([
       runGit(dir, ["rev-parse", "--abbrev-ref", "HEAD"]),
       runGit(dir, ["rev-list", "--count", "HEAD..origin/main"]).catch(() => "0"),
-      runGit(dir, ["log", "-1", "--format=%h|%s|%ci"]),
+      runGit(dir, ["log", "-1", "--format=%h%x00%s%x00%ci"]),
       runGit(dir, ["status", "--porcelain"]),
     ]);
 
-    const [hash = "", message = "", date = ""] = logLine.split("|");
+    const [hash = "", message = "", date = ""] = logLine.split("\0");
     const dirtyFiles = statusOut
       .split("\n")
       .filter((line) => line.trim().length > 0)
@@ -89,7 +89,11 @@ async function loadGitStatus(dir: string): Promise<OpenClawGitStatus | null> {
 async function loadProjectMeta(dir: string): Promise<OpenClawProjectMeta | null> {
   try {
     const raw = await fs.readFile(path.join(dir, "package.json"), "utf-8");
-    const pkg = JSON.parse(raw) as Record<string, unknown>;
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      return null;
+    }
+    const pkg = parsed as Record<string, unknown>;
     const deps = pkg.dependencies;
     const devDeps = pkg.devDependencies;
     const scripts = pkg.scripts;

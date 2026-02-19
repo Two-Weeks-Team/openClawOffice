@@ -5118,7 +5118,7 @@ body {
 
 .hub-header-title h2 {
   margin: 0;
-  font-family: "Syne", sans-serif;
+  font-family: Syne, sans-serif;
   font-size: 1.5rem;
 }
 
@@ -5340,7 +5340,7 @@ body {
 
 .hub-card-kv dd {
   margin: 0;
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .hub-card-kv code {
@@ -5535,7 +5535,7 @@ body {
 
 .hub-doc-pre {
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: anywhere;
   font-family: "Space Grotesk", monospace;
   font-size: 0.78rem;
   color: var(--muted);

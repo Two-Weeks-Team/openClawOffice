@@ -13,6 +13,10 @@ export const API_ERROR_CODES = {
   streamInitFailed: "STREAM_INIT_FAILED",
   streamRuntimeFailed: "STREAM_RUNTIME_FAILED",
   metricsReadFailed: "METRICS_READ_FAILED",
+  openclawHubBuildFailed: "OPENCLAW_HUB_BUILD_FAILED",
+  openclawHubDocFailed: "OPENCLAW_HUB_DOC_FAILED",
+  openclawHubDocNotFound: "OPENCLAW_HUB_DOC_NOT_FOUND",
+  openclawHubDocBadRequest: "OPENCLAW_HUB_DOC_BAD_REQUEST",
 } as const;
 
 export type ApiErrorCode = (typeof API_ERROR_CODES)[keyof typeof API_ERROR_CODES];

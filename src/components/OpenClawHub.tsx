@@ -435,7 +435,7 @@ function SkillsCard({
   onOpenDetail: (target: DetailTarget) => void;
 }) {
   const count = snapshot.skills.length;
-  const glance = `${count}+ Skill${count !== 1 ? "s" : ""}`;
+  const glance = `${count} Skill${count !== 1 ? "s" : ""}`;
   const tooltipLines = snapshot.skills
     .slice(0, 10)
     .map((s) => s.name)
@@ -554,7 +554,7 @@ function DocsCard({
   onOpenDetail: (target: DetailTarget) => void;
 }) {
   const count = snapshot.docs.length;
-  const glance = `${count}+ Page${count !== 1 ? "s" : ""}`;
+  const glance = `${count} Page${count !== 1 ? "s" : ""}`;
   const tooltipLines = snapshot.docs
     .slice(0, 5)
     .map((d) => d.title);

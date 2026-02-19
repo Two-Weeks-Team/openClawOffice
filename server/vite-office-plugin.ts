@@ -882,7 +882,7 @@ async function handleOpenClawHub(res: ServerResponse, context: ApiRequestContext
     res.end(
       JSON.stringify(
         toApiErrorBody({
-          code: "OPENCLAW_HUB_BUILD_FAILED" as ApiErrorCode,
+          code: API_ERROR_CODES.openclawHubBuildFailed,
           message: "Failed to build OpenClaw hub snapshot",
           requestId: context.requestId,
           details,
@@ -944,7 +944,7 @@ async function handleOpenClawHubDoc(req: IncomingMessage, res: ServerResponse, c
     res.end(
       JSON.stringify(
         toApiErrorBody({
-          code: "OPENCLAW_HUB_DOC_FAILED" as ApiErrorCode,
+          code: API_ERROR_CODES.openclawHubDocFailed,
           message: "Failed to load document",
           requestId: context.requestId,
           details,
