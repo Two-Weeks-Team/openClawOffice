@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import type { AlertSignal } from "../lib/alerts";
 import { buildBubbleLaneLayout, type BubbleLaneCandidate } from "../lib/bubble-lanes";
@@ -224,7 +224,7 @@ const EntityDatapad = memo(function EntityDatapad({
   const bubbleRef = useRef<HTMLDivElement>(null);
   const [bubbleOverflows, setBubbleOverflows] = useState(false);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = bubbleRef.current;
     if (el) {
       setBubbleOverflows(el.scrollHeight > el.clientHeight);
