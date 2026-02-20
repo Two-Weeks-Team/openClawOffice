@@ -2112,6 +2112,7 @@ body {
 }
 
 .datapad-bubble {
+  position: relative;
   margin-top: 8px;
   padding: 8px 0;
   border-top: 1px solid rgba(0, 243, 255, 0.15);
@@ -2120,26 +2121,20 @@ body {
   color: #e2e8f0;
   line-height: 1.5;
   max-height: 200px;
-  overflow-y: auto;
-  word-wrap: break-word;
+  overflow: hidden;
+  overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
 
-.datapad-bubble::-webkit-scrollbar {
-  width: 6px;
-}
-
-.datapad-bubble::-webkit-scrollbar-track {
-  background: rgba(0, 243, 255, 0.05);
-}
-
-.datapad-bubble::-webkit-scrollbar-thumb {
-  background: rgba(0, 243, 255, 0.3);
-  border-radius: 3px;
-}
-
-.datapad-bubble::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 243, 255, 0.5);
+.datapad-bubble.has-overflow::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 32px;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.95));
+  pointer-events: none;
 }
 
 .datapad-bubble-section {

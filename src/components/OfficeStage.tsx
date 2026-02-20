@@ -221,6 +221,15 @@ const EntityDatapad = memo(function EntityDatapad({
   run,
   generatedAt,
 }: EntityDatapadProps) {
+  const bubbleRef = useRef<HTMLDivElement>(null);
+  const [bubbleOverflows, setBubbleOverflows] = useState(false);
+
+  useEffect(() => {
+    const el = bubbleRef.current;
+    if (el) {
+      setBubbleOverflows(el.scrollHeight > el.clientHeight);
+    }
+  }, [entity.bubble, entity.task]);
   const durationText = useMemo(() => {
     if (entity.kind === "subagent" && run) {
       const startTime = run.startedAt ?? run.createdAt;
@@ -267,12 +276,12 @@ const EntityDatapad = memo(function EntityDatapad({
       {entity.bubble ? (
         <div className="datapad-bubble-section">
           <div className="datapad-bubble-label">Latest message</div>
-          <div className="datapad-bubble">{entity.bubble}</div>
+          <div ref={bubbleRef} className={`datapad-bubble${bubbleOverflows ? " has-overflow" : ""}`}>{entity.bubble}</div>
         </div>
       ) : entity.task ? (
         <div className="datapad-bubble-section">
           <div className="datapad-bubble-label">Task</div>
-          <div className="datapad-bubble">{entity.task}</div>
+          <div ref={bubbleRef} className={`datapad-bubble${bubbleOverflows ? " has-overflow" : ""}`}>{entity.task}</div>
         </div>
       ) : null}
     </div>
