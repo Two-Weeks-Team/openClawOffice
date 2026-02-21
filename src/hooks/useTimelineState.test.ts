@@ -183,8 +183,8 @@ describe("useTimelineState — moveTimelineEvent", () => {
 
     act(() => result.current.moveTimelineEvent(1));
 
-    // filterTimelineEvents returns events ordered by at ascending in the hook
-    expect(result.current.activeEventId).toBeTruthy();
+    // events sorted ascending by at → first is "a" (at: 1000)
+    expect(result.current.activeEventId).toBe("a");
     expect(noopToast).not.toHaveBeenCalled();
   });
 
@@ -274,7 +274,7 @@ describe("useTimelineState — handleRoomAssignmentsChange", () => {
   beforeEach(() => setSearch(""));
   afterEach(() => vi.restoreAllMocks());
 
-  it("merges room assignment map into state", () => {
+  it("sets room assignment map in state", () => {
     const { result } = renderHook(() => useTimelineState(null, noopToast));
     const assignments = new Map([["agent-1", "room-A"]]);
 
@@ -321,6 +321,7 @@ describe("useTimelineState — activeTimelineIndex", () => {
 
     act(() => result.current.moveTimelineEvent(1));
 
-    expect(result.current.activeTimelineIndex).toBeGreaterThanOrEqual(0);
+    // null → moveTimelineEvent(1) selects the first event → index 0
+    expect(result.current.activeTimelineIndex).toBe(0);
   });
 });
