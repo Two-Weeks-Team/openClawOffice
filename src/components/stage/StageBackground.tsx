@@ -1,16 +1,5 @@
 import { memo } from "react";
-
-type RoomDebugInfo = {
-  assigned: number;
-  capacity: number;
-  overflowIn: number;
-  overflowOut: number;
-  targeted: number;
-  saturation: string;
-  utilizationPct: number;
-  collisionPairs: number;
-  manualOverrides: number;
-};
+import type { RoomDebugInfo } from "../../lib/layout";
 
 type RoomShape = {
   id: string;
@@ -98,7 +87,7 @@ export const StageBackground = memo(function StageBackground({
                 <span>
                   cap {debug.assigned}/{debug.capacity}
                 </span>
-                <span>occ {debug.utilizationPct || occupancyPercent}%</span>
+                <span>occ {debug.utilizationPct ?? occupancyPercent}%</span>
                 <span>target {debug.targeted}</span>
                 <span className={`saturation-${debug.saturation}`}>{debug.saturation}</span>
                 {debug.collisionPairs > 0 ? <span>coll {debug.collisionPairs}</span> : null}

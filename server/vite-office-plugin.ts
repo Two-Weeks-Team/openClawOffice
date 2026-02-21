@@ -236,7 +236,7 @@ function collectCursor(req: IncomingMessage): number {
 }
 
 export function parseQueryNumber(value: string | null): number | undefined {
-  if (!value) {
+  if (!value?.trim()) {
     return undefined;
   }
   const parsed = Number(value);

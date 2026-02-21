@@ -1,5 +1,4 @@
 import { useMemo } from "react";
-import { formatNumber } from "../lib/format";
 import { buildTokenMetrics } from "../lib/token-dashboard";
 import type { OfficeSnapshot } from "../types/office";
 
@@ -10,7 +9,7 @@ type Props = {
 function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return formatNumber(n);
+  return String(Math.round(n));
 }
 
 function formatCost(usd: number): string {
@@ -69,7 +68,7 @@ export function TokenDashboard({ snapshot }: Props) {
         <div className="token-summary-card">
           <span className="token-summary-label">Est. Cost</span>
           <span className="token-summary-value">{formatCost(metrics.totalEstimatedCostUsd)}</span>
-          <span className="token-summary-sub">Sonnet default pricing</span>
+          <span className="token-summary-sub">Model-aware pricing est.</span>
         </div>
         <div className="token-summary-card">
           <span className="token-summary-label">Agents</span>

@@ -157,6 +157,7 @@ function LaneEvents({
                 <button
                   type="button"
                   className="timeline-summary-toggle"
+                  aria-expanded={expanded}
                   onClick={() => onToggleSummaryKey(item.key)}
                 >
                   {expanded

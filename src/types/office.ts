@@ -169,6 +169,8 @@ export function isOfficeSnapshot(value: unknown): value is OfficeSnapshot {
     obj.source !== null &&
     Array.isArray(obj.entities) &&
     Array.isArray(obj.runs) &&
-    Array.isArray(obj.events)
+    Array.isArray(obj.events) &&
+    typeof obj.runGraph === "object" &&
+    obj.runGraph !== null
   );
 }

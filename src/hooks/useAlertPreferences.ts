@@ -33,7 +33,9 @@ export function useAlertPreferences(snapshotGeneratedAt: number | undefined) {
         JSON.stringify(alertRulePreferences),
       );
     } catch {
-      // Ignore localStorage persistence errors in restricted browser modes.
+      if (import.meta.env.DEV) {
+        console.warn("[alert-preferences] localStorage write failed (restricted browser mode)");
+      }
     }
   }, [alertRulePreferences]);
 

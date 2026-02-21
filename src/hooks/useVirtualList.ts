@@ -44,6 +44,17 @@ export function useVirtualList({
 }): VirtualListResult {
   const [scrollTop, setScrollTop] = useState(0);
 
+  // Guard: if itemHeight is 0 render all items (no virtualization possible)
+  if (itemHeight <= 0) {
+    return {
+      startIndex: 0,
+      endIndex: itemCount,
+      totalHeight: 0,
+      offsetY: 0,
+      onScroll: setScrollTop,
+    };
+  }
+
   const totalHeight = itemCount * itemHeight;
   const firstVisible = Math.floor(scrollTop / itemHeight);
   const startIndex = Math.max(0, firstVisible - overscan);

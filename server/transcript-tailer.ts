@@ -1,3 +1,5 @@
+import type { ToolCategory, ToolCategoryBreakdown } from "./office-types";
+
 type TranscriptRole = "assistant" | "tool" | "user" | "unknown";
 
 type TranscriptEntry = {
@@ -232,8 +234,7 @@ function processTranscriptLine(line: string, seq: number, state: TranscriptTailS
   }
 }
 
-export type ToolCategory = "file_op" | "bash" | "web" | "agent_call" | "other";
-export type ToolCategoryBreakdown = Record<ToolCategory, number>;
+export type { ToolCategory, ToolCategoryBreakdown };
 
 const FILE_OP_TOOLS = new Set(["read", "write", "edit", "multiedit", "glob", "grep", "notebookedit"]);
 const BASH_TOOLS = new Set(["bash", "shell", "exec", "run"]);

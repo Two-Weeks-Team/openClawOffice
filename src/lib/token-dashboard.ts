@@ -63,6 +63,7 @@ export function buildTokenMetrics(snapshot: OfficeSnapshot): TokenDashboardMetri
   const agentOutputTokens = new Map<string, number>();
   const agentLabels = new Map<string, string>();
   const agentSessions = new Map<string, number>();
+  const agentModels = new Map<string, string | undefined>();
 
   for (const entity of snapshot.entities) {
     const agentId = entity.kind === "subagent" ? entity.parentAgentId : entity.agentId;
@@ -72,6 +73,7 @@ export function buildTokenMetrics(snapshot: OfficeSnapshot): TokenDashboardMetri
     if (entity.kind === "agent") {
       agentLabels.set(agentId, entity.label);
       agentSessions.set(agentId, entity.sessions);
+      agentModels.set(agentId, entity.model);
     }
 
     if (usage) {
@@ -93,7 +95,7 @@ export function buildTokenMetrics(snapshot: OfficeSnapshot): TokenDashboardMetri
       const outputTokens = agentOutputTokens.get(agentId) ?? 0;
       const totalTokens = inputTokens + outputTokens;
       const sessions = agentSessions.get(agentId) ?? 0;
-      const estimatedCostUsd = estimateCost(inputTokens, outputTokens);
+      const estimatedCostUsd = estimateCost(inputTokens, outputTokens, resolveModelPrice(agentModels.get(agentId)));
       const tokensPerSession = sessions > 0 ? Math.round(totalTokens / sessions) : 0;
 
       totalInputTokens += inputTokens;

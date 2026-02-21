@@ -348,8 +348,9 @@ function fuzzyScore(pattern: string, text: string): number {
   // Exact substring match: highest priority
   const substringIndex = text.indexOf(pattern);
   if (substringIndex !== -1) {
-    // Earlier matches in the string score slightly higher
-    return 1000 + pattern.length * 10 - substringIndex;
+    // Earlier matches in the string score slightly higher; clamp to 1 so exact
+    // matches deep in very long labels still outrank non-exact subsequences.
+    return Math.max(1, 1000 + pattern.length * 10 - substringIndex);
   }
 
   // Subsequence match with bonuses
