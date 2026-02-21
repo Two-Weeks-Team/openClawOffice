@@ -11,36 +11,97 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  quality-gate:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+  lint:
+    runs-on: [self-hosted, X64, Linux]
+    timeout-minutes: 5
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+  test:
+    runs-on: [self-hosted, X64, Linux]
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+
+  build:
+    needs: [lint, test]
+    runs-on: [self-hosted, X64, Linux]
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - uses: actions/upload-artifact@v4
         with:
-          version: 10
+          name: dist-${{ github.sha }}
+          path: dist/
+          retention-days: 1
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+  benchmark:
+    needs: [build]
+    runs-on: [self-hosted, X64, Linux]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm benchmark:local50
+
+  e2e-smoke:
+    needs: [build]
+    runs-on: [self-hosted, X64, Linux]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm e2e:smoke
+
+  ux-verify:
+    needs: [build]
+    runs-on: [self-hosted, ARM64, macOS]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
         with:
-          node-version: 24
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Install Playwright browser
+          path: ~/Library/Caches/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('**/package.json') }}
+          restore-keys: |
+            playwright-chromium-${{ runner.os }}-
+      - name: Install Playwright Chromium
         run: pnpm exec playwright install chromium
-
-      - name: Run local quality gate
-        run: pnpm ci:local
-
-      - name: Upload UX verify artifacts
+      - run: pnpm ux:verify
+      - uses: actions/upload-artifact@v4
         if: failure()
-        uses: actions/upload-artifact@v4
         with:
           name: ux-verify-artifacts
           path: output/ux-verify
