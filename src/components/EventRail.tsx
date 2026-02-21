@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { formatRelativeTime } from "../lib/format";
+import { useVirtualList } from "../hooks/useVirtualList";
 import {
   buildTimelineLaneItems,
   buildTimelineLanes,
@@ -39,16 +41,9 @@ type Props = {
 const TIMELINE_SEGMENT_WINDOW_MS = 10 * 60_000;
 const INITIAL_SEGMENT_LOAD_COUNT = 2;
 
-function relativeTime(timestamp: number, now: number) {
-  const ms = Math.max(0, now - timestamp);
-  if (ms < 60_000) {
-    return `${Math.max(1, Math.floor(ms / 1000))}s ago`;
-  }
-  if (ms < 3_600_000) {
-    return `${Math.floor(ms / 60_000)}m ago`;
-  }
-  return `${Math.floor(ms / 3_600_000)}h ago`;
-}
+const VIRTUAL_THRESHOLD = 100;
+const VIRTUAL_ITEM_HEIGHT = 72;
+const VIRTUAL_CONTAINER_HEIGHT = 400;
 
 function eventBadge(type: OfficeEvent["type"]) {
   if (type === "spawn") {
@@ -84,6 +79,143 @@ function laneHighlightAgentId(lane: TimelineLane | null): string | null {
     return lane.events[0]?.agentId ?? lane.id;
   }
   return null;
+}
+
+type LaneEventsProps = {
+  laneKey: string;
+  laneItems: TimelineLaneItem[];
+  activeEventId: string | null;
+  expandedSummaryKeys: Set<string>;
+  now: number;
+  onSelectEvent: (laneKey: string, eventId: string) => void;
+  onToggleSummaryKey: (key: string) => void;
+};
+
+function LaneEvents({
+  laneKey,
+  laneItems,
+  activeEventId,
+  expandedSummaryKeys,
+  now,
+  onSelectEvent,
+  onToggleSummaryKey,
+}: LaneEventsProps) {
+  const hasExpandedSummary = laneItems.some(
+    (item) => item.kind === "summary" && expandedSummaryKeys.has(item.key),
+  );
+  const useVirtual = laneItems.length > VIRTUAL_THRESHOLD && !hasExpandedSummary;
+
+  const { startIndex, endIndex, totalHeight, offsetY, onScroll } = useVirtualList({
+    itemCount: laneItems.length,
+    itemHeight: VIRTUAL_ITEM_HEIGHT,
+    containerHeight: VIRTUAL_CONTAINER_HEIGHT,
+  });
+
+  const visibleItems = useVirtual ? laneItems.slice(startIndex, endIndex) : laneItems;
+
+  const listContent = (
+    <ol className="timeline-lane-events">
+      {visibleItems.map((item) => {
+        if (item.kind === "event") {
+          const { event } = item;
+          return (
+            <li
+              key={item.key}
+              className={`event event-${event.type}${activeEventId === event.id ? " is-current" : ""}`}
+            >
+              <button
+                type="button"
+                className="event-hit"
+                onClick={() => onSelectEvent(laneKey, event.id)}
+              >
+                <span className="badge">{eventBadge(event.type)}</span>
+                <div className="event-body">
+                  <strong>
+                    {event.parentAgentId} {"->"} {event.agentId}
+                  </strong>
+                  <p>{event.text}</p>
+                  <p className="event-meta">
+                    run {event.runId} | {formatRelativeTime(event.at, now)}
+                  </p>
+                </div>
+              </button>
+            </li>
+          );
+        }
+
+        const expanded = expandedSummaryKeys.has(item.key);
+        return (
+          <li key={item.key} className={`event event-summary event-summary-${item.summaryKind}`}>
+            <div className="event-hit">
+              <span className="badge">{summaryBadge(item.summaryKind)}</span>
+              <div className="event-body">
+                <strong>{item.label}</strong>
+                <p className="event-meta">
+                  {item.eventCount} events | {item.runCount} runs |{" "}
+                  {formatRelativeTime(item.latestAt, now)}
+                </p>
+                <button
+                  type="button"
+                  className="timeline-summary-toggle"
+                  aria-expanded={expanded}
+                  onClick={() => onToggleSummaryKey(item.key)}
+                >
+                  {expanded
+                    ? "Hide grouped events"
+                    : `Show grouped events (${timelineLaneItemEventCount(item)})`}
+                </button>
+              </div>
+            </div>
+            {expanded ? (
+              <ol className="timeline-summary-events">
+                {item.events.map((event) => (
+                  <li
+                    key={`${item.key}:${event.id}`}
+                    className={`event event-${event.type}${activeEventId === event.id ? " is-current" : ""}`}
+                  >
+                    <button
+                      type="button"
+                      className="event-hit"
+                      onClick={() => onSelectEvent(laneKey, event.id)}
+                    >
+                      <span className="badge">{eventBadge(event.type)}</span>
+                      <div className="event-body">
+                        <strong>
+                          {event.parentAgentId} {"->"} {event.agentId}
+                        </strong>
+                        <p>{event.text}</p>
+                        <p className="event-meta">
+                          run {event.runId} | {formatRelativeTime(event.at, now)}
+                        </p>
+                      </div>
+                    </button>
+                  </li>
+                ))}
+              </ol>
+            ) : null}
+          </li>
+        );
+      })}
+    </ol>
+  );
+
+  if (!useVirtual) {
+    return listContent;
+  }
+
+  return (
+    <div
+      className="timeline-virtual-container"
+      style={{ height: VIRTUAL_CONTAINER_HEIGHT, overflowY: "auto" }}
+      onScroll={(e) => onScroll(e.currentTarget.scrollTop)}
+    >
+      <div style={{ height: totalHeight, position: "relative" }}>
+        <div style={{ position: "absolute", top: offsetY, width: "100%" }}>
+          {listContent}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function EventRail({
@@ -306,6 +438,20 @@ export function EventRail({
     () => [...index.byRunId.keys()].sort((left, right) => left.localeCompare(right)),
     [index],
   );
+
+  const handleSelectEvent = useCallback(
+    (laneKey: string, eventId: string) => {
+      setManualLaneKey(laneKey);
+      onActiveEventIdChange(eventId);
+    },
+    [onActiveEventIdChange],
+  );
+
+  const handleToggleSummaryKey = useCallback((key: string) => {
+    setExpandedSummaryKeys((previous) =>
+      previous.includes(key) ? previous.filter((k) => k !== key) : [...previous, key],
+    );
+  }, []);
 
   return (
     <aside className="event-rail">
@@ -707,104 +853,15 @@ export function EventRail({
                   </button>
                 </div>
                 {!collapsed ? (
-                  <ol className="timeline-lane-events">
-                    {laneItems.map((item) => {
-                      if (item.kind === "event") {
-                        const event = item.event;
-                        return (
-                          <li
-                            key={item.key}
-                            className={`event event-${event.type} ${
-                              activeEventId === event.id ? "is-current" : ""
-                            }`}
-                          >
-                            <button
-                              type="button"
-                              className="event-hit"
-                              onClick={() => {
-                                setManualLaneKey(lane.key);
-                                onActiveEventIdChange(event.id);
-                              }}
-                            >
-                              <span className="badge">{eventBadge(event.type)}</span>
-                              <div className="event-body">
-                                <strong>
-                                  {event.parentAgentId} {"->"} {event.agentId}
-                                </strong>
-                                <p>{event.text}</p>
-                                <p className="event-meta">
-                                  run {event.runId} | {relativeTime(event.at, now)}
-                                </p>
-                              </div>
-                            </button>
-                          </li>
-                        );
-                      }
-
-                      const expanded = effectiveExpandedSummaryKeys.has(item.key);
-                      return (
-                        <li key={item.key} className={`event event-summary event-summary-${item.summaryKind}`}>
-                          <div className="event-hit">
-                            <span className="badge">{summaryBadge(item.summaryKind)}</span>
-                            <div className="event-body">
-                              <strong>{item.label}</strong>
-                              <p className="event-meta">
-                                {item.eventCount} events | {item.runCount} runs |{" "}
-                                {relativeTime(item.latestAt, now)}
-                              </p>
-                              <button
-                                type="button"
-                                className="timeline-summary-toggle"
-                                onClick={() => {
-                                  setExpandedSummaryKeys((previous) =>
-                                    previous.includes(item.key)
-                                      ? previous.filter((key) => key !== item.key)
-                                      : [...previous, item.key],
-                                  );
-                                }}
-                              >
-                                {expanded
-                                  ? "Hide grouped events"
-                                  : `Show grouped events (${timelineLaneItemEventCount(item)})`}
-                              </button>
-                            </div>
-                          </div>
-                          {expanded ? (
-                            <ol className="timeline-summary-events">
-                              {item.events.map((event) => (
-                                <li
-                                  key={`${item.key}:${event.id}`}
-                                  className={`event event-${event.type} ${
-                                    activeEventId === event.id ? "is-current" : ""
-                                  }`}
-                                >
-                                  <button
-                                    type="button"
-                                    className="event-hit"
-                                    onClick={() => {
-                                      setManualLaneKey(lane.key);
-                                      onActiveEventIdChange(event.id);
-                                    }}
-                                  >
-                                    <span className="badge">{eventBadge(event.type)}</span>
-                                    <div className="event-body">
-                                      <strong>
-                                        {event.parentAgentId} {"->"} {event.agentId}
-                                      </strong>
-                                      <p>{event.text}</p>
-                                      <p className="event-meta">
-                                        run {event.runId} | {relativeTime(event.at, now)}
-                                      </p>
-                                    </div>
-                                  </button>
-                                </li>
-                              ))}
-                            </ol>
-                          ) : null}
-                        </li>
-                      );
-                    })}
-                  </ol>
+                  <LaneEvents
+                    laneKey={lane.key}
+                    laneItems={laneItems}
+                    activeEventId={activeEventId}
+                    expandedSummaryKeys={effectiveExpandedSummaryKeys}
+                    now={now}
+                    onSelectEvent={handleSelectEvent}
+                    onToggleSummaryKey={handleToggleSummaryKey}
+                  />
                 ) : null}
               </li>
             );

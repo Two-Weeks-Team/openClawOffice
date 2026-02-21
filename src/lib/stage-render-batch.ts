@@ -136,7 +136,7 @@ function isLinkedToTimelineHighlight(params: {
   if (normalizedHighlightAgentId) {
     agentHighlightMatch =
       entity.agentId === normalizedHighlightAgentId ||
-      entity.parentAgentId === normalizedHighlightAgentId;
+      (entity.kind === "subagent" && entity.parentAgentId === normalizedHighlightAgentId);
   }
 
   return runHighlightMatch || agentHighlightMatch;
@@ -354,7 +354,7 @@ export function buildStageEntityRenderModels(
       isSelected,
       priorityBand: priority.band,
       priorityScore: priority.score,
-      expiresAt: entity.expiresAt,
+      expiresAt: entity.kind === "subagent" ? entity.expiresAt : undefined,
       avatarStyle: getAvatarStyle(entity.agentId, entity.kind),
     });
   }

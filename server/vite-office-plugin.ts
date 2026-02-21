@@ -167,7 +167,7 @@ function buildRequestContext(req: IncomingMessage, path: string): ApiRequestCont
   };
 }
 
-function asErrorDetails(error: unknown): string | undefined {
+export function asErrorDetails(error: unknown): string | undefined {
   if (error instanceof Error) {
     return error.message;
   }
@@ -235,8 +235,8 @@ function collectCursor(req: IncomingMessage): number {
   }
 }
 
-function parseQueryNumber(value: string | null): number | undefined {
-  if (!value) {
+export function parseQueryNumber(value: string | null): number | undefined {
+  if (!value?.trim()) {
     return undefined;
   }
   const parsed = Number(value);

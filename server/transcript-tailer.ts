@@ -1,3 +1,5 @@
+import type { ToolCategory, ToolCategoryBreakdown } from "./office-types";
+
 type TranscriptRole = "assistant" | "tool" | "user" | "unknown";
 
 type TranscriptEntry = {
@@ -232,9 +234,35 @@ function processTranscriptLine(line: string, seq: number, state: TranscriptTailS
   }
 }
 
+export type { ToolCategory, ToolCategoryBreakdown };
+
+const FILE_OP_TOOLS = new Set(["read", "write", "edit", "multiedit", "glob", "grep", "notebookedit"]);
+const BASH_TOOLS = new Set(["bash", "shell", "exec", "run"]);
+const WEB_TOOLS = new Set(["webfetch", "websearch", "browser", "navigate"]);
+const AGENT_CALL_TOOLS = new Set(["task", "agent", "dispatch", "spawn"]);
+
+/** Classify a Claude tool name into a high-level category. */
+export function classifyToolCategory(toolName: string): ToolCategory {
+  const name = toolName.toLowerCase();
+  if (FILE_OP_TOOLS.has(name) || name.startsWith("file")) {
+    return "file_op";
+  }
+  if (BASH_TOOLS.has(name)) {
+    return "bash";
+  }
+  if (WEB_TOOLS.has(name)) {
+    return "web";
+  }
+  if (AGENT_CALL_TOOLS.has(name) || name.includes("agent")) {
+    return "agent_call";
+  }
+  return "other";
+}
+
 export type TranscriptToolSummary = {
   lastToolName?: string;
   toolCount: number;
+  toolCategoryBreakdown: ToolCategoryBreakdown;
   inputTokens: number;
   outputTokens: number;
 };
@@ -244,6 +272,13 @@ export function buildTranscriptMeta(rawJsonl: string): TranscriptToolSummary {
   let lastToolName: string | undefined;
   let inputTokens = 0;
   let outputTokens = 0;
+  const toolCategoryBreakdown: ToolCategoryBreakdown = {
+    file_op: 0,
+    bash: 0,
+    web: 0,
+    agent_call: 0,
+    other: 0,
+  };
 
   const lines = rawJsonl
     .split(/\r?\n/)
@@ -277,6 +312,8 @@ export function buildTranscriptMeta(rawJsonl: string): TranscriptToolSummary {
           if (isRecord(block) && block.type === "tool_use" && typeof block.name === "string") {
             toolCount++;
             lastToolName = block.name;
+            const category = classifyToolCategory(block.name);
+            toolCategoryBreakdown[category]++;
           }
         }
       }
@@ -294,7 +331,7 @@ export function buildTranscriptMeta(rawJsonl: string): TranscriptToolSummary {
     }
   }
 
-  return { lastToolName, toolCount, inputTokens, outputTokens };
+  return { lastToolName, toolCount, toolCategoryBreakdown, inputTokens, outputTokens };
 }
 
 export function buildTranscriptBubble(

@@ -50,6 +50,7 @@ type AgentSnapshot = {
   bubble?: string;
   lastTool?: string;
   toolCount?: number;
+  toolCategoryBreakdown?: import("./transcript-tailer").ToolCategoryBreakdown;
   inputTokens?: number;
   outputTokens?: number;
 };
@@ -83,7 +84,7 @@ function shortText(value: string | undefined, max = 120): string | undefined {
   return `${value.slice(0, max - 1)}...`;
 }
 
-function truncateMiddle(value: string, max = 16): string {
+export function truncateMiddle(value: string, max = 16): string {
   if (value.length <= max) {
     return value;
   }
@@ -91,7 +92,7 @@ function truncateMiddle(value: string, max = 16): string {
   return `${value.slice(0, keep)}...${value.slice(-keep)}`;
 }
 
-function extractMeaningfulLabel(name: string): string {
+export function extractMeaningfulLabel(name: string): string {
   const segments = name.split("-");
   const lastSegment = segments[segments.length - 1] || name;
   
@@ -152,6 +153,7 @@ type TranscriptInfo = {
   bubble?: string;
   lastTool?: string;
   toolCount: number;
+  toolCategoryBreakdown: import("./transcript-tailer").ToolCategoryBreakdown;
   inputTokens: number;
   outputTokens: number;
 };
@@ -207,6 +209,7 @@ async function readLatestTranscriptInfo(agentDir: string): Promise<TranscriptInf
     bubble,
     lastTool: meta.lastToolName,
     toolCount: meta.toolCount,
+    toolCategoryBreakdown: meta.toolCategoryBreakdown,
     inputTokens: meta.inputTokens,
     outputTokens: meta.outputTokens,
   };
@@ -279,6 +282,7 @@ async function loadAgentSnapshots(stateDir: string): Promise<AgentLoadResult> {
       bubble: transcriptInfo?.bubble,
       lastTool: transcriptInfo?.lastTool,
       toolCount: transcriptInfo?.toolCount,
+      toolCategoryBreakdown: transcriptInfo?.toolCategoryBreakdown,
       inputTokens: transcriptInfo?.inputTokens,
       outputTokens: transcriptInfo?.outputTokens,
     });
@@ -298,7 +302,7 @@ async function loadSubagentRuns(stateDir: string): Promise<RunLoadResult> {
   };
 }
 
-function buildEventsFromRuns(runs: OfficeRun[]): OfficeEvent[] {
+export function buildEventsFromRuns(runs: OfficeRun[]): OfficeEvent[] {
   const events: OfficeEvent[] = [];
 
   for (const run of runs) {
@@ -353,7 +357,7 @@ function buildEventsFromRuns(runs: OfficeRun[]): OfficeEvent[] {
   return events.sort((a, b) => b.at - a.at).slice(0, MAX_EVENTS);
 }
 
-function resolveAgentStatus(params: {
+export function resolveAgentStatus(params: {
   lastUpdatedAt?: number;
   activeSubagents: number;
   hasRecentError: boolean;
@@ -581,6 +585,7 @@ export async function buildOfficeSnapshot(): Promise<OfficeSnapshot> {
       bubble: agent.bubble,
       lastTool: agent.lastTool,
       toolCount: agent.toolCount,
+      toolCategoryBreakdown: agent.toolCategoryBreakdown,
       tokenUsage:
         agent.inputTokens || agent.outputTokens
           ? { inputTokens: agent.inputTokens ?? 0, outputTokens: agent.outputTokens ?? 0 }

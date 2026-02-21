@@ -1,23 +1,44 @@
 import { describe, expect, it } from "vitest";
-import type { OfficeEntity } from "../types/office";
+import type { OfficeAgentEntity, OfficeEntity, OfficeSubagentEntity } from "../types/office";
 import { buildEntityClusters, type ClusterPlacement } from "./entity-clustering";
 
-function makeEntity(partial: Partial<OfficeEntity> & { id: string }): OfficeEntity {
-  return {
+type EntityPartial = { id: string; kind?: "agent" | "subagent" } & Partial<
+  Omit<OfficeAgentEntity, "kind"> & Omit<OfficeSubagentEntity, "kind">
+>;
+
+function makeEntity(partial: EntityPartial): OfficeEntity {
+  const kind = partial.kind ?? "subagent";
+  if (kind === "agent") {
+    const e: OfficeAgentEntity = {
+      id: partial.id,
+      kind: "agent",
+      label: partial.label ?? partial.id,
+      agentId: partial.agentId ?? "agent-x",
+      status: partial.status ?? "active",
+      sessions: partial.sessions ?? 1,
+      activeSubagents: partial.activeSubagents ?? 0,
+      lastUpdatedAt: partial.lastUpdatedAt,
+      model: partial.model,
+      bubble: partial.bubble,
+      task: partial.task,
+    };
+    return e;
+  }
+  const e: OfficeSubagentEntity = {
     id: partial.id,
-    kind: partial.kind ?? "subagent",
+    kind: "subagent",
     label: partial.label ?? partial.id,
     agentId: partial.agentId ?? "agent-x",
-    parentAgentId: partial.parentAgentId,
-    runId: partial.runId,
+    parentAgentId: partial.parentAgentId ?? "parent-agent",
+    runId: partial.runId ?? partial.id,
     status: partial.status ?? "active",
     sessions: partial.sessions ?? 1,
     activeSubagents: partial.activeSubagents ?? 0,
     lastUpdatedAt: partial.lastUpdatedAt,
-    model: partial.model,
     bubble: partial.bubble,
     task: partial.task,
   };
+  return e;
 }
 
 function makePlacement(

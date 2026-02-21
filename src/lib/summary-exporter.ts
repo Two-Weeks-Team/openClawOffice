@@ -1,4 +1,5 @@
 import type { OfficeEvent, OfficeRun, OfficeSnapshot } from "../types/office";
+import { formatDatetime, formatDuration, formatPercent } from "./format";
 import { indexRunKnowledgeByRunId, type RunKnowledgeEntry } from "./run-notes-store";
 
 export type SummaryTemplate = "daily" | "incident";
@@ -305,32 +306,6 @@ function buildHighlights(kpis: SummaryKpis, failedRuns: SummaryFailedRun[]): str
   return highlights;
 }
 
-function formatPercent(value: number | null): string {
-  if (value === null) {
-    return "-";
-  }
-  return `${Math.round(value * 100)}%`;
-}
-
-function formatDuration(value: number | null): string {
-  if (value === null) {
-    return "-";
-  }
-  if (value < 1000) {
-    return `${value}ms`;
-  }
-  if (value < 60_000) {
-    return `${(value / 1000).toFixed(1)}s`;
-  }
-  return `${(value / 60_000).toFixed(1)}m`;
-}
-
-function formatDatetime(value: number | null): string {
-  if (value === null) {
-    return "-";
-  }
-  return new Date(value).toLocaleString();
-}
 
 export function buildSummaryReport(
   snapshot: OfficeSnapshot,

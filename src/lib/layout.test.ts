@@ -3,17 +3,37 @@ import { buildPlacements, buildRoomCapacityPlan, detectPlacementCollisions } fro
 import type { OfficeEntity } from "../types/office";
 import { createLocal50Scenario } from "./local50-scenario";
 
-function makeEntity(params: Partial<OfficeEntity> & Pick<OfficeEntity, "id" | "agentId" | "label">): OfficeEntity {
+function makeEntity(
+  params: { id: string; agentId: string; label: string; kind?: "agent" | "subagent" } & Partial<
+    Omit<import("../types/office").OfficeAgentEntity, "kind"> &
+      Omit<import("../types/office").OfficeSubagentEntity, "kind">
+  >,
+): OfficeEntity {
+  const kind = params.kind ?? "agent";
+  if (kind === "subagent") {
+    return {
+      id: params.id,
+      kind: "subagent",
+      label: params.label,
+      agentId: params.agentId,
+      parentAgentId: params.parentAgentId ?? "parent-agent",
+      runId: params.runId ?? params.id,
+      status: params.status ?? "active",
+      sessions: params.sessions ?? 1,
+      activeSubagents: params.activeSubagents ?? 0,
+      lastUpdatedAt: params.lastUpdatedAt,
+      bubble: params.bubble,
+      task: params.task,
+    };
+  }
   return {
     id: params.id,
-    kind: params.kind ?? "agent",
+    kind: "agent",
     label: params.label,
     agentId: params.agentId,
     status: params.status ?? "active",
     sessions: params.sessions ?? 1,
     activeSubagents: params.activeSubagents ?? 0,
-    parentAgentId: params.parentAgentId,
-    runId: params.runId,
     lastUpdatedAt: params.lastUpdatedAt,
     model: params.model,
     bubble: params.bubble,

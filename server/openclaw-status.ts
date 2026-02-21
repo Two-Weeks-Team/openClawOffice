@@ -40,7 +40,7 @@ export function resolveOpenClawProjectDir(): string {
   return path.resolve(process.cwd(), "../openclaw");
 }
 
-function resolveGatewayPort(): number {
+export function resolveGatewayPort(): number {
   const raw = process.env.OPENCLAW_GATEWAY_PORT?.trim();
   if (raw) {
     const parsed = Number(raw);

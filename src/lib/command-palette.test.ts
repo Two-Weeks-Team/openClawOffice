@@ -112,4 +112,42 @@ describe("command palette helpers", () => {
     expect(pushRecentCommand(["b", "a"], "b", 4)).toEqual(["b", "a"]);
     expect(pushRecentCommand(["d", "c", "b", "a"], "x", 3)).toEqual(["x", "d", "c"]);
   });
+
+  it("fuzzy: matches initials abbreviation across word boundaries", () => {
+    const entries = [
+      { id: "palette.toggle", label: "Toggle Command Palette", keywords: ["command", "palette"] },
+      { id: "filters.clear", label: "Clear Filters", keywords: ["reset"] },
+    ];
+    const ids = filterCommandIds(entries, "tgl cmd");
+    expect(ids[0]).toBe("palette.toggle");
+  });
+
+  it("fuzzy: ranks exact substring above subsequence", () => {
+    const entries = [
+      { id: "a", label: "Filter Status", keywords: [] },
+      { id: "b", label: "Status Filter", keywords: [] },
+    ];
+    // "filter" exact substring: "Filter Status" has it at index 0, "Status Filter" at index 7
+    const ids = filterCommandIds(entries, "filter");
+    expect(ids[0]).toBe("a"); // "Filter Status" has earlier exact match
+  });
+
+  it("fuzzy: excludes entries that do not match any pattern character", () => {
+    const entries = [
+      { id: "match", label: "Timeline Prev", keywords: [] },
+      { id: "no-match", label: "Alert Rules", keywords: [] },
+    ];
+    const ids = filterCommandIds(entries, "timelineprev");
+    expect(ids).toContain("match");
+    expect(ids).not.toContain("no-match");
+  });
+
+  it("fuzzy: returns all entries for empty query", () => {
+    const entries = [
+      { id: "a", label: "Alpha" },
+      { id: "b", label: "Beta" },
+    ];
+    expect(filterCommandIds(entries, "")).toEqual(["a", "b"]);
+    expect(filterCommandIds(entries, "  ")).toEqual(["a", "b"]);
+  });
 });

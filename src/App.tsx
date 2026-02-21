@@ -9,23 +9,23 @@ import { OpenClawHub } from "./components/OpenClawHub";
 import { OfficeStage } from "./components/OfficeStage";
 import { SummaryExporter } from "./components/SummaryExporter";
 import { ThroughputDashboard } from "./components/ThroughputDashboard";
+import { TokenDashboard } from "./components/TokenDashboard";
 import { useFocusTrap } from "./hooks/useFocusTrap";
 import { useOfficeStream } from "./hooks/useOfficeStream";
+import { useToast } from "./hooks/useToast";
+import { useBatchActions } from "./hooks/useBatchActions";
+import { useAlertPreferences } from "./hooks/useAlertPreferences";
+import { useWorkspaceLayout } from "./hooks/useWorkspaceLayout";
+import { useShortcutSystem } from "./hooks/useShortcutSystem";
+import { useTimelineState } from "./hooks/useTimelineState";
 import {
-  DEFAULT_ALERT_RULE_PREFERENCES,
   evaluateAlertSignals,
   isAlertRuleSuppressed,
-  normalizeAlertRulePreferences,
-  type AlertRuleId,
-  type AlertRulePreferences,
   type AlertSignal,
 } from "./lib/alerts";
 import {
   applyBatchAction,
-  loadBatchActionState,
-  persistBatchActionState,
   type BatchActionKind,
-  type BatchActionState,
 } from "./lib/entity-batch-actions";
 import {
   formatShortcut,
@@ -34,7 +34,6 @@ import {
   normalizeShortcut,
   pushRecentCommand,
   resolveShortcutForPlatform,
-  type ShortcutPlatform,
 } from "./lib/command-palette";
 import { buildEntitySearchIndex, searchEntityIds } from "./lib/entity-search";
 import type { PlacementMode } from "./lib/layout";
@@ -47,26 +46,10 @@ import {
   type RunKnowledgeEntry,
 } from "./lib/run-notes-store";
 import {
-  DEFAULT_WORKSPACE_LAYOUT_STATE,
-  loadWorkspaceLayoutSnapshot,
-  loadWorkspaceLayoutState,
-  persistWorkspaceLayoutSnapshot,
-  persistWorkspaceLayoutState,
-  setWorkspacePanelPlacement,
-  workspaceDockedPanels,
-  type WorkspaceLayoutPreset,
   type WorkspaceLayoutState,
   type WorkspacePanelId,
   type WorkspacePanelPlacement,
 } from "./lib/workspace-layout";
-import {
-  buildTimelineIndex,
-  filterTimelineEvents,
-  nextPlaybackEventId,
-  parseEventIdDeepLink,
-  parseRunIdDeepLink,
-  type TimelineFilters,
-} from "./lib/timeline";
 
 type EntityStatusFilter = "all" | "active" | "idle" | "error" | "ok" | "offline";
 type RecentWindowFilter = "all" | 5 | 15 | 30 | 60;
@@ -79,12 +62,7 @@ type OpsFilters = {
   focusMode: boolean;
 };
 
-type WorkspaceTabId = "status" | "operations" | "timeline" | "analysis" | "alerts" | "hub";
-
-type ToastState = {
-  kind: "success" | "error" | "info";
-  message: string;
-} | null;
+type WorkspaceTabId = "status" | "operations" | "timeline" | "analysis" | "alerts" | "hub" | "tokens";
 
 type CommandSpec = {
   id: string;
@@ -110,9 +88,6 @@ type CommandEntry = CommandSpec & {
   shortcutLabel: string;
 };
 
-const SHORTCUT_OVERRIDES_KEY = "openclawoffice.shortcut-overrides.v1";
-const RECENT_COMMANDS_KEY = "openclawoffice.recent-commands.v1";
-const ALERT_RULE_PREFERENCES_KEY = "openclawoffice.alert-rule-preferences.v1";
 const MAX_RECENT_COMMANDS = 8;
 
 const DEFAULT_OPS_FILTERS: OpsFilters = {
@@ -155,70 +130,15 @@ const WORKSPACE_TABS: WorkspaceTabSpec[] = [
     label: "Hub",
     description: "OpenClaw project status hub",
   },
+  {
+    id: "tokens",
+    label: "Tokens",
+    description: "Token usage and cost estimate per agent",
+  },
 ];
 
 function quoteShellToken(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
-}
-
-function detectShortcutPlatform(): ShortcutPlatform {
-  return /Mac|iPhone|iPad|iPod/i.test(window.navigator.platform) ? "mac" : "other";
-}
-
-function loadShortcutOverrides(): Record<string, string> {
-  try {
-    const raw = window.localStorage.getItem(SHORTCUT_OVERRIDES_KEY);
-    if (!raw) {
-      return {};
-    }
-    const parsed: unknown = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return {};
-    }
-
-    const normalizedOverrides: Record<string, string> = {};
-    for (const [key, value] of Object.entries(parsed)) {
-      if (typeof value !== "string") {
-        continue;
-      }
-      const normalized = normalizeShortcut(value);
-      if (normalized) {
-        normalizedOverrides[key] = normalized;
-      }
-    }
-    return normalizedOverrides;
-  } catch {
-    return {};
-  }
-}
-
-function loadRecentCommands(): string[] {
-  try {
-    const raw = window.localStorage.getItem(RECENT_COMMANDS_KEY);
-    if (!raw) {
-      return [];
-    }
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-    return parsed.filter((value): value is string => typeof value === "string").slice(0, MAX_RECENT_COMMANDS);
-  } catch {
-    return [];
-  }
-}
-
-function loadAlertRulePreferences(): AlertRulePreferences {
-  try {
-    const raw = window.localStorage.getItem(ALERT_RULE_PREFERENCES_KEY);
-    if (!raw) {
-      return DEFAULT_ALERT_RULE_PREFERENCES;
-    }
-    const parsed: unknown = JSON.parse(raw);
-    return normalizeAlertRulePreferences(parsed);
-  } catch {
-    return DEFAULT_ALERT_RULE_PREFERENCES;
-  }
 }
 
 const WORKSPACE_PANEL_PLACEMENT_CLASS: Record<WorkspacePanelPlacement, string> = {
@@ -260,48 +180,66 @@ function workspaceTabForCommand(command: CommandEntry): WorkspaceTabId | null {
 
 function App() {
   const { snapshot, connected, liveSource, error, recoveryMessage } = useOfficeStream();
+  const { toast, showToast } = useToast();
+  const {
+    batchActionState,
+    setBatchActionState,
+    pinnedEntityIdSet,
+    watchedEntityIdSet,
+    mutedEntityIdSet,
+  } = useBatchActions();
+  const { alertRulePreferences, toggleAlertRuleMute, snoozeAlertRule, clearAlertRuleSuppression } =
+    useAlertPreferences(snapshot?.generatedAt);
+  const {
+    workspaceLayout,
+    dockedWorkspacePanels,
+    workspaceGridStyle,
+    setWorkspacePreset,
+    toggleWorkspacePanelPinned,
+    toggleWorkspacePanelDetached,
+    saveWorkspaceLayout,
+    restoreWorkspaceLayout,
+    resetWorkspaceLayout,
+  } = useWorkspaceLayout(showToast);
+  const {
+    shortcutOverrides,
+    setShortcutOverrides,
+    recentCommandIds,
+    setRecentCommandIds,
+    rebindingCommandId,
+    setRebindingCommandId,
+    shortcutPlatform,
+    resetShortcutOverride,
+  } = useShortcutSystem();
+  const {
+    activeEventId,
+    setActiveEventId,
+    timelineFilters,
+    setTimelineFilters,
+    timelineRoomByAgentId,
+    timelineLaneHighlightAgentId,
+    timelinePlaybackEvents,
+    activeTimelineIndex,
+    clearTimelineFilters,
+    moveTimelineEvent,
+    handleLaneContextChange,
+    handleRoomAssignmentsChange,
+  } = useTimelineState(snapshot, showToast);
+
   const [selectedEntityIds, setSelectedEntityIds] = useState<string[]>([]);
-  const [activeEventId, setActiveEventId] = useState<string | null>(() => {
-    const eventId = parseEventIdDeepLink(window.location.search);
-    return eventId.length > 0 ? eventId : null;
-  });
-  const [timelineRoomByAgentId, setTimelineRoomByAgentId] = useState<Map<string, string>>(
-    () => new Map(),
-  );
-  const [timelineLaneHighlightAgentId, setTimelineLaneHighlightAgentId] = useState<string | null>(
-    null,
-  );
   const [roomOptions, setRoomOptions] = useState<string[]>([]);
   const [matchCount, setMatchCount] = useState<number | null>(null);
-  const [toast, setToast] = useState<ToastState>(null);
-  const [timelineFilters, setTimelineFilters] = useState<TimelineFilters>(() => ({
-    runId: parseRunIdDeepLink(window.location.search),
-    agentId: "",
-    status: "all",
-  }));
   const [opsFilters, setOpsFilters] = useState<OpsFilters>(DEFAULT_OPS_FILTERS);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isShortcutHelpOpen, setIsShortcutHelpOpen] = useState(false);
   const [isAlertCenterOpen, setIsAlertCenterOpen] = useState(false);
-  const [rebindingCommandId, setRebindingCommandId] = useState<string | null>(null);
-  const [shortcutOverrides, setShortcutOverrides] = useState<Record<string, string>>(loadShortcutOverrides);
-  const [recentCommandIds, setRecentCommandIds] = useState<string[]>(loadRecentCommands);
-  const [alertRulePreferences, setAlertRulePreferences] = useState<AlertRulePreferences>(
-    loadAlertRulePreferences,
-  );
-  const [batchActionState, setBatchActionState] = useState<BatchActionState>(loadBatchActionState);
   const [runKnowledgeEntries, setRunKnowledgeEntries] = useState<RunKnowledgeEntry[]>(
     loadRunKnowledgeEntries,
-  );
-  const [workspaceLayout, setWorkspaceLayout] = useState<WorkspaceLayoutState>(
-    loadWorkspaceLayoutState,
   );
   const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<WorkspaceTabId>("status");
   const [isOperationsAdvancedOpen, setIsOperationsAdvancedOpen] = useState(false);
   const [isLayoutAdvancedOpen, setIsLayoutAdvancedOpen] = useState(false);
-  const hasBatchStateHydratedRef = useRef(false);
   const hasRunKnowledgeHydratedRef = useRef(false);
-  const hasWorkspaceLayoutHydratedRef = useRef(false);
   const workspaceTabButtonRefs = useRef<Record<WorkspaceTabId, HTMLButtonElement | null>>({
     status: null,
     operations: null,
@@ -309,14 +247,10 @@ function App() {
     analysis: null,
     alerts: null,
     hub: null,
+    tokens: null,
   });
-  const shortcutPlatform = useMemo(() => detectShortcutPlatform(), []);
   const alertCenterTrapRef = useFocusTrap<HTMLDivElement>(isAlertCenterOpen);
   const shortcutHelpTrapRef = useFocusTrap<HTMLDivElement>(isShortcutHelpOpen);
-
-  const showToast = useCallback((kind: NonNullable<ToastState>["kind"], message: string) => {
-    setToast({ kind, message });
-  }, []);
 
   const searchIndex = useMemo(
     () => (snapshot ? buildEntitySearchIndex(snapshot) : new Map<string, string>()),
@@ -371,31 +305,6 @@ function App() {
     () => indexRunKnowledgeByRunId(runKnowledgeEntries),
     [runKnowledgeEntries],
   );
-  const dockedWorkspacePanels = useMemo(
-    () => workspaceDockedPanels(workspaceLayout),
-    [workspaceLayout],
-  );
-  const workspaceGridStyle = useMemo(
-    () =>
-      workspaceLayout.preset === "three-pane"
-        ? {
-            gridTemplateColumns: [
-              "minmax(0, 1fr)",
-              ...(workspaceLayout.timeline === "docked" ? ["360px"] : []),
-              ...(workspaceLayout.detail === "docked" ? ["360px"] : []),
-            ].join(" "),
-            gridTemplateRows: "minmax(0, 1fr)",
-          }
-        : {
-            gridTemplateColumns:
-              dockedWorkspacePanels.length > 0 ? "minmax(0, 1fr) 360px" : "minmax(0, 1fr)",
-            gridTemplateRows:
-              dockedWorkspacePanels.length > 1
-                ? "minmax(0, 1fr) minmax(0, 1fr)"
-                : "minmax(0, 1fr)",
-          },
-    [dockedWorkspacePanels.length, workspaceLayout.detail, workspaceLayout.preset, workspaceLayout.timeline],
-  );
   const activeEvent = useMemo(
     () => snapshot?.events.find((event) => event.id === activeEventId) ?? null,
     [activeEventId, snapshot],
@@ -418,121 +327,28 @@ function App() {
     }
     return ordered;
   }, [effectiveSelectedEntityId, selectedEntityIds]);
-  const pinnedEntityIdSet = useMemo(
-    () => new Set(batchActionState.pinnedEntityIds),
-    [batchActionState.pinnedEntityIds],
-  );
-  const watchedEntityIdSet = useMemo(
-    () => new Set(batchActionState.watchedEntityIds),
-    [batchActionState.watchedEntityIds],
-  );
-  const mutedEntityIdSet = useMemo(
-    () => new Set(batchActionState.mutedEntityIds),
-    [batchActionState.mutedEntityIds],
-  );
   const selectedEntity = useMemo(
     () => snapshot?.entities.find((entity) => entity.id === effectiveSelectedEntityId) ?? null,
     [effectiveSelectedEntityId, snapshot],
   );
+  const selectedEntityRunId = selectedEntity?.kind === "subagent" ? selectedEntity.runId : undefined;
   const selectedRun = useMemo(() => {
     if (!snapshot) {
       return null;
     }
-    if (selectedEntity?.runId) {
-      return runById.get(selectedEntity.runId) ?? null;
+    if (selectedEntityRunId) {
+      return runById.get(selectedEntityRunId) ?? null;
     }
     if (activeEvent?.runId) {
       return runById.get(activeEvent.runId) ?? null;
     }
     return null;
-  }, [activeEvent, runById, selectedEntity, snapshot]);
-
-  const timelinePlaybackEvents = useMemo(() => {
-    if (!snapshot) {
-      return [];
-    }
-    const index = buildTimelineIndex(snapshot.events, snapshot.runGraph);
-    return [...filterTimelineEvents(index, timelineFilters)].sort((left, right) => left.at - right.at);
-  }, [snapshot, timelineFilters]);
-
-  const activeTimelineIndex = useMemo(
-    () => timelinePlaybackEvents.findIndex((event) => event.id === activeEventId),
-    [activeEventId, timelinePlaybackEvents],
-  );
+  }, [activeEvent, runById, selectedEntityRunId, snapshot]);
 
   const alertSignals = useMemo<AlertSignal[]>(
     () => (snapshot ? evaluateAlertSignals(snapshot, snapshot.generatedAt) : []),
     [snapshot],
   );
-
-  useEffect(() => {
-    const url = new URL(window.location.href);
-    const runId = timelineFilters.runId.trim();
-    if (runId) {
-      url.searchParams.set("runId", runId);
-    } else {
-      url.searchParams.delete("runId");
-    }
-    const eventId = activeEventId?.trim();
-    if (eventId) {
-      url.searchParams.set("eventId", eventId);
-    } else {
-      url.searchParams.delete("eventId");
-    }
-    if (runId || eventId) {
-      url.searchParams.set("replay", "1");
-    } else {
-      url.searchParams.delete("replay");
-    }
-    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
-  }, [activeEventId, timelineFilters.runId]);
-
-  useEffect(() => {
-    if (!toast) {
-      return undefined;
-    }
-    const timer = window.setTimeout(() => {
-      setToast(null);
-    }, 1800);
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [toast]);
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(SHORTCUT_OVERRIDES_KEY, JSON.stringify(shortcutOverrides));
-    } catch {
-      // Ignore localStorage persistence errors in restricted browser modes.
-    }
-  }, [shortcutOverrides]);
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(RECENT_COMMANDS_KEY, JSON.stringify(recentCommandIds));
-    } catch {
-      // Ignore localStorage persistence errors in restricted browser modes.
-    }
-  }, [recentCommandIds]);
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(
-        ALERT_RULE_PREFERENCES_KEY,
-        JSON.stringify(alertRulePreferences),
-      );
-    } catch {
-      // Ignore localStorage persistence errors in restricted browser modes.
-    }
-  }, [alertRulePreferences]);
-
-  useEffect(() => {
-    if (!hasBatchStateHydratedRef.current) {
-      hasBatchStateHydratedRef.current = true;
-      return;
-    }
-    persistBatchActionState(batchActionState);
-  }, [batchActionState]);
 
   useEffect(() => {
     if (!hasRunKnowledgeHydratedRef.current) {
@@ -541,14 +357,6 @@ function App() {
     }
     persistRunKnowledgeEntries(runKnowledgeEntries);
   }, [runKnowledgeEntries]);
-
-  useEffect(() => {
-    if (!hasWorkspaceLayoutHydratedRef.current) {
-      hasWorkspaceLayoutHydratedRef.current = true;
-      return;
-    }
-    persistWorkspaceLayoutState(workspaceLayout);
-  }, [workspaceLayout]);
 
   const applyEntityBatchAction = useCallback(
     (action: BatchActionKind) => {
@@ -569,7 +377,7 @@ function App() {
       };
       showToast("success", `${actionLabel[action]} ${selectedCount} selected target(s).`);
     },
-    [selectedEntityIds, showToast],
+    [selectedEntityIds, showToast, setBatchActionState],
   );
 
   const upsertRunKnowledge = useCallback((input: {
@@ -590,51 +398,6 @@ function App() {
   const removeRunKnowledge = useCallback((runId: string) => {
     setRunKnowledgeEntries((prev) => removeRunKnowledgeEntry(prev, runId));
   }, []);
-
-  const setWorkspacePreset = useCallback((preset: WorkspaceLayoutPreset) => {
-    setWorkspaceLayout((prev) => ({
-      ...prev,
-      preset,
-    }));
-  }, []);
-
-  const toggleWorkspacePanelPinned = useCallback((panel: WorkspacePanelId) => {
-    setWorkspaceLayout((prev) => {
-      const nextPlacement = prev[panel] === "hidden" ? "docked" : "hidden";
-      return setWorkspacePanelPlacement(prev, panel, nextPlacement);
-    });
-  }, []);
-
-  const toggleWorkspacePanelDetached = useCallback((panel: WorkspacePanelId) => {
-    setWorkspaceLayout((prev) => {
-      const current = prev[panel];
-      if (current === "hidden") {
-        return prev;
-      }
-      const nextPlacement = current === "detached" ? "docked" : "detached";
-      return setWorkspacePanelPlacement(prev, panel, nextPlacement);
-    });
-  }, []);
-
-  const saveWorkspaceLayout = useCallback(() => {
-    persistWorkspaceLayoutSnapshot(workspaceLayout);
-    showToast("success", "Workspace layout snapshot saved.");
-  }, [showToast, workspaceLayout]);
-
-  const restoreWorkspaceLayout = useCallback(() => {
-    const saved = loadWorkspaceLayoutSnapshot();
-    if (!saved) {
-      showToast("error", "No saved workspace layout snapshot.");
-      return;
-    }
-    setWorkspaceLayout(saved);
-    showToast("info", "Workspace layout restored.");
-  }, [showToast]);
-
-  const resetWorkspaceLayout = useCallback(() => {
-    setWorkspaceLayout(DEFAULT_WORKSPACE_LAYOUT_STATE);
-    showToast("info", "Workspace layout reset to default.");
-  }, [showToast]);
 
   const handleSelectEntity = useCallback((entityId: string, mode: "single" | "toggle" = "single") => {
     if (mode === "toggle") {
@@ -669,14 +432,6 @@ function App() {
   const allSelectedMuted =
     selectedCount > 0 && selectedEntityIds.every((entityId) => mutedEntityIdSet.has(entityId));
 
-  const handleLaneContextChange = useCallback((next: { highlightAgentId: string | null }) => {
-    setTimelineLaneHighlightAgentId(next.highlightAgentId);
-  }, []);
-
-  const handleRoomAssignmentsChange = useCallback((next: Map<string, string>) => {
-    setTimelineRoomByAgentId(next);
-  }, []);
-
   const copyText = useCallback(
     async (text: string, successMessage: string) => {
       try {
@@ -691,13 +446,13 @@ function App() {
   );
 
   const onCopyRunId = useCallback(async () => {
-    const runId = selectedRun?.runId ?? selectedEntity?.runId ?? activeEvent?.runId;
+    const runId = selectedRun?.runId ?? selectedEntityRunId ?? activeEvent?.runId;
     if (!runId) {
       showToast("error", "No runId available. Select an entity or timeline event first.");
       return;
     }
     await copyText(runId, `Copied runId: ${runId}`);
-  }, [activeEvent?.runId, copyText, selectedEntity?.runId, selectedRun?.runId, showToast]);
+  }, [activeEvent?.runId, copyText, selectedEntityRunId, selectedRun?.runId, showToast]);
 
   const onCopySessionKey = useCallback(async () => {
     const sessionKey = selectedRun?.childSessionKey ?? selectedRun?.requesterSessionKey;
@@ -738,24 +493,24 @@ function App() {
           : `Detail panel jumped to runId filter: ${runId}`,
       );
     },
-    [showToast],
+    [showToast, setTimelineFilters, setActiveEventId],
   );
 
   const onJumpToRun = useCallback(() => {
-    const runId = selectedRun?.runId ?? selectedEntity?.runId ?? activeEvent?.runId;
+    const runId = selectedRun?.runId ?? selectedEntityRunId ?? activeEvent?.runId;
     if (!runId) {
       showToast("error", "No runId available for jump.");
       return;
     }
     jumpToRunId(runId, "toolbar");
-  }, [activeEvent?.runId, jumpToRunId, selectedEntity?.runId, selectedRun?.runId, showToast]);
+  }, [activeEvent?.runId, jumpToRunId, selectedEntityRunId, selectedRun?.runId, showToast]);
 
   const onCopyReplayLink = useCallback(async () => {
     const runId =
       timelineFilters.runId.trim() ||
       activeEvent?.runId ||
       selectedRun?.runId ||
-      selectedEntity?.runId;
+      selectedEntityRunId;
     if (!runId) {
       showToast("error", "No runId available for replay link.");
       return;
@@ -773,7 +528,7 @@ function App() {
     activeEvent?.runId,
     activeEventId,
     copyText,
-    selectedEntity?.runId,
+    selectedEntityRunId,
     selectedRun?.runId,
     showToast,
     timelineFilters.runId,
@@ -783,27 +538,6 @@ function App() {
     setOpsFilters(DEFAULT_OPS_FILTERS);
     showToast("info", "Ops filters reset.");
   }, [showToast]);
-
-  const clearTimelineFilters = useCallback(() => {
-    setTimelineFilters({ runId: "", agentId: "", status: "all" });
-    setActiveEventId(null);
-    showToast("info", "Timeline filters reset.");
-  }, [showToast]);
-
-  const moveTimelineEvent = useCallback(
-    (direction: 1 | -1) => {
-      const nextId = nextPlaybackEventId(timelinePlaybackEvents, activeEventId, direction);
-      if (!nextId) {
-        showToast(
-          "info",
-          direction === 1 ? "Already at the latest timeline event." : "Already at the earliest timeline event.",
-        );
-        return;
-      }
-      setActiveEventId(nextId);
-    },
-    [activeEventId, showToast, timelinePlaybackEvents],
-  );
 
   const togglePlacementMode = useCallback(() => {
     setOpsFilters((prev) => ({
@@ -821,7 +555,7 @@ function App() {
     setIsCommandPaletteOpen(false);
     setIsShortcutHelpOpen(false);
     setIsAlertCenterOpen((prev) => !prev);
-  }, []);
+  }, [setRebindingCommandId]);
 
   const closeAlertCenter = useCallback(() => {
     setIsAlertCenterOpen(false);
@@ -832,51 +566,19 @@ function App() {
     setIsAlertCenterOpen(false);
     setIsShortcutHelpOpen(false);
     setIsCommandPaletteOpen((prev) => !prev);
-  }, []);
+  }, [setRebindingCommandId]);
 
   const openShortcutHelp = useCallback(() => {
     setRebindingCommandId(null);
     setIsAlertCenterOpen(false);
     setIsCommandPaletteOpen(false);
     setIsShortcutHelpOpen(true);
-  }, []);
+  }, [setRebindingCommandId]);
 
   const closeShortcutHelp = useCallback(() => {
     setRebindingCommandId(null);
     setIsShortcutHelpOpen(false);
-  }, []);
-
-  const toggleAlertRuleMute = useCallback((ruleId: AlertRuleId) => {
-    setAlertRulePreferences((prev) => ({
-      ...prev,
-      [ruleId]: {
-        ...prev[ruleId],
-        muted: !prev[ruleId].muted,
-      },
-    }));
-  }, []);
-
-  const snoozeAlertRule = useCallback((ruleId: AlertRuleId, durationMs: number) => {
-    const baseTime = Math.max(snapshot?.generatedAt ?? 0, Date.now());
-    setAlertRulePreferences((prev) => ({
-      ...prev,
-      [ruleId]: {
-        ...prev[ruleId],
-        muted: false,
-        snoozeUntil: baseTime + durationMs,
-      },
-    }));
-  }, [snapshot?.generatedAt]);
-
-  const clearAlertRuleSuppression = useCallback((ruleId: AlertRuleId) => {
-    setAlertRulePreferences((prev) => ({
-      ...prev,
-      [ruleId]: {
-        muted: false,
-        snoozeUntil: 0,
-      },
-    }));
-  }, []);
+  }, [setRebindingCommandId]);
 
   const entityCommandSpecs = useMemo<CommandSpec[]>(() => {
     if (!snapshot) {
@@ -889,7 +591,7 @@ function App() {
         label: `Jump to ${entity.kind} ${entity.agentId}`,
         description: `Select ${entity.id} and open detail context in the panel.`,
         section: "Entities",
-        keywords: [entity.id, entity.agentId, entity.runId ?? "", entity.status, entity.kind],
+        keywords: [entity.id, entity.agentId, entity.kind === "subagent" ? entity.runId : "", entity.status, entity.kind],
         run: () => {
           setSelectedEntityIds([entity.id]);
           showToast("info", `Selected ${entity.kind} ${entity.agentId}`);
@@ -1251,7 +953,7 @@ function App() {
         setIsCommandPaletteOpen(false);
       }
     },
-    [commandEntryById],
+    [commandEntryById, setRecentCommandIds],
   );
 
   useEffect(() => {
@@ -1303,20 +1005,6 @@ function App() {
     isShortcutHelpOpen,
     rebindingCommandId,
   ]);
-
-  const resetShortcutOverride = useCallback(
-    (commandId: string) => {
-      setShortcutOverrides((prev) => {
-        if (!(commandId in prev)) {
-          return prev;
-        }
-        const next = { ...prev };
-        delete next[commandId];
-        return next;
-      });
-    },
-    [setShortcutOverrides],
-  );
 
   useEffect(() => {
     if (!isShortcutHelpOpen || !rebindingCommandId) {
@@ -1373,6 +1061,8 @@ function App() {
     defaultShortcutByCommandId,
     isShortcutHelpOpen,
     rebindingCommandId,
+    setRebindingCommandId,
+    setShortcutOverrides,
     shortcutCommands,
     showToast,
   ]);
@@ -1937,7 +1627,7 @@ function App() {
             snapshot={snapshot}
             defaultAgentId={selectedEntity?.agentId ?? activeEvent?.agentId ?? null}
             defaultRunId={
-              selectedRun?.runId ?? selectedEntity?.runId ?? activeEvent?.runId ?? null
+              selectedRun?.runId ?? selectedEntityRunId ?? activeEvent?.runId ?? null
             }
             runKnowledgeEntries={runKnowledgeEntries}
             onNotify={showToast}
@@ -1981,14 +1671,24 @@ function App() {
         >
           <OpenClawHub />
         </section>
+
+        <section
+          id="workspace-tabpanel-tokens"
+          role="tabpanel"
+          aria-labelledby="workspace-tab-tokens"
+          className="workspace-tabpanel"
+          hidden={activeWorkspaceTab !== "tokens"}
+        >
+          {snapshot ? <TokenDashboard snapshot={snapshot} /> : null}
+        </section>
       </section>
 
       <section
         className={`workspace ${workspacePresetClass} ${workspaceDockedClass} ${
-          activeWorkspaceTab === "alerts" || activeWorkspaceTab === "hub" ? "is-hidden-by-tab" : ""
+          activeWorkspaceTab === "alerts" || activeWorkspaceTab === "hub" || activeWorkspaceTab === "tokens" ? "is-hidden-by-tab" : ""
         }`}
         style={workspaceGridStyle}
-        hidden={activeWorkspaceTab === "alerts" || activeWorkspaceTab === "hub"}
+        hidden={activeWorkspaceTab === "alerts" || activeWorkspaceTab === "hub" || activeWorkspaceTab === "tokens"}
       >
         <div className="workspace-stage-pane">
           <OfficeStage

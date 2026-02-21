@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildTranscriptBubble } from "./transcript-tailer";
+import { buildTranscriptBubble, buildTranscriptMeta, classifyToolCategory } from "./transcript-tailer";
 
 function asJsonl(rows: unknown[]): string {
   return rows.map((row) => JSON.stringify(row)).join("\n");
@@ -62,5 +62,70 @@ describe("buildTranscriptBubble", () => {
       `not-json\n${JSON.stringify({ role: "assistant", content: [{ text: "  hello\\nworld  " }] })}`,
     );
     expect(bubble).toBe("hello world");
+  });
+});
+
+describe("classifyToolCategory", () => {
+  it("classifies file operation tools", () => {
+    expect(classifyToolCategory("Read")).toBe("file_op");
+    expect(classifyToolCategory("Write")).toBe("file_op");
+    expect(classifyToolCategory("Edit")).toBe("file_op");
+    expect(classifyToolCategory("Glob")).toBe("file_op");
+    expect(classifyToolCategory("Grep")).toBe("file_op");
+  });
+
+  it("classifies bash tools", () => {
+    expect(classifyToolCategory("Bash")).toBe("bash");
+    expect(classifyToolCategory("bash")).toBe("bash");
+  });
+
+  it("classifies web tools", () => {
+    expect(classifyToolCategory("WebFetch")).toBe("web");
+    expect(classifyToolCategory("WebSearch")).toBe("web");
+  });
+
+  it("classifies agent call tools", () => {
+    expect(classifyToolCategory("Task")).toBe("agent_call");
+    expect(classifyToolCategory("spawn")).toBe("agent_call");
+  });
+
+  it("classifies unknown tools as other", () => {
+    expect(classifyToolCategory("SomeCustomTool")).toBe("other");
+    expect(classifyToolCategory("unknown_tool")).toBe("other");
+  });
+});
+
+describe("buildTranscriptMeta - tool category breakdown", () => {
+  function asJsonl(rows: unknown[]): string {
+    return rows.map((row) => JSON.stringify(row)).join("\n");
+  }
+
+  it("counts tool categories from content blocks", () => {
+    const meta = buildTranscriptMeta(
+      asJsonl([
+        {
+          role: "assistant",
+          content: [
+            { type: "tool_use", name: "Read" },
+            { type: "tool_use", name: "Bash" },
+            { type: "tool_use", name: "Read" },
+            { type: "tool_use", name: "WebFetch" },
+          ],
+        },
+      ]),
+    );
+
+    expect(meta.toolCount).toBe(4);
+    expect(meta.toolCategoryBreakdown.file_op).toBe(2);
+    expect(meta.toolCategoryBreakdown.bash).toBe(1);
+    expect(meta.toolCategoryBreakdown.web).toBe(1);
+    expect(meta.toolCategoryBreakdown.agent_call).toBe(0);
+    expect(meta.toolCategoryBreakdown.other).toBe(0);
+  });
+
+  it("returns zeroed breakdown when no tools", () => {
+    const meta = buildTranscriptMeta(asJsonl([{ role: "assistant", text: "hello" }]));
+    expect(meta.toolCount).toBe(0);
+    expect(Object.values(meta.toolCategoryBreakdown).every((v) => v === 0)).toBe(true);
   });
 });
