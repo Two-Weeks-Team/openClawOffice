@@ -1,5 +1,5 @@
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { resolveGatewayPort, resolveOpenClawProjectDir } from "./openclaw-status";
 
 describe("resolveOpenClawProjectDir", () => {

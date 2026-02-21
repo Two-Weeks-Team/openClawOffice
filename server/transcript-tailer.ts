@@ -235,34 +235,24 @@ function processTranscriptLine(line: string, seq: number, state: TranscriptTailS
 export type ToolCategory = "file_op" | "bash" | "web" | "agent_call" | "other";
 export type ToolCategoryBreakdown = Record<ToolCategory, number>;
 
+const FILE_OP_TOOLS = new Set(["read", "write", "edit", "multiedit", "glob", "grep", "notebookedit"]);
+const BASH_TOOLS = new Set(["bash", "shell", "exec", "run"]);
+const WEB_TOOLS = new Set(["webfetch", "websearch", "browser", "navigate"]);
+const AGENT_CALL_TOOLS = new Set(["task", "agent", "dispatch", "spawn"]);
+
 /** Classify a Claude tool name into a high-level category. */
 export function classifyToolCategory(toolName: string): ToolCategory {
   const name = toolName.toLowerCase();
-  if (
-    name === "read" ||
-    name === "write" ||
-    name === "edit" ||
-    name === "multiedit" ||
-    name === "glob" ||
-    name === "grep" ||
-    name === "notebookedit" ||
-    name.startsWith("file")
-  ) {
+  if (FILE_OP_TOOLS.has(name) || name.startsWith("file")) {
     return "file_op";
   }
-  if (name === "bash" || name === "shell" || name === "exec" || name === "run") {
+  if (BASH_TOOLS.has(name)) {
     return "bash";
   }
-  if (name === "webfetch" || name === "websearch" || name === "browser" || name === "navigate") {
+  if (WEB_TOOLS.has(name)) {
     return "web";
   }
-  if (
-    name === "task" ||
-    name === "agent" ||
-    name === "dispatch" ||
-    name === "spawn" ||
-    name.includes("agent")
-  ) {
+  if (AGENT_CALL_TOOLS.has(name) || name.includes("agent")) {
     return "agent_call";
   }
   return "other";

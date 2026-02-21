@@ -16,9 +16,17 @@ import {
 } from "../lib/stage-render-batch";
 import type { OfficeEntity, OfficeRun, OfficeSnapshot } from "../types/office";
 import { StageBackground } from "./stage/StageBackground";
-import { EntityDatapad, EntityTokenView, statusFocusAccent } from "./stage/StageEntity";
+import { EntityDatapad, EntityTokenView } from "./stage/StageEntity";
 import { StageOverlay } from "./stage/StageOverlay";
 import { useStageLayout } from "./stage/useStageLayout";
+
+function statusFocusAccent(status: OfficeEntity["status"]): string {
+  if (status === "error") return "255, 150, 150";
+  if (status === "active") return "255, 217, 136";
+  if (status === "ok") return "130, 255, 190";
+  if (status === "idle") return "139, 226, 255";
+  return "173, 231, 250";
+}
 
 type Props = {
   snapshot: OfficeSnapshot;

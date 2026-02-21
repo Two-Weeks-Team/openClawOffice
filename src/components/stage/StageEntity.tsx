@@ -5,22 +5,6 @@ import {
 import { type StageEntityRenderModel } from "../../lib/stage-render-batch";
 import type { OfficeEntity, OfficeRun } from "../../types/office";
 
-export function statusFocusAccent(status: OfficeEntity["status"]): string {
-  if (status === "error") {
-    return "255, 150, 150";
-  }
-  if (status === "active") {
-    return "255, 217, 136";
-  }
-  if (status === "ok") {
-    return "130, 255, 190";
-  }
-  if (status === "idle") {
-    return "139, 226, 255";
-  }
-  return "173, 231, 250";
-}
-
 function formatTimeRemaining(expiresAt: number): string {
   const remaining = Math.max(0, expiresAt - Date.now());
   const minutes = Math.floor(remaining / 60_000);

@@ -343,7 +343,7 @@ function App() {
       return runById.get(activeEvent.runId) ?? null;
     }
     return null;
-  }, [activeEvent, runById, selectedEntity, snapshot]);
+  }, [activeEvent, runById, selectedEntityRunId, snapshot]);
 
   const alertSignals = useMemo<AlertSignal[]>(
     () => (snapshot ? evaluateAlertSignals(snapshot, snapshot.generatedAt) : []),
@@ -377,7 +377,7 @@ function App() {
       };
       showToast("success", `${actionLabel[action]} ${selectedCount} selected target(s).`);
     },
-    [selectedEntityIds, showToast],
+    [selectedEntityIds, showToast, setBatchActionState],
   );
 
   const upsertRunKnowledge = useCallback((input: {
@@ -493,7 +493,7 @@ function App() {
           : `Detail panel jumped to runId filter: ${runId}`,
       );
     },
-    [showToast],
+    [showToast, setTimelineFilters, setActiveEventId],
   );
 
   const onJumpToRun = useCallback(() => {
@@ -555,7 +555,7 @@ function App() {
     setIsCommandPaletteOpen(false);
     setIsShortcutHelpOpen(false);
     setIsAlertCenterOpen((prev) => !prev);
-  }, []);
+  }, [setRebindingCommandId]);
 
   const closeAlertCenter = useCallback(() => {
     setIsAlertCenterOpen(false);
@@ -566,19 +566,19 @@ function App() {
     setIsAlertCenterOpen(false);
     setIsShortcutHelpOpen(false);
     setIsCommandPaletteOpen((prev) => !prev);
-  }, []);
+  }, [setRebindingCommandId]);
 
   const openShortcutHelp = useCallback(() => {
     setRebindingCommandId(null);
     setIsAlertCenterOpen(false);
     setIsCommandPaletteOpen(false);
     setIsShortcutHelpOpen(true);
-  }, []);
+  }, [setRebindingCommandId]);
 
   const closeShortcutHelp = useCallback(() => {
     setRebindingCommandId(null);
     setIsShortcutHelpOpen(false);
-  }, []);
+  }, [setRebindingCommandId]);
 
   const entityCommandSpecs = useMemo<CommandSpec[]>(() => {
     if (!snapshot) {
@@ -953,7 +953,7 @@ function App() {
         setIsCommandPaletteOpen(false);
       }
     },
-    [commandEntryById],
+    [commandEntryById, setRecentCommandIds],
   );
 
   useEffect(() => {
@@ -1061,6 +1061,8 @@ function App() {
     defaultShortcutByCommandId,
     isShortcutHelpOpen,
     rebindingCommandId,
+    setRebindingCommandId,
+    setShortcutOverrides,
     shortcutCommands,
     showToast,
   ]);
