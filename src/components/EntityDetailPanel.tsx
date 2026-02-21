@@ -1,4 +1,5 @@
 import { Suspense, lazy, useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
+import { formatDatetime, formatLatency, formatRelativeTime } from "../lib/format";
 import {
   buildDetailPanelModelCached,
   buildRunDiffForSelection,
@@ -52,33 +53,6 @@ const LazyRunDiffView = lazy(async () => {
   return { default: module.RunDiffView };
 });
 
-function formatRelative(at: number, now: number): string {
-  const ms = Math.max(0, now - at);
-  if (ms < 60_000) {
-    return `${Math.max(1, Math.floor(ms / 1000))}s ago`;
-  }
-  if (ms < 3_600_000) {
-    return `${Math.floor(ms / 60_000)}m ago`;
-  }
-  return `${Math.floor(ms / 3_600_000)}h ago`;
-}
-
-function formatAt(at?: number): string {
-  if (typeof at !== "number") {
-    return "-";
-  }
-  return new Date(at).toLocaleString();
-}
-
-function formatLatency(latencyMs: number | null): string {
-  if (latencyMs === null) {
-    return "-";
-  }
-  if (latencyMs < 1000) {
-    return `${latencyMs} ms`;
-  }
-  return `${(latencyMs / 1000).toFixed(2)} s`;
-}
 
 const RUN_STATUS_LABELS: Record<OfficeRunStatus, string> = {
   error: "ERROR",
@@ -234,7 +208,7 @@ export function EntityDetailPanel({
     const ids = new Set<string>();
     const availableEntityIds = new Set(snapshot.entities.map((entity) => entity.id));
 
-    if (readyModel.entity.parentAgentId) {
+    if (readyModel.entity.kind === "subagent") {
       ids.add(`agent:${readyModel.entity.parentAgentId}`);
     }
     for (const item of readyModel.recentRuns.slice(0, 4)) {
@@ -533,12 +507,12 @@ export function EntityDetailPanel({
                   </div>
                   <div>
                     <dt>Parent Agent</dt>
-                    <dd>{readyModel.entity.parentAgentId ?? "-"}</dd>
+                    <dd>{readyModel.entity.kind === "subagent" ? readyModel.entity.parentAgentId : "-"}</dd>
                   </div>
                   {renderCopyValue(
                     "Run ID",
                     "runId",
-                    readyModel.linkedRun?.runId ?? readyModel.entity.runId,
+                    readyModel.linkedRun?.runId ?? (readyModel.entity.kind === "subagent" ? readyModel.entity.runId : undefined),
                   )}
                   <div>
                     <dt>Model</dt>
@@ -557,9 +531,41 @@ export function EntityDetailPanel({
                       </dd>
                     </div>
                   ) : null}
+                  {readyModel.entity.toolCategoryBreakdown &&
+                  readyModel.entity.toolCount &&
+                  readyModel.entity.toolCount > 0 ? (
+                    <div className="detail-tool-breakdown">
+                      <dt>Tool Breakdown</dt>
+                      <dd className="tool-category-bars">
+                        {(
+                          [
+                            ["file_op", "File"],
+                            ["bash", "Bash"],
+                            ["web", "Web"],
+                            ["agent_call", "Agent"],
+                            ["other", "Other"],
+                          ] as const
+                        ).map(([cat, label]) => {
+                          const count =
+                            readyModel.entity.toolCategoryBreakdown?.[cat] ?? 0;
+                          const pct = Math.round(
+                            (count / (readyModel.entity.toolCount ?? 1)) * 100,
+                          );
+                          if (count === 0) return null;
+                          return (
+                            <span key={cat} className={`tool-category-bar cat-${cat}`} title={`${label}: ${count}`}>
+                              <span className="tool-cat-label">{label}</span>
+                              <span className="tool-cat-bar" style={{ width: `${pct}%` }} />
+                              <span className="tool-cat-count">{count}</span>
+                            </span>
+                          );
+                        })}
+                      </dd>
+                    </div>
+                  ) : null}
                   <div>
                     <dt>Last Updated</dt>
-                    <dd>{formatAt(readyModel.entity.lastUpdatedAt)}</dd>
+                    <dd>{formatDatetime(readyModel.entity.lastUpdatedAt)}</dd>
                   </div>
                   <div>
                     <dt>Cleanup</dt>
@@ -611,7 +617,7 @@ export function EntityDetailPanel({
                         <div className="detail-message-top">
                           <span className={`detail-tag event-${event.type}`}>{eventTypeLabel(event)}</span>
                           <time title={new Date(event.at).toLocaleString()}>
-                            {formatRelative(event.at, snapshot.generatedAt)}
+                            {formatRelativeTime(event.at, snapshot.generatedAt)}
                           </time>
                         </div>
                         <p>{event.text}</p>
@@ -782,8 +788,8 @@ export function EntityDetailPanel({
                           ) : null}
                           <p className="detail-run-task">{item.run.task}</p>
                           <p className="detail-run-time">
-                            created {formatAt(item.run.createdAt)} | start {formatAt(item.run.startedAt)} | end{" "}
-                            {formatAt(item.run.endedAt)}
+                            created {formatDatetime(item.run.createdAt)} | start {formatDatetime(item.run.startedAt)} | end{" "}
+                            {formatDatetime(item.run.endedAt)}
                           </p>
                           <div className="detail-run-knowledge">
                             <label>
@@ -835,7 +841,7 @@ export function EntityDetailPanel({
                                 Clear Note
                               </button>
                               {entry ? (
-                                <small>saved {formatAt(entry.updatedAt)}</small>
+                                <small>saved {formatDatetime(entry.updatedAt)}</small>
                               ) : (
                                 <small>not saved</small>
                               )}
@@ -954,7 +960,7 @@ export function EntityDetailPanel({
                           <span>
                             {saved.baselineRunId} {"->"} {saved.candidateRunId}
                           </span>
-                          <small>{formatAt(saved.createdAt)}</small>
+                          <small>{formatDatetime(saved.createdAt)}</small>
                           <div className="detail-run-actions">
                             <button
                               type="button"

@@ -1,12 +1,12 @@
 export type OfficeEntityStatus = "active" | "idle" | "offline" | "ok" | "error";
 
-export type OfficeEntity = {
+export type ToolCategory = "file_op" | "bash" | "web" | "agent_call" | "other";
+export type ToolCategoryBreakdown = Record<ToolCategory, number>;
+
+type OfficeEntityBase = {
   id: string;
-  kind: "agent" | "subagent";
   label: string;
   agentId: string;
-  parentAgentId?: string;
-  runId?: string;
   status: OfficeEntityStatus;
   sessions: number;
   activeSubagents: number;
@@ -14,9 +14,9 @@ export type OfficeEntity = {
   model?: string;
   bubble?: string;
   task?: string;
-  expiresAt?: number;
   lastTool?: string;
   toolCount?: number;
+  toolCategoryBreakdown?: ToolCategoryBreakdown;
   tokenUsage?: {
     inputTokens: number;
     outputTokens: number;
@@ -28,6 +28,19 @@ export type OfficeEntity = {
     facing?: string;
   };
 };
+
+export type OfficeAgentEntity = OfficeEntityBase & {
+  kind: "agent";
+};
+
+export type OfficeSubagentEntity = OfficeEntityBase & {
+  kind: "subagent";
+  parentAgentId: string;
+  runId: string;
+  expiresAt?: number;
+};
+
+export type OfficeEntity = OfficeAgentEntity | OfficeSubagentEntity;
 
 export type OfficeRunStatus = "active" | "ok" | "error";
 

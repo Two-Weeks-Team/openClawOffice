@@ -1,12 +1,13 @@
 export type OfficeEntityStatus = "active" | "idle" | "offline" | "ok" | "error";
 
-export type OfficeEntity = {
+export type ToolCategory = "file_op" | "bash" | "web" | "agent_call" | "other";
+export type ToolCategoryBreakdown = Record<ToolCategory, number>;
+
+/** Shared fields present on every entity regardless of kind. */
+type OfficeEntityBase = {
   id: string;
-  kind: "agent" | "subagent";
   label: string;
   agentId: string;
-  parentAgentId?: string;
-  runId?: string;
   status: OfficeEntityStatus;
   sessions: number;
   activeSubagents: number;
@@ -14,9 +15,9 @@ export type OfficeEntity = {
   model?: string;
   bubble?: string;
   task?: string;
-  expiresAt?: number;
   lastTool?: string;
   toolCount?: number;
+  toolCategoryBreakdown?: ToolCategoryBreakdown;
   tokenUsage?: {
     inputTokens: number;
     outputTokens: number;
@@ -28,6 +29,24 @@ export type OfficeEntity = {
     facing?: string;
   };
 };
+
+/** Top-level agent (owns sessions, spawns subagents). */
+export type OfficeAgentEntity = OfficeEntityBase & {
+  kind: "agent";
+};
+
+/** Subagent run (child of a parent agent; always has parentAgentId and runId). */
+export type OfficeSubagentEntity = OfficeEntityBase & {
+  kind: "subagent";
+  /** The agentId of the parent that spawned this subagent. Always present. */
+  parentAgentId: string;
+  /** The runId this subagent represents. Always present. */
+  runId: string;
+  /** When the subagent record expires (TTL-based expiry for completed runs). */
+  expiresAt?: number;
+};
+
+export type OfficeEntity = OfficeAgentEntity | OfficeSubagentEntity;
 
 export type OfficeRunStatus = "active" | "ok" | "error";
 

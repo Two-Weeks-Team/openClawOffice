@@ -462,7 +462,7 @@ function deriveTeamId(entity: OfficeEntity, teamByAgentId: Map<string, string>):
   if (modelTeam) {
     return modelTeam;
   }
-  if (entity.parentAgentId) {
+  if (entity.kind === "subagent" && entity.parentAgentId) {
     const parentTeam = teamByAgentId.get(entity.parentAgentId);
     if (parentTeam) {
       return parentTeam;
@@ -616,7 +616,7 @@ function pickTargetRoom(params: {
   } = params;
   const role = deriveRole(entity);
   const teamId = deriveTeamId(entity, teamByAgentId);
-  const parentRoomId = entity.parentAgentId
+  const parentRoomId = entity.kind === "subagent" && entity.parentAgentId
     ? parentRoomByAgentId.get(entity.parentAgentId)
     : undefined;
 

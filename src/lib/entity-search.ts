@@ -46,8 +46,10 @@ export function buildEntitySearchIndex(snapshot: OfficeSnapshot): EntitySearchIn
     pushToken(parts, entity.id);
     pushToken(parts, entity.label);
     pushToken(parts, entity.agentId);
-    pushToken(parts, entity.parentAgentId);
-    pushToken(parts, entity.runId);
+    if (entity.kind === "subagent") {
+      pushToken(parts, entity.parentAgentId);
+      pushToken(parts, entity.runId);
+    }
     pushToken(parts, entity.task);
     pushToken(parts, entity.bubble);
     pushToken(parts, entity.model);

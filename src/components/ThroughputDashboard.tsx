@@ -1,5 +1,13 @@
 import { useMemo, useState } from "react";
 import {
+  formatDuration,
+  formatNumber,
+  formatPercent,
+  formatSignedDuration,
+  formatSignedNumber,
+  formatSignedPercent,
+} from "../lib/format";
+import {
   THROUGHPUT_WINDOWS,
   buildAgentThroughputBreakdown,
   buildThroughputHotspots,
@@ -20,86 +28,6 @@ const WINDOW_LABELS: Record<ThroughputWindow, string> = {
   "1h": "1h",
   "24h": "24h",
 };
-
-function formatPercent(value: number | null): string {
-  if (value === null) {
-    return "-";
-  }
-  return `${Math.round(value * 100)}%`;
-}
-
-function formatDuration(value: number | null): string {
-  if (value === null) {
-    return "-";
-  }
-  if (value < 1000) {
-    return `${value}ms`;
-  }
-  if (value < 60_000) {
-    return `${(value / 1000).toFixed(1)}s`;
-  }
-  return `${(value / 60_000).toFixed(1)}m`;
-}
-
-function formatSignedPercent(value: number | null): string {
-  if (value === null) {
-    return "-";
-  }
-  const rounded = Math.round(value * 100);
-  if (rounded === 0) {
-    return "0%";
-  }
-  const sign = rounded > 0 ? "+" : "";
-  return `${sign}${rounded}%`;
-}
-
-function formatSignedDuration(value: number | null): string {
-  if (value === null) {
-    return "-";
-  }
-  const abs = Math.abs(value);
-  if (abs < 1000) {
-    const rounded = Math.round(value);
-    if (rounded === 0) {
-      return "0ms";
-    }
-    const sign = rounded > 0 ? "+" : "";
-    return `${sign}${rounded}ms`;
-  }
-  if (abs < 60_000) {
-    const seconds = Number((value / 1000).toFixed(1));
-    if (seconds === 0) {
-      return "0.0s";
-    }
-    const sign = seconds > 0 ? "+" : "";
-    return `${sign}${seconds.toFixed(1)}s`;
-  }
-  const minutes = Number((value / 60_000).toFixed(1));
-  if (minutes === 0) {
-    return "0.0m";
-  }
-  const sign = minutes > 0 ? "+" : "";
-  return `${sign}${minutes.toFixed(1)}m`;
-}
-
-function formatSignedNumber(value: number | null): string {
-  if (value === null) {
-    return "-";
-  }
-  const rounded = Number(value.toFixed(2));
-  if (rounded === 0) {
-    return "0.00";
-  }
-  const sign = rounded > 0 ? "+" : "";
-  return `${sign}${rounded.toFixed(2)}`;
-}
-
-function formatNumber(value: number | null): string {
-  if (value === null) {
-    return "-";
-  }
-  return value.toFixed(2);
-}
 
 function ratioToPercentHeight(value: number, max: number): string {
   if (value <= 0) {

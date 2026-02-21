@@ -1,22 +1,24 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import type { AlertSignal } from "../lib/alerts";
 import { buildBubbleLaneLayout, type BubbleLaneCandidate } from "../lib/bubble-lanes";
 import { buildEntityClusters } from "../lib/entity-clustering";
-import { buildPlacements, type PlacementMode } from "../lib/layout";
+import { type PlacementMode } from "../lib/layout";
 import { indexRunsById } from "../lib/run-graph";
 import {
   projectBubbleLaneLayoutForLod,
   resolveStageLodLevel,
   shouldRenderRunLinkForLod,
-  type StageLodLevel,
 } from "../lib/stage-lod";
 import {
   buildStageEntityRenderModels,
   evaluateStageEntityPriority,
-  type StageEntityRenderModel,
 } from "../lib/stage-render-batch";
 import type { OfficeEntity, OfficeRun, OfficeSnapshot } from "../types/office";
+import { StageBackground } from "./stage/StageBackground";
+import { EntityDatapad, EntityTokenView, statusFocusAccent } from "./stage/StageEntity";
+import { StageOverlay } from "./stage/StageOverlay";
+import { useStageLayout } from "./stage/useStageLayout";
 
 type Props = {
   snapshot: OfficeSnapshot;
@@ -150,22 +152,6 @@ function touchCenter(a: TouchPoint, b: TouchPoint) {
   };
 }
 
-function statusFocusAccent(status: OfficeEntity["status"]): string {
-  if (status === "error") {
-    return "255, 150, 150";
-  }
-  if (status === "active") {
-    return "255, 217, 136";
-  }
-  if (status === "ok") {
-    return "130, 255, 190";
-  }
-  if (status === "idle") {
-    return "139, 226, 255";
-  }
-  return "173, 231, 250";
-}
-
 function loadBubbleEntityIds(storageKey: string): string[] {
   try {
     const raw = window.localStorage.getItem(storageKey);
@@ -209,158 +195,6 @@ function bubbleAgeLabel(ageMs: number): string {
   }
   return `${Math.floor(ageMs / 3_600_000)}h`;
 }
-
-type EntityDatapadProps = {
-  entity: OfficeEntity;
-  run?: OfficeRun;
-  generatedAt: number;
-};
-
-const EntityDatapad = memo(function EntityDatapad({
-  entity,
-  run,
-  generatedAt,
-}: EntityDatapadProps) {
-  const bubbleRef = useRef<HTMLDivElement>(null);
-  const [bubbleOverflows, setBubbleOverflows] = useState(false);
-
-  useLayoutEffect(() => {
-    const el = bubbleRef.current;
-    if (el) {
-      setBubbleOverflows(el.scrollHeight > el.clientHeight);
-    } else {
-      setBubbleOverflows(false);
-    }
-  }, [entity.bubble, entity.task]);
-  const durationText = useMemo(() => {
-    if (entity.kind === "subagent" && run) {
-      const startTime = run.startedAt ?? run.createdAt;
-      const endTime = run.endedAt ?? generatedAt;
-      const durationMs = endTime - startTime;
-      if (durationMs < 1000) return "<1s";
-      if (durationMs < 60_000) return `${Math.floor(durationMs / 1000)}s`;
-      if (durationMs < 3_600_000) return `${Math.floor(durationMs / 60_000)}m ${Math.floor((durationMs % 60_000) / 1000)}s`;
-      return `${Math.floor(durationMs / 3_600_000)}h ${Math.floor((durationMs % 3_600_000) / 60_000)}m`;
-    }
-    if (entity.lastUpdatedAt) {
-      const age = generatedAt - entity.lastUpdatedAt;
-      if (age < 60_000) return `${Math.max(1, Math.floor(age / 1000))}s ago`;
-      if (age < 3_600_000) return `${Math.floor(age / 60_000)}m ago`;
-      return `${Math.floor(age / 3_600_000)}h ago`;
-    }
-    return "—";
-  }, [entity, run, generatedAt]);
-
-  const statusLabel = entity.kind === "agent"
-    ? `${entity.sessions} session${entity.sessions === 1 ? "" : "s"}`
-    : entity.status;
-
-  return (
-    <div className="entity-datapad">
-      <div className="datapad-header">{entity.label}</div>
-      <div className="datapad-row">
-        <span className="datapad-label">Status</span>
-        <span className={`datapad-value datapad-status-${entity.status}`}>
-          <span className="datapad-status-dot" />
-          {statusLabel}
-        </span>
-      </div>
-      <div className="datapad-row">
-        <span className="datapad-label">{entity.kind === "subagent" ? "Duration" : "Last active"}</span>
-        <span className="datapad-value">{durationText}</span>
-      </div>
-      {entity.kind === "subagent" && entity.parentAgentId ? (
-        <div className="datapad-row">
-          <span className="datapad-label">Parent</span>
-          <span className="datapad-value datapad-parent">{entity.parentAgentId}</span>
-        </div>
-      ) : null}
-      {entity.bubble ? (
-        <div className="datapad-bubble-section">
-          <div className="datapad-bubble-label">Latest message</div>
-          <div ref={bubbleRef} className={`datapad-bubble${bubbleOverflows ? " has-overflow" : ""}`}>{entity.bubble}</div>
-        </div>
-      ) : entity.task ? (
-        <div className="datapad-bubble-section">
-          <div className="datapad-bubble-label">Task</div>
-          <div ref={bubbleRef} className={`datapad-bubble${bubbleOverflows ? " has-overflow" : ""}`}>{entity.task}</div>
-        </div>
-      ) : null}
-    </div>
-  );
-});
-
-function formatTimeRemaining(expiresAt: number): string {
-  const remaining = Math.max(0, expiresAt - Date.now());
-  const minutes = Math.floor(remaining / 60_000);
-  const seconds = Math.floor((remaining % 60_000) / 1000);
-  if (minutes > 0) {
-    return `${minutes}m`;
-  }
-  return `${seconds}s`;
-}
-
-type EntityTokenViewProps = {
-  model: StageEntityRenderModel;
-  lodLevel: StageLodLevel;
-  densityMode: "standard" | "compact" | "dense";
-  onSelectEntity?: (entityId: string, mode?: "single" | "toggle") => void;
-  onHoverEntity?: (entityId: string | null, rect: DOMRect | null) => void;
-};
-
-const EntityTokenView = memo(function EntityTokenView({
-  model,
-  lodLevel,
-  densityMode,
-  onSelectEntity,
-  onHoverEntity,
-}: EntityTokenViewProps) {
-  const showLabel = lodLevel !== "distant" && densityMode !== "dense";
-  const showStatus = lodLevel === "detail" && densityMode === "standard";
-  return (
-    <article
-      className={`${model.className} lod-${lodLevel} density-${densityMode}`}
-      style={model.style}
-      role="button"
-      tabIndex={0}
-      title={model.fullLabel}
-      aria-label={`Open detail panel for ${model.label}`}
-      aria-pressed={model.isSelected}
-      onClick={(event) => {
-        const multiToggle = event.metaKey || event.ctrlKey;
-        onSelectEntity?.(model.id, multiToggle ? "toggle" : "single");
-      }}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onSelectEntity?.(model.id, "single");
-        }
-      }}
-      onMouseEnter={(event) => {
-        const rect = event.currentTarget.getBoundingClientRect();
-        onHoverEntity?.(model.id, rect);
-      }}
-      onMouseLeave={() => onHoverEntity?.(null, null)}
-    >
-      <div className="chip-status-bar" />
-      {model.avatarStyle ? <div className="chip-avatar" style={model.avatarStyle} /> : null}
-      {showLabel ? (
-        <div className="chip-content">
-          <span className="chip-label">
-            {model.label}
-            {model.secondaryLabel ? <span className="chip-secondary">{model.secondaryLabel}</span> : null}
-          </span>
-          {showStatus ? <span className="chip-status">{model.statusLabel}</span> : null}
-          {model.expiresAt ? (
-            <span className="chip-expires" title="Time until removal">
-              {formatTimeRemaining(model.expiresAt)}
-            </span>
-          ) : null}
-        </div>
-      ) : null}
-    </article>
-  );
-});
 
 export function OfficeStage({
   snapshot,
@@ -413,8 +247,6 @@ export function OfficeStage({
   const [expandedBubbleEntityIds, setExpandedBubbleEntityIds] = useState<string[]>(() =>
     loadBubbleEntityIds(BUBBLE_EXPANDED_STORAGE_KEY),
   );
-  const previousRoomOptionsKeyRef = useRef("");
-  const previousRoomAssignmentsKeyRef = useRef("");
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const mousePanGestureRef = useRef<{
     pointerId: number;
@@ -443,7 +275,7 @@ export function OfficeStage({
   );
 
   const hasExpiringEntities = useMemo(
-    () => snapshot.entities.some((e) => e.expiresAt && e.expiresAt > now),
+    () => snapshot.entities.some((e) => e.kind === "subagent" && e.expiresAt && e.expiresAt > now),
     [snapshot.entities, now],
   );
 
@@ -454,104 +286,33 @@ export function OfficeStage({
   }, [hasExpiringEntities]);
 
   const activeEntities = useMemo(
-    () => snapshot.entities.filter((e) => !e.expiresAt || e.expiresAt > now),
+    () => snapshot.entities.filter((e) => e.kind !== "subagent" || !e.expiresAt || e.expiresAt > now),
     [snapshot.entities, now],
   );
 
-  const layoutState = useMemo(
-    () =>
-      buildPlacements({
-        entities: activeEntities,
-        generatedAt: snapshot.generatedAt,
-        placementMode,
-        zoneConfig,
-      }),
-    [placementMode, activeEntities, snapshot.generatedAt, zoneConfig],
-  );
-
-  const rooms = layoutState.rooms;
-  const placements = layoutState.placements;
-  const collisionPairCount = layoutState.collisionPairs.length;
-  const filteredEntityIdSet = useMemo(() => new Set(filterEntityIds), [filterEntityIds]);
-
-  const roomDensityMode = useMemo(() => {
-    const densityByRoom = new Map<string, "standard" | "compact" | "dense">();
-    for (const room of rooms) {
-      const debug = layoutState.roomDebug.get(room.id);
-      const count = debug?.assigned ?? 0;
-      if (count >= 26) {
-        densityByRoom.set(room.id, "dense");
-      } else if (count >= 10) {
-        densityByRoom.set(room.id, "compact");
-      } else {
-        densityByRoom.set(room.id, "standard");
-      }
-    }
-    return densityByRoom;
-  }, [rooms, layoutState.roomDebug]);
-
-  const placementByEntityId = useMemo(
-    () => new Map(placements.map((p) => [p.entity.id, p] as const)),
-    [placements],
-  );
-  const normalizedRoomFilterId =
-    roomFilterId.trim() !== "" && roomFilterId !== "all" ? roomFilterId : null;
-  const hasRoomFilter = Boolean(normalizedRoomFilterId);
-  const hasOpsFilter = hasEntityFilter || hasRoomFilter;
-
-  useEffect(() => {
-    if (!onRoomOptionsChange) {
-      return;
-    }
-    const roomIds = [...rooms.map((room) => room.id)].sort((a, b) => a.localeCompare(b));
-    const roomOptionsKey = roomIds.join(",");
-    if (roomOptionsKey === previousRoomOptionsKeyRef.current) {
-      return;
-    }
-    previousRoomOptionsKeyRef.current = roomOptionsKey;
-    onRoomOptionsChange(roomIds);
-  }, [onRoomOptionsChange, rooms]);
-
-  useEffect(() => {
-    if (!onRoomAssignmentsChange) {
-      return;
-    }
-    const roomByAgentId = new Map<string, string>();
-    for (const placement of placements) {
-      if (!roomByAgentId.has(placement.entity.agentId)) {
-        roomByAgentId.set(placement.entity.agentId, placement.roomId);
-      }
-    }
-    const entries = [...roomByAgentId.entries()];
-    entries.sort((left, right) => left[0].localeCompare(right[0]));
-    const roomAssignmentsKey = entries.map(([agentId, roomId]) => `${agentId}:${roomId}`).join("|");
-    if (roomAssignmentsKey === previousRoomAssignmentsKeyRef.current) {
-      return;
-    }
-    previousRoomAssignmentsKeyRef.current = roomAssignmentsKey;
-    onRoomAssignmentsChange(new Map(entries));
-  }, [onRoomAssignmentsChange, placements]);
-
-  const matchedEntityCount = useMemo(() => {
-    let count = 0;
-    for (const placement of placements) {
-      const entity = placement.entity;
-      const matchesEntityFilter = !hasEntityFilter || filteredEntityIdSet.has(entity.id);
-      const matchesRoomFilter =
-        !normalizedRoomFilterId || placement.roomId === normalizedRoomFilterId;
-      if (matchesEntityFilter && matchesRoomFilter) {
-        count += 1;
-      }
-    }
-    return count;
-  }, [filteredEntityIdSet, hasEntityFilter, normalizedRoomFilterId, placements]);
-
-  useEffect(() => {
-    if (!onFilterMatchCountChange) {
-      return;
-    }
-    onFilterMatchCountChange(matchedEntityCount);
-  }, [matchedEntityCount, onFilterMatchCountChange]);
+  const {
+    rooms,
+    placements,
+    collisionPairCount,
+    roomDebug,
+    roomDensityMode,
+    placementByEntityId,
+    placementById,
+    filteredEntityIdSet,
+    normalizedRoomFilterId,
+    hasOpsFilter,
+  } = useStageLayout({
+    snapshot,
+    activeEntities,
+    placementMode,
+    zoneConfig,
+    filterEntityIds,
+    hasEntityFilter,
+    roomFilterId,
+    onRoomOptionsChange,
+    onRoomAssignmentsChange,
+    onFilterMatchCountChange,
+  });
 
   useEffect(() => {
     try {
@@ -607,20 +368,6 @@ export function OfficeStage({
       window.clearInterval(intervalId);
     };
   }, []);
-
-  const placementById = useMemo(() => {
-    const map = new Map<string, (typeof placements)[number]>();
-    for (const placement of placements) {
-      map.set(placement.entity.id, placement);
-      if (placement.entity.kind === "agent") {
-        map.set(`agent:${placement.entity.agentId}`, placement);
-      }
-      if (placement.entity.kind === "subagent" && placement.entity.runId) {
-        map.set(`subagent:${placement.entity.runId}`, placement);
-      }
-    }
-    return map;
-  }, [placements]);
 
   const runById = useMemo(() => {
     return indexRunsById(snapshot.runs);
@@ -1542,20 +1289,15 @@ export function OfficeStage({
           }
         }}
       >
-        {hasFocusSelection && focusPoint ? (
-          <>
-            <div className="focus-fog-layer" style={focusFogStyle} aria-hidden="true" />
-            <div className="focus-accent-ring" style={focusAccentStyle} aria-hidden="true" />
-          </>
-        ) : null}
+        <StageOverlay focusFogStyle={focusFogStyle} focusAccentStyle={focusAccentStyle} />
         <div className="office-stage-camera" style={cameraStyle}>
-          <div className="office-stage-grid" />
-
-      <svg className="office-lines" viewBox="0 0 980 660" preserveAspectRatio="none" aria-hidden>
-        {runLinks.map((link) => (
-          <path key={link.id} className={`run-link ${link.cls}`} d={link.d} />
-        ))}
-      </svg>
+          <StageBackground
+            rooms={rooms}
+            roomDebug={roomDebug}
+            runLinks={runLinks}
+            stageWidth={STAGE_WIDTH}
+            stageHeight={STAGE_HEIGHT}
+          />
 
       <section className="bubble-lane-overlay" aria-label="Thread bubble lanes">
         {bubbleLaneRenderState.lanes.map((lane) => (
@@ -1642,56 +1384,6 @@ export function OfficeStage({
           );
         })}
       </section>
-
-      {rooms.map((room) => {
-        const debug = layoutState.roomDebug.get(room.id);
-        const overflowCount = (debug?.overflowIn ?? 0) + (debug?.overflowOut ?? 0);
-        const occupancyRatio = debug ? debug.assigned / Math.max(1, debug.capacity) : 0;
-        const occupancyPercent = Math.round(occupancyRatio * 100);
-        const occupancyHeatLevel =
-          occupancyRatio >= 1 ? "high" : occupancyRatio >= 0.7 ? "medium" : "low";
-        const isEmpty = debug ? debug.assigned === 0 : true;
-        return (
-          <section
-            key={room.id}
-            className={`office-room heat-${occupancyHeatLevel}${isEmpty ? " room-empty" : ""}`}
-            style={{
-              left: room.x,
-              top: room.y,
-              width: room.width,
-              height: room.height,
-              background: room.fill,
-              borderColor: room.border,
-            }}
-          >
-            <div className={`occupancy-heat heat-${occupancyHeatLevel}`} aria-hidden="true" />
-            <header>
-              {room.label}
-              {room.description ? <small className="room-description">{room.description}</small> : null}
-            </header>
-            <div className="shape-tag">{room.shape}</div>
-            {debug ? (
-              <div
-                className={`zone-debug ${overflowCount > 0 ? "has-overflow" : ""} ${
-                  debug.collisionPairs > 0 ? "has-collision" : ""
-                }`}
-                aria-hidden="true"
-              >
-                <span>
-                  cap {debug.assigned}/{debug.capacity}
-                </span>
-                <span>occ {debug.utilizationPct || occupancyPercent}%</span>
-                <span>target {debug.targeted}</span>
-                <span className={`saturation-${debug.saturation}`}>{debug.saturation}</span>
-                {debug.collisionPairs > 0 ? <span>coll {debug.collisionPairs}</span> : null}
-                {debug.overflowOut > 0 ? <span>out +{debug.overflowOut}</span> : null}
-                {debug.overflowIn > 0 ? <span>in +{debug.overflowIn}</span> : null}
-                {debug.manualOverrides > 0 ? <span>override {debug.manualOverrides}</span> : null}
-              </div>
-            ) : null}
-          </section>
-        );
-      })}
 
       {clusterState.collapsedClusters.map((cluster) => {
         const expandCluster = () => {

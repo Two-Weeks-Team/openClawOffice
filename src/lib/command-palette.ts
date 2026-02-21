@@ -331,6 +331,58 @@ export function formatShortcut(shortcut: string, platform: ShortcutPlatform): st
   return names.join("+");
 }
 
+/**
+ * Computes a fuzzy match score for a pattern against a text string.
+ * Returns -1 if the pattern is not a subsequence of text.
+ * Higher scores indicate better matches.
+ *
+ * Scoring:
+ * - Exact substring match: high base score with position bonus
+ * - Consecutive character matches: +20 per pair
+ * - Word-boundary start matches: +15 per character
+ * - Each matched character: +10
+ */
+function fuzzyScore(pattern: string, text: string): number {
+  if (!pattern) return 0;
+
+  // Exact substring match: highest priority
+  const substringIndex = text.indexOf(pattern);
+  if (substringIndex !== -1) {
+    // Earlier matches in the string score slightly higher
+    return 1000 + pattern.length * 10 - substringIndex;
+  }
+
+  // Subsequence match with bonuses
+  let score = 0;
+  let textIndex = 0;
+  let prevMatchIndex = -1;
+
+  for (let pi = 0; pi < pattern.length; pi++) {
+    const pChar = pattern[pi];
+    let found = false;
+
+    for (let ti = textIndex; ti < text.length; ti++) {
+      if (text[ti] === pChar) {
+        score += 10;
+        if (ti === prevMatchIndex + 1) {
+          score += 20; // Consecutive match bonus
+        }
+        if (ti === 0 || /[\s\-_/]/.test(text[ti - 1])) {
+          score += 15; // Word-boundary start bonus
+        }
+        prevMatchIndex = ti;
+        textIndex = ti + 1;
+        found = true;
+        break;
+      }
+    }
+
+    if (!found) return -1; // Pattern not a subsequence
+  }
+
+  return score;
+}
+
 export function filterCommandIds(entries: CommandSearchEntry[], query: string): string[] {
   const normalized = query.trim().toLowerCase();
   if (!normalized) {
@@ -338,19 +390,39 @@ export function filterCommandIds(entries: CommandSearchEntry[], query: string): 
   }
   const tokens = normalized.split(/\s+/).filter(Boolean);
 
-  return entries
-    .filter((entry) => {
-      const searchCorpus = [
-        entry.label,
-        entry.description ?? "",
-        ...(entry.keywords ?? []),
-        entry.id,
-      ]
-        .join(" ")
-        .toLowerCase();
-      return tokens.every((token) => searchCorpus.includes(token));
-    })
-    .map((entry) => entry.id);
+  type ScoredEntry = { id: string; score: number };
+  const scored: ScoredEntry[] = [];
+
+  for (const entry of entries) {
+    const searchFields = [
+      entry.label,
+      entry.description ?? "",
+      ...(entry.keywords ?? []),
+      entry.id,
+    ].map((s) => s.toLowerCase());
+
+    let totalScore = 0;
+    let allTokensMatch = true;
+
+    for (const token of tokens) {
+      let bestTokenScore = -1;
+      for (const field of searchFields) {
+        const s = fuzzyScore(token, field);
+        if (s > bestTokenScore) bestTokenScore = s;
+      }
+      if (bestTokenScore < 0) {
+        allTokensMatch = false;
+        break;
+      }
+      totalScore += bestTokenScore;
+    }
+
+    if (allTokensMatch) {
+      scored.push({ id: entry.id, score: totalScore });
+    }
+  }
+
+  return scored.sort((a, b) => b.score - a.score).map((item) => item.id);
 }
 
 export function pushRecentCommand(history: string[], commandId: string, limit = 8): string[] {
