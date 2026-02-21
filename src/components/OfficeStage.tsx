@@ -228,6 +228,8 @@ const EntityDatapad = memo(function EntityDatapad({
     const el = bubbleRef.current;
     if (el) {
       setBubbleOverflows(el.scrollHeight > el.clientHeight);
+    } else {
+      setBubbleOverflows(false);
     }
   }, [entity.bubble, entity.task]);
   const durationText = useMemo(() => {
