@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import type { AlertSignal } from "../lib/alerts";
 import { buildBubbleLaneLayout, type BubbleLaneCandidate } from "../lib/bubble-lanes";
@@ -221,6 +221,17 @@ const EntityDatapad = memo(function EntityDatapad({
   run,
   generatedAt,
 }: EntityDatapadProps) {
+  const bubbleRef = useRef<HTMLDivElement>(null);
+  const [bubbleOverflows, setBubbleOverflows] = useState(false);
+
+  useLayoutEffect(() => {
+    const el = bubbleRef.current;
+    if (el) {
+      setBubbleOverflows(el.scrollHeight > el.clientHeight);
+    } else {
+      setBubbleOverflows(false);
+    }
+  }, [entity.bubble, entity.task]);
   const durationText = useMemo(() => {
     if (entity.kind === "subagent" && run) {
       const startTime = run.startedAt ?? run.createdAt;
@@ -265,9 +276,15 @@ const EntityDatapad = memo(function EntityDatapad({
         </div>
       ) : null}
       {entity.bubble ? (
-        <div className="datapad-bubble">"{entity.bubble}"</div>
+        <div className="datapad-bubble-section">
+          <div className="datapad-bubble-label">Latest message</div>
+          <div ref={bubbleRef} className={`datapad-bubble${bubbleOverflows ? " has-overflow" : ""}`}>{entity.bubble}</div>
+        </div>
       ) : entity.task ? (
-        <div className="datapad-bubble">"{entity.task}"</div>
+        <div className="datapad-bubble-section">
+          <div className="datapad-bubble-label">Task</div>
+          <div ref={bubbleRef} className={`datapad-bubble${bubbleOverflows ? " has-overflow" : ""}`}>{entity.task}</div>
+        </div>
       ) : null}
     </div>
   );
