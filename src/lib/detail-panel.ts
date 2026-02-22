@@ -360,7 +360,7 @@ export function buildDetailPanelModel(
   const linkedRun =
     entity.kind === "subagent" && entity.runId ? (runById.get(entity.runId) ?? null) : null;
 
-  let relatedRuns: OfficeRun[] = [];
+  let relatedRuns: OfficeRun[];
   if (entity.kind === "agent") {
     relatedRuns = runIdsForAgent(snapshot.runGraph, entity.agentId)
       .map((runId) => runById.get(runId))
