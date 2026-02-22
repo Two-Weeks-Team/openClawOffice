@@ -1,0 +1,48 @@
+server:
+  - changed-files:
+      - any-glob-to-any-file: 'server/**/*'
+
+hooks:
+  - changed-files:
+      - any-glob-to-any-file: 'src/hooks/**/*'
+
+components:
+  - changed-files:
+      - any-glob-to-any-file: 'src/components/**/*'
+
+lib:
+  - changed-files:
+      - any-glob-to-any-file: 'src/lib/**/*'
+
+types:
+  - changed-files:
+      - any-glob-to-any-file: 'src/types/**/*'
+
+tests:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**/*.test.ts'
+          - '**/*.spec.ts'
+
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**/*.md'
+          - 'docs/**/*'
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file: '.github/**/*'
+
+docker:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'Dockerfile'
+          - 'docker-compose.yml'
+          - '.dockerignore'
+
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'package.json'
+          - 'pnpm-lock.yaml'
