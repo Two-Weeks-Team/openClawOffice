@@ -15,7 +15,7 @@ jobs:
     runs-on: [self-hosted, X64, Linux]
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v4
         with: { version: 10 }
       - uses: actions/setup-node@v6
@@ -27,7 +27,7 @@ jobs:
     runs-on: [self-hosted, X64, Linux]
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v4
         with: { version: 10 }
       - uses: actions/setup-node@v6
@@ -40,7 +40,7 @@ jobs:
     runs-on: [self-hosted, X64, Linux]
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v4
         with: { version: 10 }
       - uses: actions/setup-node@v6
@@ -58,7 +58,7 @@ jobs:
     runs-on: [self-hosted, X64, Linux]
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v4
         with: { version: 10 }
       - uses: actions/setup-node@v6
@@ -71,7 +71,7 @@ jobs:
     runs-on: [self-hosted, X64, Linux]
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v4
         with: { version: 10 }
       - uses: actions/setup-node@v6
@@ -84,7 +84,7 @@ jobs:
     runs-on: [self-hosted, ARM64, macOS]
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v4
         with: { version: 10 }
       - uses: actions/setup-node@v6
