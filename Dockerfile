@@ -1,4 +1,4 @@
-FROM node:22-alpine
+FROM node:25-alpine
 
 RUN apk add --no-cache wget && corepack enable && corepack prepare pnpm@10 --activate
 
