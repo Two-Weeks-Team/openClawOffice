@@ -1,0 +1,23 @@
+services:
+  office:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: openclawoffice-web
+    ports:
+      - "127.0.0.1:5179:5179"
+    environment:
+      - PORT=5179
+      - OPENCLAW_STATE_DIR=/app/.openclaw
+      - OPENCLAW_PROJECT_DIR=/app/openclaw
+      - OPENCLAW_GATEWAY_PORT=18789
+    volumes:
+      - ${HOME}/.openclaw:/app/.openclaw:ro
+      - ../openclaw:/app/openclaw:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5179/api/office/snapshot"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
