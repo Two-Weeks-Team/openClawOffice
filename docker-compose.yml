@@ -12,8 +12,10 @@ services:
       - OPENCLAW_PROJECT_DIR=/app/openclaw
       - OPENCLAW_GATEWAY_PORT=18789
     volumes:
-      - ${HOME}/.openclaw:/app/.openclaw:ro
-      - ../openclaw:/app/openclaw:ro
+      - ${HOME:-/root}/.openclaw:/app/.openclaw:ro
+      - ${OPENCLAW_PROJECT_HOST_DIR:-../openclaw}:/app/openclaw:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5179/api/office/snapshot"]
