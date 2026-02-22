@@ -1253,7 +1253,7 @@ function App() {
                     setActiveWorkspaceTab(tab.id);
                   }}
                   onKeyDown={(event) => {
-                    let nextIndex = index;
+                    let nextIndex: number;
                     if (event.key === "ArrowRight") {
                       nextIndex = (index + 1) % WORKSPACE_TABS.length;
                     } else if (event.key === "ArrowLeft") {

@@ -129,14 +129,14 @@ function clampCameraPan(
   const contentWidth = STAGE_WIDTH * zoom;
   const contentHeight = STAGE_HEIGHT * zoom;
 
-  let nextPanX = panX;
+  let nextPanX: number;
   if (contentWidth <= viewportWidth) {
     nextPanX = (viewportWidth - contentWidth) / 2;
   } else {
     nextPanX = clamp(panX, viewportWidth - contentWidth, 0);
   }
 
-  let nextPanY = panY;
+  let nextPanY: number;
   if (contentHeight <= viewportHeight) {
     nextPanY = (viewportHeight - contentHeight) / 2;
   } else {

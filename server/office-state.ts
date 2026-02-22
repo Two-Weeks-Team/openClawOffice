@@ -160,7 +160,7 @@ type TranscriptInfo = {
 
 async function readLatestTranscriptInfo(agentDir: string): Promise<TranscriptInfo | undefined> {
   const sessionsDir = path.join(agentDir, "sessions");
-  let files: Dirent[] = [];
+  let files: Dirent[];
   try {
     files = await fs.readdir(sessionsDir, { withFileTypes: true });
   } catch (error) {
@@ -194,7 +194,7 @@ async function readLatestTranscriptInfo(agentDir: string): Promise<TranscriptInf
     return undefined;
   }
 
-  let raw = "";
+  let raw: string;
   try {
     raw = await fs.readFile(latest.full, "utf-8");
   } catch (error) {
@@ -234,7 +234,7 @@ async function loadAgentSnapshots(stateDir: string): Promise<AgentLoadResult> {
   const diagnostics: SnapshotDiagnostic[] = [];
   const agentsDir = path.join(stateDir, "agents");
 
-  let folders: Dirent[] = [];
+  let folders: Dirent[];
   try {
     folders = await fs.readdir(agentsDir, { withFileTypes: true });
   } catch (err) {
