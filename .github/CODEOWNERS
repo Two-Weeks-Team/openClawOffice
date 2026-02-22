@@ -1,0 +1,55 @@
+# CODEOWNERS for openClawOffice
+# These owners will be requested for review when someone opens a PR
+# that modifies code they own.
+#
+# Documentation: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owners for everything
+* @Two-Weeks-Team/maintainers
+
+# =============================================================================
+# SERVER CORE (Vite plugin, office state, snapshot)
+# =============================================================================
+
+server/ @Two-Weeks-Team/maintainers
+
+# =============================================================================
+# FRONTEND SOURCE
+# =============================================================================
+
+src/ @Two-Weeks-Team/maintainers
+
+# Type definitions
+src/types/ @Two-Weeks-Team/maintainers
+
+# Hooks
+src/hooks/ @Two-Weeks-Team/maintainers
+
+# Core library utilities
+src/lib/ @Two-Weeks-Team/maintainers
+
+# =============================================================================
+# CI/CD AND CONFIGURATION
+# =============================================================================
+
+.github/workflows/ @Two-Weeks-Team/maintainers
+.github/CODEOWNERS @Two-Weeks-Team/maintainers
+.github/dependabot.yml @Two-Weeks-Team/maintainers
+
+# Package configuration (security-sensitive)
+package.json @Two-Weeks-Team/maintainers
+pnpm-lock.yaml @Two-Weeks-Team/maintainers
+tsconfig*.json @Two-Weeks-Team/maintainers
+vite.config.ts @Two-Weeks-Team/maintainers
+eslint.config.js @Two-Weeks-Team/maintainers
+
+# Docker configuration
+Dockerfile @Two-Weeks-Team/maintainers
+docker-compose.yml @Two-Weeks-Team/maintainers
+.dockerignore @Two-Weeks-Team/maintainers
+
+# =============================================================================
+# DOCUMENTATION
+# =============================================================================
+
+README.md @Two-Weeks-Team/maintainers
