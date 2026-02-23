@@ -246,9 +246,9 @@ async function loadDocSummaries(dir: string): Promise<OpenClawDocSummary[]> {
 
   const readMdSummary = async (filePath: string, relativePath: string) => {
     try {
-      const stat = await fs.stat(filePath);
       const fd = await fs.open(filePath, "r");
       try {
+        const stat = await fd.stat();
         const buf = Buffer.alloc(Math.min(DOC_HEAD_BYTES, stat.size));
         await fd.read(buf, 0, buf.length, 0);
         const content = buf.toString("utf-8");
