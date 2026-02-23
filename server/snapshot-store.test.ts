@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildRunGraph } from "../src/lib/run-graph";
 import type { OfficeSnapshot } from "./office-types";
 import { OfficeSnapshotStore } from "./snapshot-store";
@@ -221,5 +221,49 @@ describe("OfficeSnapshotStore", () => {
     expect(second.stored).toBe(false);
     expect(second.reason).toBe("interval");
     expect(store.getMetrics().skippedByInterval).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe("OfficeSnapshotStore — read-only filesystem handling (#210)", () => {
+  it("forReplayDir creates store rooted at the given replay dir", async () => {
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "replay-dir-test-"));
+    tempDirs.push(tmpDir);
+    const store = OfficeSnapshotStore.forReplayDir(tmpDir, { minIntervalMs: 0, maxSnapshots: 5, maxTotalBytes: 32 * 1024 * 1024, maxAgeMs: 60_000 });
+    const result = await store.persistSnapshot(
+      makeSnapshot(Date.now(), { runId: "r1", childAgentId: "ca", parentAgentId: "pa" }),
+    );
+    expect(result.stored).toBe(true);
+    expect(store.isPersistenceDisabled()).toBe(false);
+  });
+
+  it("isPersistenceDisabled returns false for a normal writable store", async () => {
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "replay-normal-test-"));
+    tempDirs.push(tmpDir);
+    const store = OfficeSnapshotStore.forReplayDir(tmpDir, { minIntervalMs: 0, maxSnapshots: 5, maxTotalBytes: 32 * 1024 * 1024, maxAgeMs: 60_000 });
+    expect(store.isPersistenceDisabled()).toBe(false);
+  });
+
+  it("disables persistence and does not throw when mkdir fails with EROFS (read-only filesystem)", async () => {
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "replay-erofs-test-"));
+    tempDirs.push(tmpDir);
+    const store = new OfficeSnapshotStore(path.join(tmpDir, "subdir"), {
+      minIntervalMs: 0,
+      maxSnapshots: 5,
+      maxTotalBytes: 32 * 1024 * 1024,
+      maxAgeMs: 60_000,
+    });
+
+    // Simulate read-only filesystem by making mkdir throw EROFS
+    const rofsError = Object.assign(new Error("EROFS: read-only file system"), { code: "EROFS" });
+    const mkdirSpy = vi.spyOn(fs, "mkdir").mockRejectedValueOnce(rofsError);
+    try {
+      const result = await store.persistSnapshot(
+        makeSnapshot(Date.now(), { runId: "r-erofs", childAgentId: "ca", parentAgentId: "pa" }),
+      );
+      expect(result).toBeDefined();
+      expect(store.isPersistenceDisabled()).toBe(true);
+    } finally {
+      mkdirSpy.mockRestore();
+    }
   });
 });

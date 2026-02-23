@@ -11,9 +11,11 @@ services:
       - OPENCLAW_STATE_DIR=/app/.openclaw
       - OPENCLAW_PROJECT_DIR=/app/openclaw
       - OPENCLAW_GATEWAY_PORT=18789
+      - OPENCLAW_REPLAY_DIR=/app/.replay-data
     volumes:
       - ${HOME:-/root}/.openclaw:/app/.openclaw:ro
       - ${OPENCLAW_PROJECT_HOST_DIR:-../openclaw}:/app/openclaw:ro
+      - openclawoffice_replay:/app/.replay-data
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
@@ -23,3 +25,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 20s
+
+volumes:
+  openclawoffice_replay:

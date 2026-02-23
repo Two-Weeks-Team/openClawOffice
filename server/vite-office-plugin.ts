@@ -110,7 +110,10 @@ const replayStoreMetrics: ReplayStoreMetric = {
 
 function resolveSnapshotStore(stateDir: string): OfficeSnapshotStore {
   if (!snapshotStore) {
-    snapshotStore = OfficeSnapshotStore.forStateDir(stateDir);
+    const replayDir = process.env.OPENCLAW_REPLAY_DIR?.trim();
+    snapshotStore = replayDir
+      ? OfficeSnapshotStore.forReplayDir(replayDir)
+      : OfficeSnapshotStore.forStateDir(stateDir);
   }
   return snapshotStore;
 }

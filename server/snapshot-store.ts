@@ -189,6 +189,9 @@ function toSnapshotId(generatedAt: number): string {
   return `${generatedAt}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/** Error codes that indicate the storage directory is permanently unwritable. */
+const READONLY_FS_CODES = new Set(["EROFS", "EACCES", "EPERM"]);
+
 export class OfficeSnapshotStore {
   private readonly rootDir: string;
   private readonly indexPath: string;
@@ -197,6 +200,8 @@ export class OfficeSnapshotStore {
   private mutationQueue: Promise<unknown> = Promise.resolve();
   private lastPersistAttemptAt = 0;
   private metrics: SnapshotStoreMetrics;
+  /** Set to true after a permanent write failure so subsequent calls are skipped silently. */
+  private persistenceDisabled = false;
 
   constructor(rootDir: string, policy?: Partial<SnapshotStorePolicy>) {
     this.rootDir = rootDir;
@@ -215,6 +220,20 @@ export class OfficeSnapshotStore {
 
   static forStateDir(stateDir: string, policy?: Partial<SnapshotStorePolicy>): OfficeSnapshotStore {
     return new OfficeSnapshotStore(path.join(stateDir, ".openclawoffice", "replay-snapshots"), policy);
+  }
+
+  /**
+   * Create a store that writes to a dedicated replay directory.
+   * Use when `OPENCLAW_REPLAY_DIR` is set to keep replay data on a writable
+   * volume separate from the (potentially read-only) state dir.
+   */
+  static forReplayDir(replayDir: string, policy?: Partial<SnapshotStorePolicy>): OfficeSnapshotStore {
+    return new OfficeSnapshotStore(replayDir, policy);
+  }
+
+  /** Returns true when persistence has been permanently disabled due to a write error. */
+  isPersistenceDisabled(): boolean {
+    return this.persistenceDisabled;
   }
 
   getMetrics(): SnapshotStoreMetrics {
@@ -301,6 +320,9 @@ export class OfficeSnapshotStore {
   }
 
   async persistSnapshot(snapshot: OfficeSnapshot): Promise<PersistResult> {
+    if (this.persistenceDisabled) {
+      return { stored: false, reason: "interval" };
+    }
     const now = Date.now();
     if (now - this.lastPersistAttemptAt < this.policy.minIntervalMs) {
       this.metrics.skippedByInterval += 1;
@@ -313,10 +335,17 @@ export class OfficeSnapshotStore {
 
     return this.withMutation(async () => {
       const index = await this.loadIndexFile();
+      // loadIndexFile calls ensureRootDir; if that detected a read-only FS, bail now.
+      if (this.persistenceDisabled) {
+        return { stored: false, reason: "interval" as const };
+      }
       const snapshotId = toSnapshotId(snapshot.generatedAt);
       const fileName = `${snapshotId}${SNAPSHOT_FILE_SUFFIX}`;
       const compressed = await gzipAsync(Buffer.from(JSON.stringify(snapshot), "utf-8"), { level: 9 });
       await this.ensureRootDir();
+      if (this.persistenceDisabled) {
+        return { stored: false, reason: "interval" as const };
+      }
       await fs.writeFile(path.join(this.rootDir, fileName), compressed);
 
       const runIds = uniqueSorted(snapshot.runs.map((run) => run.runId));
@@ -361,7 +390,24 @@ export class OfficeSnapshotStore {
   }
 
   private async ensureRootDir() {
-    await fs.mkdir(this.rootDir, { recursive: true });
+    try {
+      await fs.mkdir(this.rootDir, { recursive: true });
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code ?? "";
+      if (READONLY_FS_CODES.has(code)) {
+        if (!this.persistenceDisabled) {
+          this.persistenceDisabled = true;
+          logStructuredEvent({
+            level: "info",
+            event: "replay-store.disabled",
+            details: "Replay persistence disabled: storage directory is not writable. Set OPENCLAW_REPLAY_DIR to a writable path to enable.",
+            extra: { rootDir: this.rootDir, errorCode: code },
+          });
+        }
+        return;
+      }
+      throw error;
+    }
   }
 
   private async loadIndexFile(): Promise<SnapshotStoreIndexFile> {
