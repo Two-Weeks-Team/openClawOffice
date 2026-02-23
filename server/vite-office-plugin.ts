@@ -108,6 +108,15 @@ const replayStoreMetrics: ReplayStoreMetric = {
   totalBytes: 0,
 };
 
+/**
+ * Backpressure warning throttle — warn at most once per this interval.
+ * Repeated pressure events within the window are aggregated and emitted
+ * as a single summary when the window expires.
+ */
+const BACKPRESSURE_WARN_INTERVAL_MS = 30_000;
+let lastBackpressureWarnAt = 0;
+let pendingBackpressure = { activations: 0, droppedUnseenEvents: 0, evictedBackfillEvents: 0 };
+
 function resolveSnapshotStore(stateDir: string): OfficeSnapshotStore {
   if (!snapshotStore) {
     const replayDir = process.env.OPENCLAW_REPLAY_DIR?.trim();
@@ -603,12 +612,31 @@ async function pollStreamSnapshot() {
     streamMetrics.evictedBackfillEvents += pressure.evictedBackfillEvents;
 
     if (pressure.backpressureActivations > 0) {
-      logStructuredEvent({
-        level: "warn",
-        event: "stream.backpressure",
-        details: "Lifecycle stream backpressure was applied",
-        extra: pressure,
-      });
+      pendingBackpressure.activations += pressure.backpressureActivations;
+      pendingBackpressure.droppedUnseenEvents += pressure.droppedUnseenEvents;
+      pendingBackpressure.evictedBackfillEvents += pressure.evictedBackfillEvents;
+
+      const nowMs = Date.now();
+      const hasDrop = pendingBackpressure.droppedUnseenEvents > 0;
+      const windowExpired = nowMs - lastBackpressureWarnAt >= BACKPRESSURE_WARN_INTERVAL_MS;
+
+      if (hasDrop || windowExpired) {
+        logStructuredEvent({
+          level: hasDrop ? "warn" : "info",
+          event: "stream.backpressure",
+          details: hasDrop
+            ? "Lifecycle stream backpressure dropped unseen events"
+            : "Lifecycle stream backpressure (aggregated)",
+          extra: {
+            activations: pendingBackpressure.activations,
+            droppedUnseenEvents: pendingBackpressure.droppedUnseenEvents,
+            evictedBackfillEvents: pendingBackpressure.evictedBackfillEvents,
+            windowMs: nowMs - lastBackpressureWarnAt,
+          },
+        });
+        lastBackpressureWarnAt = nowMs;
+        pendingBackpressure = { activations: 0, droppedUnseenEvents: 0, evictedBackfillEvents: 0 };
+      }
     }
 
     if (frames.length === 0) {
