@@ -87,6 +87,16 @@ describe("hasNonStaleActiveEntity — overlay visibility regression tests", () =
       ),
     ).toBe(false);
   });
+
+  it("active + missing lastUpdatedAt → false (treated as stale)", () => {
+    expect(
+      hasNonStaleActiveEntity([{ status: "active", lastUpdatedAt: undefined }], NOW),
+    ).toBe(false);
+  });
+
+  it("empty entity list → false", () => {
+    expect(hasNonStaleActiveEntity([], NOW)).toBe(false);
+  });
 });
 
 describe("buildBubbleLaneLayout", () => {

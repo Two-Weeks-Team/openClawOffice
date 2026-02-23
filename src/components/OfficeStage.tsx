@@ -740,13 +740,12 @@ export function OfficeStage({
     const visibleIds = new Set(visiblePlacements.map(({ entity }) => entity.id));
     for (const { entity } of visiblePlacements) {
       if (
-        entity.status === "active" &&
         isStaleActive(entity.status, entity.lastUpdatedAt, nowMs) &&
         !staleActiveLoggedRef.current.has(entity.id)
       ) {
         staleActiveLoggedRef.current.add(entity.id);
         console.warn(
-          `[openClawOffice] stale-active: entity "${entity.id}" (${entity.label}) has not reported in >120 s — excluded from bubble lane`,
+          `[openClawOffice] stale-active: entity "${entity.id}" has not reported in >120 s — excluded from bubble lane`,
         );
       }
     }
