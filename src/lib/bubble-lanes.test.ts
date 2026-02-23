@@ -148,6 +148,67 @@ describe("buildBubbleLaneLayout", () => {
     expect(summary?.text).toContain("older updates");
   });
 
+  it("uses active overflow summary when activeEntityCount is 3 or 4", () => {
+    const candidates: BubbleLaneCandidate[] = [
+      baseCandidate({ id: "a1", entityId: "e1", anchorX: 100, ageMs: 1_000 }),
+      baseCandidate({ id: "a2", entityId: "e2", anchorX: 150, ageMs: 1_500 }),
+      baseCandidate({ id: "a3", entityId: "e3", anchorX: 200, ageMs: 2_000 }),
+      baseCandidate({ id: "a4", entityId: "e4", anchorX: 250, ageMs: 2_500 }),
+    ];
+
+    const layout = buildBubbleLaneLayout(candidates, {
+      stageWidth: 500,
+      maxVisiblePerLane: 4,
+      activeEntityCount: 4,
+    });
+
+    const summary = layout.cards.find((card) => card.isSummary);
+    const visibleCards = layout.cards.filter((card) => !card.isSummary);
+
+    expect(summary).toBeDefined();
+    expect(summary?.isActiveOverflow).toBe(true);
+    expect(summary?.text).toContain("more active");
+    expect(summary?.hiddenCount).toBe(2);
+    expect(visibleCards).toHaveLength(2); // effectiveMaxVisible=2 for count=4
+  });
+
+  it("limits to 1 visible per lane when activeEntityCount is 5 or more", () => {
+    const candidates: BubbleLaneCandidate[] = Array.from({ length: 6 }, (_, i) =>
+      baseCandidate({ id: `a${i}`, entityId: `e${i}`, anchorX: 80 + i * 40, ageMs: (i + 1) * 1_000 }),
+    );
+
+    const layout = buildBubbleLaneLayout(candidates, {
+      stageWidth: 600,
+      maxVisiblePerLane: 6,
+      activeEntityCount: 6,
+    });
+
+    const visibleCards = layout.cards.filter((card) => !card.isSummary);
+    const summary = layout.cards.find((card) => card.isSummary);
+
+    expect(visibleCards).toHaveLength(1); // effectiveMaxVisible=1 for count≥5
+    expect(summary?.isActiveOverflow).toBe(true);
+    expect(summary?.hiddenCount).toBe(5);
+  });
+
+  it("uses normal age-based summary when activeEntityCount is below 3", () => {
+    const candidates: BubbleLaneCandidate[] = [
+      baseCandidate({ id: "b1", entityId: "e1", anchorX: 100, ageMs: 1_000 }),
+      baseCandidate({ id: "b2", entityId: "e2", anchorX: 150, ageMs: 2_000 }),
+      baseCandidate({ id: "b3", entityId: "e3", anchorX: 200, ageMs: 3_000 }),
+    ];
+
+    const layout = buildBubbleLaneLayout(candidates, {
+      stageWidth: 500,
+      maxVisiblePerLane: 2,
+      activeEntityCount: 2, // below threshold
+    });
+
+    const summary = layout.cards.find((card) => card.isSummary);
+    expect(summary?.isActiveOverflow).toBe(false);
+    expect(summary?.text).toContain("older updates");
+  });
+
   it("keeps pinned and expanded cards uncollapsed", () => {
     const candidates: BubbleLaneCandidate[] = [
       baseCandidate({
