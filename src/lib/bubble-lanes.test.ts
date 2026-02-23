@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { buildBubbleLaneLayout, type BubbleLaneCandidate } from "./bubble-lanes";
+import {
+  buildBubbleLaneLayout,
+  hasNonStaleActiveEntity,
+  isStaleActive,
+  BUBBLE_ACTIVE_STALE_TIMEOUT_MS,
+  type BubbleLaneCandidate,
+} from "./bubble-lanes";
 
 function baseCandidate(partial: Partial<BubbleLaneCandidate> & {
   id: string;
@@ -19,6 +25,79 @@ function baseCandidate(partial: Partial<BubbleLaneCandidate> & {
     isExpanded: partial.isExpanded ?? false,
   };
 }
+
+const NOW = 1_700_000_000_000;
+
+describe("isStaleActive", () => {
+  it("returns false for non-active statuses regardless of age", () => {
+    expect(isStaleActive("idle", NOW - 200_000, NOW)).toBe(false);
+    expect(isStaleActive("error", NOW - 200_000, NOW)).toBe(false);
+    expect(isStaleActive("offline", NOW - 200_000, NOW)).toBe(false);
+    expect(isStaleActive("ok", NOW - 200_000, NOW)).toBe(false);
+  });
+
+  it("returns false for active entity with fresh heartbeat (<= 120 s)", () => {
+    expect(isStaleActive("active", NOW - 60_000, NOW)).toBe(false);
+    expect(isStaleActive("active", NOW - BUBBLE_ACTIVE_STALE_TIMEOUT_MS, NOW)).toBe(false);
+  });
+
+  it("returns true for active entity with stale heartbeat (> 120 s)", () => {
+    expect(isStaleActive("active", NOW - (BUBBLE_ACTIVE_STALE_TIMEOUT_MS + 1), NOW)).toBe(true);
+    expect(isStaleActive("active", NOW - 200_000, NOW)).toBe(true);
+  });
+
+  it("returns true for active entity with unknown lastUpdatedAt", () => {
+    expect(isStaleActive("active", undefined, NOW)).toBe(true);
+  });
+});
+
+describe("hasNonStaleActiveEntity — overlay visibility regression tests", () => {
+  it("active + fresh update (<= 120 s) → true (overlay visible)", () => {
+    expect(
+      hasNonStaleActiveEntity([{ status: "active", lastUpdatedAt: NOW - 60_000 }], NOW),
+    ).toBe(true);
+  });
+
+  it("active + stale (> 120 s) → false (overlay hidden)", () => {
+    expect(
+      hasNonStaleActiveEntity([{ status: "active", lastUpdatedAt: NOW - 200_000 }], NOW),
+    ).toBe(false);
+  });
+
+  it("2 active (1 stale + 1 fresh) → true (overlay visible)", () => {
+    expect(
+      hasNonStaleActiveEntity(
+        [
+          { status: "active", lastUpdatedAt: NOW - 200_000 }, // stale
+          { status: "active", lastUpdatedAt: NOW - 60_000 }, // fresh
+        ],
+        NOW,
+      ),
+    ).toBe(true);
+  });
+
+  it("no active entities → false (overlay hidden)", () => {
+    expect(
+      hasNonStaleActiveEntity(
+        [
+          { status: "idle", lastUpdatedAt: NOW - 10_000 },
+          { status: "error", lastUpdatedAt: NOW - 5_000 },
+        ],
+        NOW,
+      ),
+    ).toBe(false);
+  });
+
+  it("active + missing lastUpdatedAt → false (treated as stale)", () => {
+    expect(
+      hasNonStaleActiveEntity([{ status: "active", lastUpdatedAt: undefined }], NOW),
+    ).toBe(false);
+  });
+
+  it("empty entity list → false", () => {
+    expect(hasNonStaleActiveEntity([], NOW)).toBe(false);
+  });
+});
 
 describe("buildBubbleLaneLayout", () => {
   it("avoids overlap by spreading cards across rows", () => {
