@@ -58,6 +58,37 @@ export type BubbleLaneLayout = {
   contentHeight: number;
 };
 
+/** Milliseconds after which an "active" entity with no heartbeat is treated as stale. */
+export const BUBBLE_ACTIVE_STALE_TIMEOUT_MS = 120_000;
+
+/**
+ * Returns true when an entity has status "active" but its heartbeat has exceeded
+ * the stale threshold (120 s). A missing lastUpdatedAt is treated as stale.
+ */
+export function isStaleActive(
+  status: string,
+  lastUpdatedAt: number | undefined,
+  nowMs: number,
+): boolean {
+  if (status !== "active") return false;
+  if (typeof lastUpdatedAt !== "number") return true;
+  return nowMs - lastUpdatedAt > BUBBLE_ACTIVE_STALE_TIMEOUT_MS;
+}
+
+/**
+ * Returns true when at least one entity is non-stale-active.
+ * Used to determine whether the bubble-lane-overlay section should render.
+ */
+export function hasNonStaleActiveEntity(
+  entities: ReadonlyArray<{ status: string; lastUpdatedAt?: number }>,
+  nowMs: number,
+): boolean {
+  return entities.some(
+    ({ status, lastUpdatedAt }) =>
+      status === "active" && !isStaleActive(status, lastUpdatedAt, nowMs),
+  );
+}
+
 type ResolvedCard = BubbleLaneCandidate & {
   isSummary: boolean;
   hiddenCount: number;

@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import type { AlertSignal } from "../lib/alerts";
-import { buildBubbleLaneLayout, type BubbleLaneCandidate } from "../lib/bubble-lanes";
+import {
+  buildBubbleLaneLayout,
+  hasNonStaleActiveEntity,
+  isStaleActive,
+  type BubbleLaneCandidate,
+} from "../lib/bubble-lanes";
 import { buildEntityClusters } from "../lib/entity-clustering";
 import { type PlacementMode } from "../lib/layout";
 import { indexRunsById } from "../lib/run-graph";
@@ -653,6 +658,7 @@ export function OfficeStage({
           : Number.POSITIVE_INFINITY;
       const bubbleVisible =
         Boolean(entity.bubble) &&
+        !isStaleActive(entity.status, entity.lastUpdatedAt, snapshot.generatedAt) &&
         (entity.status === "active" ||
           entity.status === "error" ||
           entityAgeMs <= BUBBLE_VISIBLE_WINDOW_MS);
@@ -716,6 +722,42 @@ export function OfficeStage({
   const bubbleLaneRenderState = useMemo(() => {
     return projectBubbleLaneLayoutForLod(bubbleLaneLayout, lodLevel);
   }, [bubbleLaneLayout, lodLevel]);
+
+  // Overlay renders only when at least one non-stale active entity exists.
+  const hasNonStaleActive = useMemo(
+    () =>
+      hasNonStaleActiveEntity(
+        visiblePlacements.map(({ entity }) => entity),
+        snapshot.generatedAt,
+      ),
+    [visiblePlacements, snapshot.generatedAt],
+  );
+
+  // Diagnostic: log once per entity when it first transitions to stale-active.
+  const staleActiveLoggedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const nowMs = snapshot.generatedAt;
+    const visibleIds = new Set(visiblePlacements.map(({ entity }) => entity.id));
+    for (const { entity } of visiblePlacements) {
+      if (
+        entity.status === "active" &&
+        isStaleActive(entity.status, entity.lastUpdatedAt, nowMs) &&
+        !staleActiveLoggedRef.current.has(entity.id)
+      ) {
+        staleActiveLoggedRef.current.add(entity.id);
+        console.warn(
+          `[openClawOffice] stale-active: entity "${entity.id}" (${entity.label}) has not reported in >120 s — excluded from bubble lane`,
+        );
+      }
+    }
+    // Prune IDs that are no longer visible so they can be re-logged if they return.
+    for (const id of staleActiveLoggedRef.current) {
+      if (!visibleIds.has(id)) {
+        staleActiveLoggedRef.current.delete(id);
+      }
+    }
+  }, [visiblePlacements, snapshot.generatedAt]);
+
   const hasTimelineHighlight = Boolean(normalizedHighlightRunId || normalizedHighlightAgentId);
   const entityRenderModels = useMemo(
     () =>
@@ -1307,7 +1349,7 @@ export function OfficeStage({
             stageHeight={STAGE_HEIGHT}
           />
 
-      <section className="bubble-lane-overlay" aria-label="Thread bubble lanes">
+      {hasNonStaleActive && <section className="bubble-lane-overlay" aria-label="Thread bubble lanes">
         {bubbleLaneRenderState.lanes.map((lane) => (
           <div key={`lane:${lane.id}`} className="bubble-thread-lane" style={{ top: lane.y }}>
             <span className="bubble-thread-label">
@@ -1391,7 +1433,7 @@ export function OfficeStage({
             </article>
           );
         })}
-      </section>
+      </section>}
 
       {clusterState.collapsedClusters.map((cluster) => {
         const expandCluster = () => {
