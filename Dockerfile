@@ -1,6 +1,6 @@
 FROM node:25-alpine
 
-RUN apk add --no-cache wget && corepack enable && corepack prepare pnpm@10 --activate
+RUN apk add --no-cache wget && npm install -g pnpm@10
 
 WORKDIR /app
 
