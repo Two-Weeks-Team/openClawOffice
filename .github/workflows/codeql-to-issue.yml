@@ -1,0 +1,235 @@
+name: CodeQL Alert → Issue
+
+on:
+  code_scanning_alert:
+    types: [appeared_in_branch, reopened, reopened_by_user, fixed, closed_by_user]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (미리보기만, 실제 이슈 생성 안 함)'
+        type: boolean
+        default: false
+
+permissions:
+  issues: write
+  security-events: read
+
+jobs:
+  # ──────────────────────────────────────────────────────────
+  # Job 1: 새 경보 감지 → 이슈 생성
+  # ──────────────────────────────────────────────────────────
+  create-issue:
+    name: Create Issue for Alert
+    if: >-
+      github.event_name == 'code_scanning_alert' &&
+      (github.event.action == 'appeared_in_branch' ||
+       github.event.action == 'reopened' ||
+       github.event.action == 'reopened_by_user')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup labels
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh label create "security"                --color "e4e669" --description "Security vulnerability"     --force --repo ${{ github.repository }} 2>/dev/null || true
+          gh label create "codeql"                  --color "0075ca" --description "Detected by CodeQL"         --force --repo ${{ github.repository }} 2>/dev/null || true
+          gh label create "codeql-alert-${{ github.event.alert.number }}" \
+                                                    --color "d93f0b" --description "CodeQL alert #${{ github.event.alert.number }}" \
+                                                    --force --repo ${{ github.repository }} 2>/dev/null || true
+
+      - name: Check for duplicate
+        id: dedup
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          COUNT=$(gh issue list \
+            --repo "${{ github.repository }}" \
+            --label "codeql-alert-${{ github.event.alert.number }}" \
+            --state all \
+            --json number \
+            --jq 'length')
+          echo "count=${COUNT}" >> "$GITHUB_OUTPUT"
+
+      - name: Create issue
+        if: steps.dedup.outputs.count == '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ALERT_NUMBER: ${{ github.event.alert.number }}
+          RULE_ID:      ${{ github.event.alert.rule.id }}
+          RULE_DESC:    ${{ github.event.alert.rule.description }}
+          SEC_SEV:      ${{ github.event.alert.rule.security_severity_level }}
+          SEV:          ${{ github.event.alert.rule.severity }}
+          FILE_PATH:    ${{ github.event.alert.most_recent_instance.location.path }}
+          START_LINE:   ${{ github.event.alert.most_recent_instance.location.start_line }}
+          MESSAGE:      ${{ github.event.alert.most_recent_instance.message.text }}
+          ALERT_URL:    ${{ github.event.alert.html_url }}
+        run: |
+          SEVERITY="${SEC_SEV:-$SEV}"
+          case "$SEVERITY" in
+            critical) EMOJI="🔴" ;;
+            high)     EMOJI="🟠" ;;
+            medium)   EMOJI="🟡" ;;
+            low)      EMOJI="🟢" ;;
+            *)        EMOJI="⚠️"  ;;
+          esac
+
+          cat > /tmp/issue_body.md << EOF
+          ## ${EMOJI} CodeQL 보안 경보 \`#${ALERT_NUMBER}\`
+
+          | 항목 | 내용 |
+          |------|------|
+          | **규칙** | \`${RULE_ID}\` |
+          | **설명** | ${RULE_DESC} |
+          | **심각도** | ${SEVERITY} |
+          | **위치** | \`${FILE_PATH}:${START_LINE}\` |
+
+          **메시지**:
+          > ${MESSAGE}
+
+          🔗 [CodeQL 경보 보기](${ALERT_URL})
+
+          ---
+          *이 이슈는 CodeQL 보안 분석에 의해 자동 생성되었습니다.*
+          EOF
+
+          gh issue create \
+            --repo "${{ github.repository }}" \
+            --title "${EMOJI} [CodeQL #${ALERT_NUMBER}] ${RULE_DESC}" \
+            --body-file /tmp/issue_body.md \
+            --label "security,codeql,codeql-alert-${ALERT_NUMBER}"
+
+  # ──────────────────────────────────────────────────────────
+  # Job 2: 경보 수정/기각 → 연결 이슈 닫기
+  # ──────────────────────────────────────────────────────────
+  close-issue:
+    name: Close Issue when Alert Resolved
+    if: >-
+      github.event_name == 'code_scanning_alert' &&
+      (github.event.action == 'fixed' ||
+       github.event.action == 'closed_by_user')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Close related issues
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ISSUES=$(gh issue list \
+            --repo "${{ github.repository }}" \
+            --label "codeql-alert-${{ github.event.alert.number }}" \
+            --state open \
+            --json number \
+            --jq '.[].number')
+
+          if [ -z "$ISSUES" ]; then
+            echo "No open issues found for alert #${{ github.event.alert.number }}"
+            exit 0
+          fi
+
+          ACTION="${{ github.event.action }}"
+          if [ "$ACTION" = "fixed" ]; then
+            COMMENT="✅ CodeQL 경보가 코드 수정으로 해결되었습니다. 이슈를 자동으로 닫습니다."
+          else
+            COMMENT="🔕 CodeQL 경보가 기각(dismissed)되었습니다. 이슈를 자동으로 닫습니다."
+          fi
+
+          while IFS= read -r ISSUE_NUM; do
+            [ -z "$ISSUE_NUM" ] && continue
+            gh issue comment "$ISSUE_NUM" --body "$COMMENT" --repo "${{ github.repository }}"
+            gh issue close "$ISSUE_NUM" --repo "${{ github.repository }}"
+            echo "✅ Closed issue #${ISSUE_NUM}"
+          done <<< "$ISSUES"
+
+  # ──────────────────────────────────────────────────────────
+  # Job 3: 기존 경보 일괄 동기화 (수동 실행)
+  # ──────────────────────────────────────────────────────────
+  sync-existing:
+    name: Sync Existing Alerts → Issues
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup base labels
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh label create "security" --color "e4e669" --description "Security vulnerability" --force --repo ${{ github.repository }} 2>/dev/null || true
+          gh label create "codeql"   --color "0075ca" --description "Detected by CodeQL"     --force --repo ${{ github.repository }} 2>/dev/null || true
+
+      - name: Sync all open alerts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          gh api "repos/${{ github.repository }}/code-scanning/alerts?state=open&per_page=100" \
+            --paginate | jq -c '.[]' | while IFS= read -r alert; do
+
+            NUMBER=$(echo "$alert"   | jq -r '.number')
+            RULE_ID=$(echo "$alert"  | jq -r '.rule.id')
+            RULE_DESC=$(echo "$alert"| jq -r '.rule.description')
+            SEC_SEV=$(echo "$alert"  | jq -r '.rule.security_severity_level // empty')
+            SEV=$(echo "$alert"      | jq -r '.rule.severity')
+            SEVERITY="${SEC_SEV:-$SEV}"
+            FILE_PATH=$(echo "$alert"| jq -r '.most_recent_instance.location.path')
+            LINE=$(echo "$alert"     | jq -r '.most_recent_instance.location.start_line')
+            MESSAGE=$(echo "$alert"  | jq -r '.most_recent_instance.message.text')
+            HTML_URL=$(echo "$alert" | jq -r '.html_url')
+
+            # 경보별 라벨 생성 (중복 방지용)
+            gh label create "codeql-alert-${NUMBER}" \
+              --color "d93f0b" \
+              --description "CodeQL alert #${NUMBER}" \
+              --force \
+              --repo "${{ github.repository }}" 2>/dev/null || true
+
+            # 중복 이슈 확인
+            COUNT=$(gh issue list \
+              --repo "${{ github.repository }}" \
+              --label "codeql-alert-${NUMBER}" \
+              --state all \
+              --json number \
+              --jq 'length')
+
+            if [ "$COUNT" -gt 0 ]; then
+              echo "⏭️  Alert #${NUMBER} — 이슈 이미 존재, 건너뜀"
+              continue
+            fi
+
+            case "$SEVERITY" in
+              critical) EMOJI="🔴" ;;
+              high)     EMOJI="🟠" ;;
+              medium)   EMOJI="🟡" ;;
+              low)      EMOJI="🟢" ;;
+              *)        EMOJI="⚠️"  ;;
+            esac
+
+            TITLE="${EMOJI} [CodeQL #${NUMBER}] ${RULE_DESC}"
+
+            cat > "/tmp/issue_body_${NUMBER}.md" << EOF
+          ## ${EMOJI} CodeQL 보안 경보 \`#${NUMBER}\`
+
+          | 항목 | 내용 |
+          |------|------|
+          | **규칙** | \`${RULE_ID}\` |
+          | **설명** | ${RULE_DESC} |
+          | **심각도** | ${SEVERITY} |
+          | **위치** | \`${FILE_PATH}:${LINE}\` |
+
+          **메시지**:
+          > ${MESSAGE}
+
+          🔗 [CodeQL 경보 보기](${HTML_URL})
+
+          ---
+          *이 이슈는 CodeQL 보안 분석에 의해 자동 생성되었습니다.*
+          EOF
+
+            if [ "$DRY_RUN" = "true" ]; then
+              echo "🔍 [DRY RUN] 생성 예정: ${TITLE}"
+            else
+              ISSUE_URL=$(gh issue create \
+                --repo "${{ github.repository }}" \
+                --title "$TITLE" \
+                --body-file "/tmp/issue_body_${NUMBER}.md" \
+                --label "security,codeql,codeql-alert-${NUMBER}")
+              echo "✅ Alert #${NUMBER} → ${ISSUE_URL}"
+            fi
+          done
