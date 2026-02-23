@@ -260,6 +260,7 @@ export function OfficeStage({
   const [expandedBubbleEntityIds, setExpandedBubbleEntityIds] = useState<string[]>(() =>
     loadBubbleEntityIds(BUBBLE_EXPANDED_STORAGE_KEY),
   );
+  const [overflowPanelOpen, setOverflowPanelOpen] = useState(false);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const mousePanGestureRef = useRef<{
     pointerId: number;
@@ -632,11 +633,12 @@ export function OfficeStage({
     snapshot.runGraph.edges,
     runById,
   ]);
-  const bubbleLaneCandidates = useMemo<BubbleLaneCandidate[]>(() => {
+  const [bubbleLaneCandidates, activeBubbleCount] = useMemo<[BubbleLaneCandidate[], number]>(() => {
     if (lodLevel === "distant") {
-      return [];
+      return [[], 0];
     }
     const candidates: BubbleLaneCandidate[] = [];
+    let activeCount = 0;
 
     for (const placement of visiblePlacements) {
       const entity = placement.entity;
@@ -690,9 +692,12 @@ export function OfficeStage({
         isPinned: pinnedBubbleEntityIdSet.has(entity.id),
         isExpanded: expandedBubbleEntityIdSet.has(entity.id),
       });
+      if (entity.status === "active") {
+        activeCount += 1;
+      }
     }
 
-    return candidates;
+    return [candidates, activeCount];
   }, [
     expandedBubbleEntityIdSet,
     filteredEntityIdSet,
@@ -716,8 +721,9 @@ export function OfficeStage({
         maxVisiblePerLane: 3,
         maxRowsPerLane: 3,
         collapseAfterMs: BUBBLE_COLLAPSE_AFTER_MS,
+        activeEntityCount: activeBubbleCount,
       }),
-    [bubbleLaneCandidates],
+    [activeBubbleCount, bubbleLaneCandidates],
   );
   const bubbleLaneRenderState = useMemo(() => {
     return projectBubbleLaneLayoutForLod(bubbleLaneLayout, lodLevel);
@@ -732,6 +738,9 @@ export function OfficeStage({
       ),
     [visiblePlacements, snapshot.generatedAt],
   );
+
+  // Derived: overflow panel is visible only when explicitly open AND there are enough active entities.
+  const isOverflowPanelVisible = overflowPanelOpen && activeBubbleCount >= 3;
 
   // Diagnostic: log once per entity when it first transitions to stale-active.
   const staleActiveLoggedRef = useRef<Set<string>>(new Set());
@@ -1361,12 +1370,14 @@ export function OfficeStage({
         {bubbleLaneRenderState.cards.map((card) => {
           const entity = card.entityId ? entityById.get(card.entityId) : undefined;
           const isSummary = card.isSummary;
+          const isInteractiveSummary = isSummary && card.isActiveOverflow;
           return (
             <article
               key={card.id}
               className={[
                 "bubble-lane-card",
                 isSummary ? "is-summary" : "",
+                isInteractiveSummary ? "is-active-overflow" : "",
                 card.isPinned ? "is-pinned" : "",
                 card.isExpanded ? "is-expanded" : "",
               ]
@@ -1377,14 +1388,26 @@ export function OfficeStage({
                 top: card.y,
                 width: card.width,
               }}
-              role={isSummary ? undefined : "button"}
-              tabIndex={isSummary ? -1 : 0}
+              role={!isSummary || isInteractiveSummary ? "button" : undefined}
+              tabIndex={!isSummary || isInteractiveSummary ? 0 : -1}
+              aria-expanded={isInteractiveSummary ? isOverflowPanelVisible : undefined}
               onClick={() => {
+                if (isInteractiveSummary) {
+                  setOverflowPanelOpen((prev) => !prev);
+                  return;
+                }
                 if (!isSummary && card.entityId) {
                   onSelectEntity?.(card.entityId, "single");
                 }
               }}
               onKeyDown={(event) => {
+                if (isInteractiveSummary) {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setOverflowPanelOpen((prev) => !prev);
+                  }
+                  return;
+                }
                 if (isSummary || !card.entityId) {
                   return;
                 }
@@ -1396,7 +1419,7 @@ export function OfficeStage({
             >
               <header>
                 <strong>{entity?.label ?? card.laneLabel}</strong>
-                <span>{isSummary ? "summary" : bubbleAgeLabel(card.ageMs)}</span>
+                <span>{isSummary ? (isInteractiveSummary ? "active" : "summary") : bubbleAgeLabel(card.ageMs)}</span>
               </header>
               <p>{card.text}</p>
               {!isSummary ? (
@@ -1432,6 +1455,53 @@ export function OfficeStage({
             </article>
           );
         })}
+
+        {isOverflowPanelVisible && (
+          <div
+            className="bubble-overflow-panel"
+            role="dialog"
+            aria-label={`All active threads (${activeBubbleCount})`}
+            aria-modal="false"
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                setOverflowPanelOpen(false);
+              }
+            }}
+          >
+            <div className="bubble-overflow-panel-header">
+              <span>Active threads ({activeBubbleCount})</span>
+              <button
+                type="button"
+                className="bubble-overflow-panel-close"
+                aria-label="Close active threads panel"
+                onClick={() => setOverflowPanelOpen(false)}
+              >
+                ✕
+              </button>
+            </div>
+            <ul className="bubble-overflow-panel-list">
+              {[...bubbleLaneCandidates]
+                .sort((a, b) => b.priority - a.priority || a.ageMs - b.ageMs)
+                .map((candidate) => {
+                  const entity = entityById.get(candidate.entityId);
+                  return (
+                    <li key={candidate.id}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onSelectEntity?.(candidate.entityId, "single");
+                          setOverflowPanelOpen(false);
+                        }}
+                      >
+                        <strong>{entity?.label ?? candidate.laneLabel}</strong>
+                        <span>{candidate.text}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+            </ul>
+          </div>
+        )}
       </section>}
 
       {clusterState.collapsedClusters.map((cluster) => {

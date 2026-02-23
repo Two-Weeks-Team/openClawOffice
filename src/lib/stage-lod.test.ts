@@ -83,6 +83,7 @@ describe("stage LOD helpers", () => {
           isExpanded: false,
           isSummary: false,
           hiddenCount: 0,
+          isActiveOverflow: false,
         },
         {
           id: "card:b",
@@ -99,6 +100,7 @@ describe("stage LOD helpers", () => {
           isExpanded: false,
           isSummary: true,
           hiddenCount: 2,
+          isActiveOverflow: false,
         },
       ],
       contentHeight: 220,

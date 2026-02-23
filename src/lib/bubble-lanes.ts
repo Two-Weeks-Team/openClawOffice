@@ -24,6 +24,11 @@ export type BubbleLaneLayoutOptions = {
   maxLanes?: number;
   collapseAfterMs?: number;
   collapseChars?: number;
+  /**
+   * Total number of non-stale-active entities with visible bubbles. When >= 3, the
+   * per-lane visibility limit is tightened and summary cards use "more active" text.
+   */
+  activeEntityCount?: number;
 };
 
 export type BubbleLane = {
@@ -50,6 +55,8 @@ export type BubbleLaneCard = {
   isExpanded: boolean;
   isSummary: boolean;
   hiddenCount: number;
+  /** True when this summary card represents hidden entries due to the active-overflow strategy (3+ active entities). */
+  isActiveOverflow: boolean;
 };
 
 export type BubbleLaneLayout = {
@@ -92,6 +99,7 @@ export function hasNonStaleActiveEntity(
 type ResolvedCard = BubbleLaneCandidate & {
   isSummary: boolean;
   hiddenCount: number;
+  isActiveOverflow: boolean;
 };
 
 type LaneBucket = {
@@ -102,7 +110,7 @@ type LaneBucket = {
   entries: BubbleLaneCandidate[];
 };
 
-const DEFAULT_OPTIONS: Required<Omit<BubbleLaneLayoutOptions, "stageWidth">> = {
+const DEFAULT_OPTIONS: Required<Omit<BubbleLaneLayoutOptions, "stageWidth" | "activeEntityCount">> = {
   topPadding: 16,
   sidePadding: 14,
   laneGap: 10,
@@ -147,7 +155,9 @@ function estimateCardWidth(text: string, isExpanded: boolean): number {
   return clamp(Math.round(calculated), 128, maxWidth);
 }
 
-function mergeOptions(options: BubbleLaneLayoutOptions): Required<BubbleLaneLayoutOptions> {
+function mergeOptions(
+  options: BubbleLaneLayoutOptions,
+): Required<Omit<BubbleLaneLayoutOptions, "activeEntityCount">> {
   return {
     stageWidth: Math.max(320, Math.floor(options.stageWidth)),
     topPadding: options.topPadding ?? DEFAULT_OPTIONS.topPadding,
@@ -164,7 +174,11 @@ function mergeOptions(options: BubbleLaneLayoutOptions): Required<BubbleLaneLayo
   };
 }
 
-function compactLaneEntries(entries: BubbleLaneCandidate[], maxVisiblePerLane: number): {
+function compactLaneEntries(
+  entries: BubbleLaneCandidate[],
+  maxVisiblePerLane: number,
+  isActiveOverflowMode: boolean,
+): {
   cards: ResolvedCard[];
   hiddenCount: number;
 } {
@@ -204,6 +218,7 @@ function compactLaneEntries(entries: BubbleLaneCandidate[], maxVisiblePerLane: n
     ...entry,
     isSummary: false,
     hiddenCount: 0,
+    isActiveOverflow: false,
   }));
 
   if (hidden.length > 0) {
@@ -216,13 +231,16 @@ function compactLaneEntries(entries: BubbleLaneCandidate[], maxVisiblePerLane: n
       laneId: entries[0]?.laneId ?? "lane",
       laneLabel: entries[0]?.laneLabel ?? "thread",
       anchorX: averageAnchorX,
-      text: `+${hidden.length} older updates condensed`,
+      text: isActiveOverflowMode
+        ? `+${hidden.length} more active`
+        : `+${hidden.length} older updates condensed`,
       ageMs: hidden[0]?.ageMs ?? 0,
       priority: -1,
       isPinned: false,
       isExpanded: false,
       isSummary: true,
       hiddenCount: hidden.length,
+      isActiveOverflow: isActiveOverflowMode,
     });
   }
 
@@ -236,7 +254,14 @@ export function buildBubbleLaneLayout(
   candidates: BubbleLaneCandidate[],
   options: BubbleLaneLayoutOptions,
 ): BubbleLaneLayout {
+  const activeEntityCount = options.activeEntityCount ?? 0;
+  const isActiveOverflowMode = activeEntityCount >= 3;
+  // Tighten per-lane visibility when many active entities compete for attention:
+  // 3-4 active → max 2 visible per lane; 5+ active → max 1 visible per lane.
+  const activeOverrideMaxVisible =
+    activeEntityCount >= 5 ? 1 : activeEntityCount >= 3 ? 2 : undefined;
   const resolved = mergeOptions(options);
+  const effectiveMaxVisible = activeOverrideMaxVisible ?? resolved.maxVisiblePerLane;
   const normalizedCandidates = candidates
     .map((candidate) => {
       const text = normalizeText(candidate.text);
@@ -298,7 +323,7 @@ export function buildBubbleLaneLayout(
   let cursorY = resolved.topPadding;
 
   for (const lane of sortedLanes) {
-    const compacted = compactLaneEntries(lane.entries, resolved.maxVisiblePerLane);
+    const compacted = compactLaneEntries(lane.entries, effectiveMaxVisible, isActiveOverflowMode);
     const placedCards = compacted.cards.sort((left, right) => {
       if (left.anchorX !== right.anchorX) {
         return left.anchorX - right.anchorX;
@@ -378,6 +403,7 @@ export function buildBubbleLaneLayout(
         isExpanded: card.isExpanded,
         isSummary: card.isSummary,
         hiddenCount: card.hiddenCount,
+        isActiveOverflow: card.isActiveOverflow,
       });
     }
 
