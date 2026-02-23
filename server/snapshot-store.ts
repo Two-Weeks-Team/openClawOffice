@@ -28,7 +28,7 @@ type SnapshotStoreIndexFile = {
 
 type PersistResult = {
   stored: boolean;
-  reason?: "interval";
+  reason?: "interval" | "disabled";
   entry?: ReplaySnapshotIndexEntry;
 };
 
@@ -321,7 +321,7 @@ export class OfficeSnapshotStore {
 
   async persistSnapshot(snapshot: OfficeSnapshot): Promise<PersistResult> {
     if (this.persistenceDisabled) {
-      return { stored: false, reason: "interval" };
+      return { stored: false, reason: "disabled" };
     }
     const now = Date.now();
     if (now - this.lastPersistAttemptAt < this.policy.minIntervalMs) {
@@ -337,14 +337,14 @@ export class OfficeSnapshotStore {
       const index = await this.loadIndexFile();
       // loadIndexFile calls ensureRootDir; if that detected a read-only FS, bail now.
       if (this.persistenceDisabled) {
-        return { stored: false, reason: "interval" as const };
+        return { stored: false, reason: "disabled" as const };
       }
       const snapshotId = toSnapshotId(snapshot.generatedAt);
       const fileName = `${snapshotId}${SNAPSHOT_FILE_SUFFIX}`;
       const compressed = await gzipAsync(Buffer.from(JSON.stringify(snapshot), "utf-8"), { level: 9 });
       await this.ensureRootDir();
       if (this.persistenceDisabled) {
-        return { stored: false, reason: "interval" as const };
+        return { stored: false, reason: "disabled" as const };
       }
       await fs.writeFile(path.join(this.rootDir, fileName), compressed);
 
@@ -393,7 +393,7 @@ export class OfficeSnapshotStore {
     try {
       await fs.mkdir(this.rootDir, { recursive: true });
     } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code ?? "";
+      const code = error instanceof Error && "code" in error ? (error as NodeJS.ErrnoException).code ?? "" : "";
       if (READONLY_FS_CODES.has(code)) {
         if (!this.persistenceDisabled) {
           this.persistenceDisabled = true;

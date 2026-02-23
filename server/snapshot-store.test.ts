@@ -261,7 +261,15 @@ describe("OfficeSnapshotStore — read-only filesystem handling (#210)", () => {
         makeSnapshot(Date.now(), { runId: "r-erofs", childAgentId: "ca", parentAgentId: "pa" }),
       );
       expect(result).toBeDefined();
+      expect(result.stored).toBe(false);
       expect(store.isPersistenceDisabled()).toBe(true);
+
+      // Second call must return immediately without touching the filesystem
+      const result2 = await store.persistSnapshot(
+        makeSnapshot(Date.now() + 1_000, { runId: "r-erofs-2", childAgentId: "ca", parentAgentId: "pa" }),
+      );
+      expect(result2.stored).toBe(false);
+      expect(result2.reason).toBe("disabled");
     } finally {
       mkdirSpy.mockRestore();
     }
