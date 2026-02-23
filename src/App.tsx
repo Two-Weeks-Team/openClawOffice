@@ -1679,7 +1679,7 @@ function App() {
           className="workspace-tabpanel"
           hidden={activeWorkspaceTab !== "tokens"}
         >
-          {snapshot ? <TokenDashboard snapshot={snapshot} /> : null}
+          <TokenDashboard snapshot={snapshot} />
         </section>
       </section>
 
