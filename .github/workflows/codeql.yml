@@ -31,14 +31,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-        with: { version: 10 }
-
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
           node-version: '24'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with: { version: 10, cache: true }
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4

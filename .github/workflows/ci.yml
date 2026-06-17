@@ -16,10 +16,10 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
-      - uses: pnpm/action-setup@v6
-        with: { version: 10 }
       - uses: actions/setup-node@v6
-        with: { node-version: 24, cache: pnpm }
+        with: { node-version: 24 }
+      - uses: pnpm/action-setup@v6
+        with: { version: 10, cache: true }
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
 
@@ -28,10 +28,10 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
-      - uses: pnpm/action-setup@v6
-        with: { version: 10 }
       - uses: actions/setup-node@v6
-        with: { node-version: 24, cache: pnpm }
+        with: { node-version: 24 }
+      - uses: pnpm/action-setup@v6
+        with: { version: 10, cache: true }
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
 
@@ -41,10 +41,10 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
-      - uses: pnpm/action-setup@v6
-        with: { version: 10 }
       - uses: actions/setup-node@v6
-        with: { node-version: 24, cache: pnpm }
+        with: { node-version: 24 }
+      - uses: pnpm/action-setup@v6
+        with: { version: 10, cache: true }
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - uses: actions/upload-artifact@v6
@@ -59,10 +59,10 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
-      - uses: pnpm/action-setup@v6
-        with: { version: 10 }
       - uses: actions/setup-node@v6
-        with: { node-version: 24, cache: pnpm }
+        with: { node-version: 24 }
+      - uses: pnpm/action-setup@v6
+        with: { version: 10, cache: true }
       - run: pnpm install --frozen-lockfile
       - run: pnpm benchmark:local50
 
@@ -72,10 +72,10 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
-      - uses: pnpm/action-setup@v6
-        with: { version: 10 }
       - uses: actions/setup-node@v6
-        with: { node-version: 24, cache: pnpm }
+        with: { node-version: 24 }
+      - uses: pnpm/action-setup@v6
+        with: { version: 10, cache: true }
       - run: pnpm install --frozen-lockfile
       - run: pnpm e2e:smoke
 
@@ -85,10 +85,10 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
-      - uses: pnpm/action-setup@v6
-        with: { version: 10 }
       - uses: actions/setup-node@v6
-        with: { node-version: 24, cache: pnpm }
+        with: { node-version: 24 }
+      - uses: pnpm/action-setup@v6
+        with: { version: 10, cache: true }
       - run: pnpm install --frozen-lockfile
       - name: Cache Playwright browsers
         uses: actions/cache@v5
