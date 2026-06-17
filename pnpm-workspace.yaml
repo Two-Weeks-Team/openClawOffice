@@ -1,0 +1,6 @@
+overrides:
+  minimatch: '>=10.2.1'
+  ajv: '>=6.14.0 <7.0.0'
+
+allowBuilds:
+  esbuild: true
